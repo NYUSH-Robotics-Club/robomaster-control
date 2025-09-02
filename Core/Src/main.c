@@ -414,7 +414,7 @@ int main(void)
     // 最后发送输出电流
     M3508_SendCurrent4(output_currents[0], output_currents[1], output_currents[2], output_currents[3], MOTOR_STDID_1_4);
     
-    int16_t other_currents[4] = {0, 10, -10, 0};
+    int16_t other_currents[4] = {1000, -10000, 10000, 0};
     M3508_SendCurrent4(other_currents[0], other_currents[1], other_currents[2], other_currents[3], MOTOR_STDID_5_8);
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE BEGIN 3 */
