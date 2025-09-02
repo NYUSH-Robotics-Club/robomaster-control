@@ -67,10 +67,14 @@ typedef struct {
 // 电机自动运行时间
 #define MOTOR_AUTO_RUN_TIME_MS          (4000U)
 
-// 目标速度，这个是转子的速度，1:19减速比，所以转子最高速度理论上是9000rpm
+// 底盘速度，M3508，这个是转子的速度，1:19减速比，所以转子最高速度理论上是9000rpm
 #define DEMO_TARGET_SPEED               (7000)
+// 转盘，M2006
+#define MOTOR5_CONST_SPEED              (3000)
 // 加速度
 #define RAMP_STEP                       (50.0f)
+// 射击轮，M3508
+#define SHOOTER_CONST_SPEED             (7500)
 
 // 比例，kp决定当前值逼近目标值的速度，越大响应越快，但是可能靠近就boom
 #define SPEED_PID_KP                    (5.0f)
@@ -112,11 +116,62 @@ static float PID_Calculate(PID_Controller *pid, float target, float actual);
 static void RGB_Init(void);
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 static void CAN1_StartAll(void);
-static HAL_StatusTypeDef M3508_SendCurrent4(int16_t i1,int16_t i2,int16_t i3,int16_t i4,uint16_t stdId);
+static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1,int16_t i2,int16_t i3,int16_t i4,uint16_t stdId);
+static float RampTowards(float current, float target, float step);
+static void ResetPidIntegralsRange(PID_Controller *pids, int start_idx, int count);
+static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const float ramp_targets[MOTOR_COUNT], PID_Controller pids[8], Motor_Feedback feedbacks[8], uint32_t current_tick);
+static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static float RampTowards(float current, float target, float step)
+{
+    if (current < target)
+    {
+        current += step;
+        if (current > target)
+        {
+            current = target;
+        }
+    }
+    else if (current > target)
+    {
+        current -= step;
+        if (current < target)
+        {
+            current = target;
+        }
+    }
+    return current;
+}
+
+static void ResetPidIntegralsRange(PID_Controller *pids, int start_idx, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        pids[start_idx + i].integral = 0.0f;
+    }
+}
+
+static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick)
+{
+    if (current_tick - feedback->last_update_time > MOTOR_FEEDBACK_TIMEOUT_MS)
+    {
+        return 0;
+    }
+    float current_speed = feedback->speed;
+    return (int16_t)PID_Calculate(pid, target, current_speed);
+}
+
+static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const float ramp_targets[MOTOR_COUNT], PID_Controller pids[8], Motor_Feedback feedbacks[8], uint32_t current_tick)
+{
+    for (int i = 0; i < MOTOR_COUNT; i++)
+    {
+        out_currents[i] = ComputeSingleMotorCurrent(&pids[i], ramp_targets[i], &feedbacks[i], current_tick);
+    }
+}
 
 /*
 初始化PID控制器
@@ -190,7 +245,7 @@ static void CAN1_StartAll(void)
 /*
 发送电流到电调
 */
-static HAL_StatusTypeDef M3508_SendCurrent4(int16_t i1,int16_t i2,int16_t i3,int16_t i4,uint16_t stdId)
+static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1,int16_t i2,int16_t i3,int16_t i4,uint16_t stdId)
 {
   CAN_TxHeaderTypeDef tx = {0};
   uint8_t d[8];
@@ -258,6 +313,9 @@ int main(void)
   PID_Init(&speed_pids[1], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   PID_Init(&speed_pids[2], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   PID_Init(&speed_pids[3], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+  PID_Init(&speed_pids[4], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+  PID_Init(&speed_pids[5], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+  PID_Init(&speed_pids[6], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   
 
   uint32_t initial_tick = HAL_GetTick();
@@ -271,11 +329,12 @@ int main(void)
   bool motor_auto_stop_enabled = false;
   int16_t output_currents[MOTOR_COUNT] = {0};
   float ramped_target_speed = 0.0f;
-  
-  // 1和4：正向旋转
-  // 2和3：反向旋转
+  float ramped_motor5_target = 0.0f;
+  float ramped_shooter1_target = 0.0f;
+  float ramped_shooter2_target = 0.0f;
+  int16_t output_currents_5_8[4] = {0};
   float motor_target_speeds[MOTOR_COUNT] = {DEMO_TARGET_SPEED, -DEMO_TARGET_SPEED, -DEMO_TARGET_SPEED, DEMO_TARGET_SPEED};
-  float ramped_motor_targets[MOTOR_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f}; // 初始化为0
+  float ramped_motor_targets[MOTOR_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* USER CODE END 2 */
 
@@ -306,9 +365,8 @@ int main(void)
                 // 手动停止电机
                 motor_running = false;
                 motor_auto_stop_enabled = false;
-                for (int i = 0; i < MOTOR_COUNT; i++) {
-                    speed_pids[i].integral = 0.0f;
-                }
+                ResetPidIntegralsRange(speed_pids, 0, MOTOR_COUNT);
+                ResetPidIntegralsRange(speed_pids, 4, 3);
             }
         }
     }
@@ -318,79 +376,32 @@ int main(void)
     {
         motor_running = false;
         motor_auto_stop_enabled = false;
-        for (int i = 0; i < MOTOR_COUNT; i++) {
-            speed_pids[i].integral = 0.0f;
-        }
+        ResetPidIntegralsRange(speed_pids, 0, MOTOR_COUNT);
+        ResetPidIntegralsRange(speed_pids, 4, 3);
     }
 
 
     for (int i = 0; i < MOTOR_COUNT; i++)
     {
-        if (motor_running)
-        {
-            if (motor_target_speeds[i] > 0)
-            {
-                // 正向电机
-                if (ramped_motor_targets[i] < motor_target_speeds[i])
-                {
-                    ramped_motor_targets[i] += RAMP_STEP;
-                    if (ramped_motor_targets[i] > motor_target_speeds[i])
-                    {
-                        ramped_motor_targets[i] = motor_target_speeds[i];
-                    }
-                }
-            }
-            else
-            {
-                // 反向电机
-                if (ramped_motor_targets[i] > motor_target_speeds[i])
-                {
-                    ramped_motor_targets[i] -= RAMP_STEP;
-                    if (ramped_motor_targets[i] < motor_target_speeds[i])
-                    {
-                        ramped_motor_targets[i] = motor_target_speeds[i];
-                    }
-                }
-            }
-        }
-        else
-        {
-            // 停止时逐渐减速到0
-            if (ramped_motor_targets[i] > 0)
-            {
-                ramped_motor_targets[i] -= RAMP_STEP;
-                if (ramped_motor_targets[i] < 0)
-                {
-                    ramped_motor_targets[i] = 0;
-                }
-            }
-            else if (ramped_motor_targets[i] < 0)
-            {
-                ramped_motor_targets[i] += RAMP_STEP;
-                if (ramped_motor_targets[i] > 0)
-                {
-                    ramped_motor_targets[i] = 0;
-                }
-            }
-        }
+        float target = motor_running ? motor_target_speeds[i] : 0.0f;
+        ramped_motor_targets[i] = RampTowards(ramped_motor_targets[i], target, RAMP_STEP);
     }
 
 
-    // 计算输出电流
-    for (int i = 0; i < MOTOR_COUNT; i++)
-    {
-        // 如果电调没有更新，就认为电机没有运行，直接输出0
-        if (current_tick - motor_feedbacks[i].last_update_time > MOTOR_FEEDBACK_TIMEOUT_MS)
-        {
-            output_currents[i] = 0;
-        }
-        else
-        {
-            // 根据电调的反馈计算输出电流，使用每个电机的独立目标速度
-            float current_speed = motor_feedbacks[i].speed;
-            output_currents[i] = (int16_t)PID_Calculate(&speed_pids[i], ramped_motor_targets[i], current_speed);
-        }
-    }
+    // 转盘
+    ramped_motor5_target = RampTowards(ramped_motor5_target, motor_running ? MOTOR5_CONST_SPEED : 0.0f, RAMP_STEP);
+
+    // 射击电机
+    float shooter1_target = motor_running ? -SHOOTER_CONST_SPEED : 0.0f;
+    float shooter2_target = motor_running ?  SHOOTER_CONST_SPEED : 0.0f;
+    ramped_shooter1_target = RampTowards(ramped_shooter1_target, shooter1_target, RAMP_STEP);
+    ramped_shooter2_target = RampTowards(ramped_shooter2_target, shooter2_target, RAMP_STEP);
+
+    ComputeChassisCurrents(output_currents, ramped_motor_targets, speed_pids, motor_feedbacks, current_tick);
+
+    int16_t motor5_current = ComputeSingleMotorCurrent(&speed_pids[4], ramped_motor5_target, &motor_feedbacks[4], current_tick);
+    int16_t motor6_current = ComputeSingleMotorCurrent(&speed_pids[5], ramped_shooter1_target, &motor_feedbacks[5], current_tick);
+    int16_t motor7_current = ComputeSingleMotorCurrent(&speed_pids[6], ramped_shooter2_target, &motor_feedbacks[6], current_tick);
 
     bool any_motor_running = false;
     for (int i = 0; i < MOTOR_COUNT; i++)
@@ -410,12 +421,15 @@ int main(void)
     {
         LED_SetRGB(0, 0, 1); // 蓝色：电机停止
     }
-
-    // 最后发送输出电流
-    M3508_SendCurrent4(output_currents[0], output_currents[1], output_currents[2], output_currents[3], MOTOR_STDID_1_4);
     
-    int16_t other_currents[4] = {1000, -10000, 10000, 0};
-    M3508_SendCurrent4(other_currents[0], other_currents[1], other_currents[2], other_currents[3], MOTOR_STDID_5_8);
+    output_currents_5_8[0] = motor5_current;
+    output_currents_5_8[1] = motor6_current;
+    output_currents_5_8[2] = motor7_current;
+    output_currents_5_8[3] = 0;
+    CAN_SendMotorCurrents4(output_currents_5_8[0], output_currents_5_8[1], output_currents_5_8[2], output_currents_5_8[3], MOTOR_STDID_5_8);
+    CAN_SendMotorCurrents4(output_currents[0], output_currents[1], output_currents[2], output_currents[3], MOTOR_STDID_1_4);
+    
+
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE BEGIN 3 */
   }
