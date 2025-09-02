@@ -63,6 +63,8 @@ typedef struct {
 #define MOTOR_FEEDBACK_TIMEOUT_MS       (100U)
 // 神奇小按钮的抖动时间
 #define KEY_DEBOUNCE_MS                 (200U)
+// 电机自动运行时间
+#define MOTOR_AUTO_RUN_TIME_MS          (4000U)
 
 // 目标速度，这个是转子的速度，1:19减速比，所以转子最高速度理论上是9000rpm
 #define DEMO_TARGET_SPEED               (7000)
@@ -264,6 +266,8 @@ int main(void)
 
   bool motor_running = false;
   uint32_t last_key_press_time = 0;
+  uint32_t motor_start_time = 0;
+  bool motor_auto_stop_enabled = false;
   int16_t output_currents[MOTOR_COUNT] = {0};
   float ramped_target_speed = 0.0f;
   
@@ -287,14 +291,34 @@ int main(void)
     {
         if (current_tick - last_key_press_time > KEY_DEBOUNCE_MS)
         {
-            motor_running = !motor_running;
             last_key_press_time = current_tick;
+            
             if (!motor_running)
             {
+                // 启动电机
+                motor_running = true;
+                motor_start_time = current_tick;
+                motor_auto_stop_enabled = true;
+            }
+            else
+            {
+                // 手动停止电机
+                motor_running = false;
+                motor_auto_stop_enabled = false;
                 for (int i = 0; i < MOTOR_COUNT; i++) {
                     speed_pids[i].integral = 0.0f;
                 }
             }
+        }
+    }
+
+    // 检查是否达到自动停止时间
+    if (motor_running && motor_auto_stop_enabled && (current_tick - motor_start_time >= MOTOR_AUTO_RUN_TIME_MS))
+    {
+        motor_running = false;
+        motor_auto_stop_enabled = false;
+        for (int i = 0; i < MOTOR_COUNT; i++) {
+            speed_pids[i].integral = 0.0f;
         }
     }
 
