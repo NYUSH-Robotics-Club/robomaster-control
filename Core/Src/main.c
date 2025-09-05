@@ -100,6 +100,7 @@ typedef struct {
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
+CAN_HandleTypeDef hcan2;
 
 /* USER CODE BEGIN PV */
 Motor_Feedback motor_feedbacks[8];
@@ -110,6 +111,7 @@ PID_Controller speed_pids[8];
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
+static void MX_CAN2_Init(void);
 /* USER CODE BEGIN PFP */
 static void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float output_max, float integral_max);
 static float PID_Calculate(PID_Controller *pid, float target, float actual);
@@ -117,6 +119,10 @@ static void RGB_Init(void);
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 static void CAN1_StartAll(void);
 static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1,int16_t i2,int16_t i3,int16_t i4,uint16_t stdId);
+static void CAN2_StartAll(void);
+static HAL_StatusTypeDef CAN_SendMotorCurrents4Ex(CAN_HandleTypeDef *hcan,
+                                                  uint16_t stdId,
+                                                  int16_t i1,int16_t i2,int16_t i3,int16_t i4);
 static float RampTowards(float current, float target, float step);
 static void ResetPidIntegralsRange(PID_Controller *pids, int start_idx, int count);
 static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const float ramp_targets[MOTOR_COUNT], PID_Controller pids[8], Motor_Feedback feedbacks[8], uint32_t current_tick);
@@ -242,10 +248,28 @@ static void CAN1_StartAll(void)
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 }
 
-/*
-发送电流到电调
-*/
-static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1,int16_t i2,int16_t i3,int16_t i4,uint16_t stdId)
+static void CAN2_StartAll(void)
+{
+  CAN_FilterTypeDef f = {0};
+  f.FilterBank            = 14;
+  f.FilterMode            = CAN_FILTERMODE_IDMASK;
+  f.FilterScale           = CAN_FILTERSCALE_32BIT;
+  f.FilterFIFOAssignment  = CAN_FILTER_FIFO0;
+  f.FilterIdHigh          = 0x0000;
+  f.FilterIdLow           = 0x0000;
+  f.FilterMaskIdHigh      = 0x0000;
+  f.FilterMaskIdLow       = 0x0000;
+  f.FilterActivation      = ENABLE;
+  f.SlaveStartFilterBank  = 14;
+
+  HAL_CAN_ConfigFilter(&hcan2, &f);
+  HAL_CAN_Start(&hcan2);
+  HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
+}
+
+static HAL_StatusTypeDef CAN_SendMotorCurrents4Ex(CAN_HandleTypeDef *hcan,
+                                                  uint16_t stdId,
+                                                  int16_t i1,int16_t i2,int16_t i3,int16_t i4)
 {
   CAN_TxHeaderTypeDef tx = {0};
   uint8_t d[8];
@@ -261,11 +285,11 @@ static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1,int16_t i2,int16_t i3
   d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
   d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
 
-  return HAL_CAN_AddTxMessage(&hcan1, &tx, d, &mb);
+  return HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
 }
 
 /*
-CAN1接收回调
+CAN接收回调
 */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
@@ -293,19 +317,35 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
 
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
   SystemClock_Config();
 
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_CAN1_Init();
-
+  MX_CAN2_Init();
   /* USER CODE BEGIN 2 */
   LED_SetRGB(1,1,1); HAL_Delay(200);
 
   CAN1_StartAll();
+  CAN2_StartAll();
   HAL_Delay(WAIT_ESC_BOOT_MS);
 
   
@@ -426,9 +466,12 @@ int main(void)
     output_currents_5_8[1] = motor6_current;
     output_currents_5_8[2] = motor7_current;
     output_currents_5_8[3] = 0;
-    CAN_SendMotorCurrents4(output_currents_5_8[0], output_currents_5_8[1], output_currents_5_8[2], output_currents_5_8[3], MOTOR_STDID_5_8);
-    CAN_SendMotorCurrents4(output_currents[0], output_currents[1], output_currents[2], output_currents[3], MOTOR_STDID_1_4);
-    
+    CAN_SendMotorCurrents4Ex(&hcan2, MOTOR_STDID_5_8,
+                         output_currents_5_8[0], output_currents_5_8[1],
+                         output_currents_5_8[2], output_currents_5_8[3]);
+    CAN_SendMotorCurrents4Ex(&hcan1, MOTOR_STDID_1_4,
+                         output_currents[0], output_currents[1],
+                         output_currents[2], output_currents[3]);
 
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE BEGIN 3 */
@@ -498,15 +541,15 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = CAN1_TIMING_PRESCALER;
+  hcan1.Init.Prescaler = 3;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN1_TIMING_BS1;
-  hcan1.Init.TimeSeg2 = CAN1_TIMING_BS2;
+  hcan1.Init.TimeSeg1 = CAN_BS1_11TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
-  hcan1.Init.AutoRetransmission = ENABLE;
+  hcan1.Init.AutoRetransmission = DISABLE;
   hcan1.Init.ReceiveFifoLocked = DISABLE;
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
@@ -516,6 +559,43 @@ static void MX_CAN1_Init(void)
   /* USER CODE BEGIN CAN1_Init 2 */
 
   /* USER CODE END CAN1_Init 2 */
+
+}
+
+/**
+  * @brief CAN2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CAN2_Init(void)
+{
+
+  /* USER CODE BEGIN CAN2_Init 0 */
+
+  /* USER CODE END CAN2_Init 0 */
+
+  /* USER CODE BEGIN CAN2_Init 1 */
+
+  /* USER CODE END CAN2_Init 1 */
+  hcan2.Instance = CAN2;
+  hcan2.Init.Prescaler = 3;
+  hcan2.Init.Mode = CAN_MODE_NORMAL;
+  hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_11TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_2TQ;
+  hcan2.Init.TimeTriggeredMode = DISABLE;
+  hcan2.Init.AutoBusOff = DISABLE;
+  hcan2.Init.AutoWakeUp = DISABLE;
+  hcan2.Init.AutoRetransmission = DISABLE;
+  hcan2.Init.ReceiveFifoLocked = DISABLE;
+  hcan2.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CAN2_Init 2 */
+
+  /* USER CODE END CAN2_Init 2 */
 
 }
 
