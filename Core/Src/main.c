@@ -18,6 +18,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdbool.h>
+#include "remote_control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -349,7 +350,10 @@ int main(void)
   MX_CAN2_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-  LED_SetRGB(1,1,1); HAL_Delay(200);
+  // LED_SetRGB(1,1,1); HAL_Delay(200);
+
+  // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
+  remote_control_init();
 
   CAN1_StartAll();
   CAN2_StartAll();
@@ -464,10 +468,6 @@ int main(void)
     {
         LED_SetRGB(0, 1, 0); // 绿色：电机运行中
     }
-    else
-    {
-        LED_SetRGB(0, 0, 1); // 蓝色：电机停止
-    }
     
     output_currents_5_8[0] = motor5_current;
     output_currents_5_8[1] = motor6_current;
@@ -482,6 +482,20 @@ int main(void)
 
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE BEGIN 3 */
+    // Map DT7 right switch to RGB LED states
+    const RC_ctrl_t *rc = get_remote_control_point();
+    if (rc != NULL)
+    {
+        // rc->rc.s[1]: right switch, values defined in remote_control.h
+        if (switch_is_up(rc->rc.s[1]))
+        {
+            LED_SetRGB(1,0,0); // Red when up
+        }
+        else if (switch_is_down(rc->rc.s[1]))
+        {
+            LED_SetRGB(0,0,1); // Blue when down
+        }
+    }
   }
   /* USER CODE END 3 */
 }

@@ -413,6 +413,16 @@
           <GroupName>Drivers/STM32F4xx_HAL_Driver</GroupName>
           <Files>
             <File>
+              <FileName>remote_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/remote_control.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_rc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/bsp_rc.c</FilePath>
+            </File>
+            <File>
               <FileName>stm32f4xx_hal_can.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c</FilePath>

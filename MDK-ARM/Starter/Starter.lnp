@@ -3,6 +3,8 @@
 "starter\main.o"
 "starter\stm32f4xx_it.o"
 "starter\stm32f4xx_hal_msp.o"
+"starter\remote_control.o"
+"starter\bsp_rc.o"
 "starter\stm32f4xx_hal_can.o"
 "starter\stm32f4xx_hal_rcc.o"
 "starter\stm32f4xx_hal_rcc_ex.o"

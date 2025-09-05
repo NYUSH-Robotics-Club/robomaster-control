@@ -67,7 +67,7 @@ const RC_ctrl_t *get_remote_control_point(void)
 }
 
 
-void USART3_IRQHandler(void)
+void REMOTE_USART3_IDLE_IRQHandler(void)
 {
     if(huart3.Instance->SR & UART_FLAG_RXNE)
     {
