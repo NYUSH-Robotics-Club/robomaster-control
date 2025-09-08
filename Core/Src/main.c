@@ -110,6 +110,7 @@ static void ResetPidIntegralsRange(PID_Controller *pids, int start_idx, int coun
 static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const float ramp_targets[MOTOR_COUNT], PID_Controller pids[8], Motor_Feedback feedbacks[8], uint32_t current_tick);
 static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick);
 static HAL_StatusTypeDef GM6020_SendCurrentById(uint8_t id, int16_t cur);
+int16_t gm6020_control_from_joystick(uint8_t id, int16_t joystick_ch1);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -192,6 +193,8 @@ static HAL_StatusTypeDef GM6020_SendCurrentById(uint8_t id, int16_t cur)
 static void CAN1_StartAll(void)
 {
   CAN_FilterTypeDef f = {0};
+  f.FilterBank          = 0;
+  f.SlaveStartFilterBank  = 14;
   f.FilterActivation      = ENABLE;
   f.FilterMode            = CAN_FILTERMODE_IDMASK;
   f.FilterScale           = CAN_FILTERSCALE_32BIT;
@@ -217,7 +220,7 @@ static void CAN2_StartAll(void)
   f.FilterMaskIdHigh      = 0x0000;
   f.FilterMaskIdLow       = 0x0000;
   f.FilterActivation      = ENABLE;
-  f.SlaveStartFilterBank  = 14;
+  
 
   HAL_CAN_ConfigFilter(&hcan2, &f);
   HAL_CAN_Start(&hcan2);
@@ -254,16 +257,12 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   uint8_t d[8];
 
   if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx, d) != HAL_OK) return;
-
-  if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
-    uint8_t mid = rx.StdId - 0x205;
-    if (mid < 8) {
-        motor_feedbacks[mid].angle = (d[0]<<8) | d[1];
-        motor_feedbacks[mid].speed = (int16_t)((d[2]<<8) | d[3]);
-        motor_feedbacks[mid].current = (int16_t)((d[4]<<8) | d[5]);
-        motor_feedbacks[mid].temp = d[6];
-        motor_feedbacks[mid].last_update_time = HAL_GetTick();
-        gm6020_on_feedback(mid + 1, motor_feedbacks[mid].angle, motor_feedbacks[mid].speed);
+  if (hcan == &hcan1 && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x208) {
+    uint8_t gid = (uint8_t)(rx.StdId - 0x205 + 1); // 1..7
+    if (gid >= 1 && gid <= 7) {
+        uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
+        int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
+        gm6020_on_feedback(gid, angle_raw, speed_rpm);
     }
   }
   else if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x208) {
@@ -433,6 +432,13 @@ int main(void)
         LED_SetRGB(1, 0, 0);
     }
     
+    const RC_ctrl_t *rc_for_speed = get_remote_control_point();
+    int16_t motor7_current = 0;
+    if (rc_for_speed != NULL)
+    {
+        motor7_current = gm6020_control_from_joystick(7, rc_for_speed->rc.ch[1]);
+    }
+    (void)GM6020_SendCurrentById(7, motor7_current);
     output_currents_5_8[0] = motor5_current;
     output_currents_5_8[1] = motor6_current;
     output_currents_5_8[2] = 0;
@@ -444,11 +450,7 @@ int main(void)
                          output_currents[0], output_currents[1],
                          output_currents[2], output_currents[3]);
 
-    const RC_ctrl_t *rc_for_speed = get_remote_control_point();
-    if (rc_for_speed != NULL)
-    {
-        gm6020_control_from_joystick(7, rc_for_speed->rc.ch[1]);
-    }
+
 
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
   }

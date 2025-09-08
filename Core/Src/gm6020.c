@@ -66,9 +66,9 @@ void gm6020_on_feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   }
 }
 
-void gm6020_control_from_joystick(uint8_t id, int16_t joystick_ch1)
+int16_t gm6020_control_from_joystick(uint8_t id, int16_t joystick_ch1)
 {
-  if (id < 1 || id > 7) return;
+  if (id < 1 || id > 7) return 0;
   gm6020_ctx_t *c = &g_ctx[id-1];
 
   int16_t raw = joystick_ch1;
@@ -86,7 +86,7 @@ void gm6020_control_from_joystick(uint8_t id, int16_t joystick_ch1)
     if (target_rpm >  GM6020_MAX_TARGET_RPM) target_rpm =  GM6020_MAX_TARGET_RPM;
     if (target_rpm < -GM6020_MAX_TARGET_RPM) target_rpm = -GM6020_MAX_TARGET_RPM;
     int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
-    (void)send_current_by_id(id, cmd);
+    return cmd;
   }
   else
   {
@@ -98,8 +98,9 @@ void gm6020_control_from_joystick(uint8_t id, int16_t joystick_ch1)
     c->hold_angle_raw = c->angle_raw;
     c->hold_inited = 1;
     int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
-    (void)send_current_by_id(id, cmd);
+    return cmd;
   }
+  return 0;
 }
 
 
