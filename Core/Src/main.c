@@ -327,6 +327,7 @@ int main(void)
   PID_Init(&speed_pids[4], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   PID_Init(&speed_pids[5], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   PID_Init(&speed_pids[6], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+  PID_Init(&speed_pids[7], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   gm6020_init(7);
 
   uint32_t initial_tick = HAL_GetTick();
@@ -408,7 +409,7 @@ int main(void)
     
     // 射击电机
     int16_t motor6_current = ComputeSingleMotorCurrent(&speed_pids[5], ramped_shooter1_target, &motor_feedbacks[5], current_tick);
-    int16_t motor8_current = ComputeSingleMotorCurrent(&speed_pids[6], ramped_shooter2_target, &motor_feedbacks[6], current_tick);
+    int16_t motor8_current = ComputeSingleMotorCurrent(&speed_pids[7], ramped_shooter2_target, &motor_feedbacks[7], current_tick);
 
     bool any_motor_running = false;
     for (int i = 0; i < MOTOR_COUNT; i++)
