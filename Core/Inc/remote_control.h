@@ -14,6 +14,7 @@
 #define REMOTE_CONTROL_H
 #include "main.h"
 #include "bsp_rc.h"
+#include "cmsis_compiler.h"
 
 #define SBUS_RX_BUF_NUM 36u
 
@@ -48,14 +49,14 @@
 #define KEY_PRESSED_OFFSET_V            ((uint16_t)1 << 14)
 #define KEY_PRESSED_OFFSET_B            ((uint16_t)1 << 15)
 /* ----------------------- Data Struct ------------------------------------- */
-typedef __packed struct
+typedef __PACKED_STRUCT
 {
-        __packed struct
+        __PACKED_STRUCT
         {
                 int16_t ch[5];
                 char s[2];
         } rc;
-        __packed struct
+        __PACKED_STRUCT
         {
                 int16_t x;
                 int16_t y;
@@ -63,7 +64,7 @@ typedef __packed struct
                 uint8_t press_l;
                 uint8_t press_r;
         } mouse;
-        __packed struct
+        __PACKED_STRUCT
         {
                 uint16_t v;
         } key;
