@@ -257,8 +257,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   uint8_t d[8];
 
   if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx, d) != HAL_OK) return;
-  if (hcan == &hcan1 && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x208) {
-    uint8_t gid = (uint8_t)(rx.StdId - 0x205 + 1); // 1..7
+  if (hcan == &hcan1 && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
+    uint8_t gid = (uint8_t)(rx.StdId - 0x204);
     if (gid >= 1 && gid <= 7) {
         uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
         int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
