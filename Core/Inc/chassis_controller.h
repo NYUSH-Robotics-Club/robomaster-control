@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "pid.h"
 #include "remote_control.h"
+#include "motor_feedback.h"
 
 // Chassis motor count
 #define CHASSIS_MOTOR_COUNT 4
@@ -13,14 +14,6 @@
 #define CHASSIS_DEMO_TARGET_SPEED 7000
 #define CHASSIS_RAMP_STEP 50.0f
 
-// Motor feedback structure
-typedef struct {
-    uint16_t angle;
-    int16_t  speed;
-    int16_t  current;
-    uint8_t  temp;
-    uint32_t last_update_time;
-} Motor_Feedback;
 
 // Chassis controller structure
 typedef struct {
