@@ -79,4 +79,16 @@ const int16_t* ChassisController_GetOutputCurrents(const ChassisController *cont
  */
 bool ChassisController_IsRunning(const ChassisController *controller);
 
+/**
+ * @brief Update motor feedback (to be called from CAN receive path)
+ * @param controller Chassis controller pointer
+ * @param motor_id Motor ID in range 0..3
+ * @param angle Encoder angle
+ * @param speed Speed (RPM)
+ * @param current Current
+ * @param temp Temperature
+ * @param current_tick Current timestamp
+ */
+void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick);
+
 #endif // CHASSIS_CONTROLLER_H
