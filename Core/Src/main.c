@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include "remote_control.h"
 #include "pid.h"
+#include "gm6020.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -108,6 +109,7 @@ static float RampTowards(float current, float target, float step);
 static void ResetPidIntegralsRange(PID_Controller *pids, int start_idx, int count);
 static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const float ramp_targets[MOTOR_COUNT], PID_Controller pids[8], Motor_Feedback feedbacks[8], uint32_t current_tick);
 static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick);
+static HAL_StatusTypeDef GM6020_SendCurrentById(uint8_t id, int16_t cur);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -158,6 +160,29 @@ static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const floa
     {
         out_currents[i] = ComputeSingleMotorCurrent(&pids[i], ramp_targets[i], &feedbacks[i], current_tick);
     }
+}
+
+static HAL_StatusTypeDef GM6020_SendCurrentById(uint8_t id, int16_t cur)
+{
+  if (id < 1 || id > 7) return HAL_ERROR;
+
+  if (cur >  30000) cur =  30000;
+  if (cur < -30000) cur = -30000;
+
+  uint16_t stdId = (id <= 4) ? 0x1FF : 0x2FF;
+  uint8_t  slot  = (id <= 4) ? (uint8_t)(id - 1) : (uint8_t)(id - 5);
+
+  int16_t i1 = 0, i2 = 0, i3 = 0, i4 = 0;
+  switch (slot)
+  {
+    case 0: i1 = cur; break;
+    case 1: i2 = cur; break;
+    case 2: i3 = cur; break;
+    case 3: i4 = cur; break;
+    default: break;
+  }
+
+  return CAN_SendMotorCurrents4Ex(&hcan1, stdId, i1, i2, i3, i4);
 }
 
 
@@ -230,7 +255,18 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
   if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx, d) != HAL_OK) return;
 
-  if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x208) {
+  if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
+    uint8_t mid = rx.StdId - 0x205;
+    if (mid < 8) {
+        motor_feedbacks[mid].angle = (d[0]<<8) | d[1];
+        motor_feedbacks[mid].speed = (int16_t)((d[2]<<8) | d[3]);
+        motor_feedbacks[mid].current = (int16_t)((d[4]<<8) | d[5]);
+        motor_feedbacks[mid].temp = d[6];
+        motor_feedbacks[mid].last_update_time = HAL_GetTick();
+        gm6020_on_feedback(mid + 1, motor_feedbacks[mid].angle, motor_feedbacks[mid].speed);
+    }
+  }
+  else if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x208) {
     uint8_t  mid   = rx.StdId - 0x201;
     if (mid < 8) {
         motor_feedbacks[mid].angle = (d[0]<<8) | d[1];
@@ -292,7 +328,7 @@ int main(void)
   PID_Init(&speed_pids[4], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   PID_Init(&speed_pids[5], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
   PID_Init(&speed_pids[6], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
-  
+  gm6020_init(7);
 
   uint32_t initial_tick = HAL_GetTick();
   for (int i = 0; i < 8; i++) {
@@ -375,8 +411,10 @@ int main(void)
     ComputeChassisCurrents(output_currents, ramped_motor_targets, speed_pids, motor_feedbacks, current_tick);
 
     int16_t motor5_current = ComputeSingleMotorCurrent(&speed_pids[4], ramped_motor5_target, &motor_feedbacks[4], current_tick);
+    
+    // 射击电机
     int16_t motor6_current = ComputeSingleMotorCurrent(&speed_pids[5], ramped_shooter1_target, &motor_feedbacks[5], current_tick);
-    int16_t motor7_current = ComputeSingleMotorCurrent(&speed_pids[6], ramped_shooter2_target, &motor_feedbacks[6], current_tick);
+    int16_t motor8_current = ComputeSingleMotorCurrent(&speed_pids[6], ramped_shooter2_target, &motor_feedbacks[6], current_tick);
 
     bool any_motor_running = false;
     for (int i = 0; i < MOTOR_COUNT; i++)
@@ -390,13 +428,15 @@ int main(void)
     
     if (any_motor_running)
     {
-        LED_SetRGB(0, 1, 0); // 绿色：电机运行中
+        LED_SetRGB(0, 1, 0);
+    }else{
+        LED_SetRGB(1, 0, 0);
     }
     
     output_currents_5_8[0] = motor5_current;
     output_currents_5_8[1] = motor6_current;
-    output_currents_5_8[2] = motor7_current;
-    output_currents_5_8[3] = 0;
+    output_currents_5_8[2] = 0;
+    output_currents_5_8[3] = motor8_current;
     CAN_SendMotorCurrents4Ex(&hcan2, MOTOR_STDID_5_8,
                          output_currents_5_8[0], output_currents_5_8[1],
                          output_currents_5_8[2], output_currents_5_8[3]);
@@ -404,21 +444,13 @@ int main(void)
                          output_currents[0], output_currents[1],
                          output_currents[2], output_currents[3]);
 
-    HAL_Delay(CMD_REFRESH_INTERVAL_MS);
-    // Map DT7 right switch to RGB LED states
-    const RC_ctrl_t *rc = get_remote_control_point();
-    if (rc != NULL)
+    const RC_ctrl_t *rc_for_speed = get_remote_control_point();
+    if (rc_for_speed != NULL)
     {
-        // rc->rc.s[1]: right switch, values defined in remote_control.h
-        if (switch_is_up(rc->rc.s[1]))
-        {
-            LED_SetRGB(1,0,0); // Red when up
-        }
-        else if (switch_is_down(rc->rc.s[1]))
-        {
-            LED_SetRGB(0,0,1); // Blue when down
-        }
+        gm6020_control_from_joystick(7, rc_for_speed->rc.ch[1]);
     }
+
+    HAL_Delay(CMD_REFRESH_INTERVAL_MS);
   }
     /* USER CODE END WHILE */
 

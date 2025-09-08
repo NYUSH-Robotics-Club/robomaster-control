@@ -398,6 +398,11 @@
               <FilePath>../Core/Src/main.c</FilePath>
             </File>
             <File>
+              <FileName>gm6020.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/gm6020.c</FilePath>
+            </File>
+            <File>
               <FileName>pid.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/pid.c</FilePath>
