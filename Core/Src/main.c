@@ -23,28 +23,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "remote_control.h"
+#include "pid.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct {
-    float Kp;
-    float Ki;
-    float Kd;
-
-    float target;
-    float actual;
-    float last_actual;
-
-    float error;
-    float last_error;
-    float integral;
-
-    float output;
-    float output_max;
-    float integral_max;
-} PID_Controller;
-
 typedef struct {
     uint16_t angle;
     int16_t  speed;
@@ -113,8 +96,6 @@ PID_Controller speed_pids[8];
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-static void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float output_max, float integral_max);
-static float PID_Calculate(PID_Controller *pid, float target, float actual);
 static void RGB_Init(void);
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 static void CAN1_StartAll(void);
@@ -179,55 +160,6 @@ static void ComputeChassisCurrents(int16_t out_currents[MOTOR_COUNT], const floa
     }
 }
 
-/*
-初始化PID控制器
-*/
-void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float output_max, float integral_max)
-{
-    pid->Kp = kp;
-    pid->Ki = ki;
-    pid->Kd = kd;
-    pid->output_max = output_max;
-    pid->integral_max = integral_max;
-    pid->target = 0.0f;
-    pid->actual = 0.0f;
-    pid->last_actual = 0.0f;
-    pid->error = 0.0f;
-    pid->last_error = 0.0f;
-    pid->integral = 0.0f;
-    pid->output = 0.0f;
-}
-
-/*
-计算PID输出
-*/
-float PID_Calculate(PID_Controller *pid, float target, float actual)
-{
-    pid->target = target;
-    pid->actual = actual;
-    pid->error = pid->target - pid->actual;
-
-    pid->integral += pid->error;
-    if (pid->integral > pid->integral_max) {
-        pid->integral = pid->integral_max;
-    } else if (pid->integral < -pid->integral_max) {
-        pid->integral = -pid->integral_max;
-    }
-
-    
-    float derivative = - (pid->actual - pid->last_actual);
-    pid->output = pid->Kp * pid->error + pid->Ki * pid->integral + pid->Kd * derivative;
-
-    if (pid->output > pid->output_max) {
-        pid->output = pid->output_max;
-    } else if (pid->output < -pid->output_max) {
-        pid->output = -pid->output_max;
-    }
-
-    pid->last_error = pid->error;
-    pid->last_actual = pid->actual;
-    return pid->output;
-}
 
 /*
 启动CAN1

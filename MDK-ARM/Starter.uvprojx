@@ -398,6 +398,11 @@
               <FilePath>../Core/Src/main.c</FilePath>
             </File>
             <File>
+              <FileName>pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/pid.c</FilePath>
+            </File>
+            <File>
               <FileName>gpio.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/gpio.c</FilePath>
