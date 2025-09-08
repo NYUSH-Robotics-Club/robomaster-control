@@ -356,38 +356,27 @@ int main(void)
     uint32_t current_tick = HAL_GetTick();
 
 
-    // 按钮控制电机的逻辑
-    if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET)
     {
-        if (current_tick - last_key_press_time > KEY_DEBOUNCE_MS)
+        const RC_ctrl_t *rc_for_chassis = get_remote_control_point();
+        bool left_switch_up = false;
+        if (rc_for_chassis != NULL)
         {
-            last_key_press_time = current_tick;
-            
-            if (!motor_running)
-            {
-                // 启动电机
-                motor_running = true;
-                motor_start_time = current_tick;
-                motor_auto_stop_enabled = true;
-            }
-            else
-            {
-                // 手动停止电机
-                motor_running = false;
-                motor_auto_stop_enabled = false;
-                ResetPidIntegralsRange(speed_pids, 0, MOTOR_COUNT);
-                ResetPidIntegralsRange(speed_pids, 4, 3);
-            }
+            left_switch_up = switch_is_up(rc_for_chassis->rc.s[0]);
         }
-    }
 
-    // 检查是否达到自动停止时间
-    if (motor_running && motor_auto_stop_enabled && (current_tick - motor_start_time >= MOTOR_AUTO_RUN_TIME_MS))
-    {
-        motor_running = false;
+        static bool last_left_switch_up = false;
+        if (left_switch_up && !last_left_switch_up)
+        {
+            motor_running = true;
+        }
+        else if (!left_switch_up && last_left_switch_up)
+        {
+            motor_running = false;
+            ResetPidIntegralsRange(speed_pids, 0, MOTOR_COUNT);
+        }
+        last_left_switch_up = left_switch_up;
+
         motor_auto_stop_enabled = false;
-        ResetPidIntegralsRange(speed_pids, 0, MOTOR_COUNT);
-        ResetPidIntegralsRange(speed_pids, 4, 3);
     }
 
 
@@ -397,13 +386,19 @@ int main(void)
         ramped_motor_targets[i] = RampTowards(ramped_motor_targets[i], target, RAMP_STEP);
     }
 
+    const RC_ctrl_t *rc_for_switch = get_remote_control_point();
+    bool right_switch_up = false;
+    if (rc_for_switch != NULL)
+    {
+        right_switch_up = switch_is_up(rc_for_switch->rc.s[1]);
+    }
 
     // 转盘
-    ramped_motor5_target = RampTowards(ramped_motor5_target, motor_running ? MOTOR5_CONST_SPEED : 0.0f, RAMP_STEP);
+    ramped_motor5_target = RampTowards(ramped_motor5_target, right_switch_up ? MOTOR5_CONST_SPEED : 0.0f, RAMP_STEP);
 
     // 射击电机
-    float shooter1_target = motor_running ? -SHOOTER_CONST_SPEED : 0.0f;
-    float shooter2_target = motor_running ?  SHOOTER_CONST_SPEED : 0.0f;
+    float shooter1_target = right_switch_up ? -SHOOTER_CONST_SPEED : 0.0f;
+    float shooter2_target = right_switch_up ?  SHOOTER_CONST_SPEED : 0.0f;
     ramped_shooter1_target = RampTowards(ramped_shooter1_target, shooter1_target, RAMP_STEP);
     ramped_shooter2_target = RampTowards(ramped_shooter2_target, shooter2_target, RAMP_STEP);
 
