@@ -2,10 +2,11 @@
 #include "pid.h"
 #include "can.h"
 
-#define GM6020_MAX_TARGET_RPM           (200.0f)
-#define GM6020_JOYSTICK_DEADZONE        (80)
+#define GM6020_MAX_TARGET_RPM           (300.0f)
+#define GM6020_JOYSTICK_DEADZONE        (60)
 #define GM6020_JOYSTICK_FULL_SCALE      (660.0f)
-#define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (50.0f)
+#define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (100.0f)
+#define GM6020_ANGLE_HOLD_MIN_RPM          (120.0f)
 
 typedef struct {
   uint8_t   id;
@@ -51,7 +52,7 @@ void gm6020_init(uint8_t id)
   c->speed_rpm = 0;
   c->hold_angle_raw = 0;
   c->hold_inited = 0;
-  PID_Init(&c->speed_pid, 6.0f, 0.1f, 0.1f, 20000.0f, 15000.0f);
+  PID_Init(&c->speed_pid, 10.0f, 0.3f, 0.05f, 30000.0f, 25000.0f);
 }
 
 void gm6020_on_feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
