@@ -393,7 +393,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
     uint32_t current_tick = HAL_GetTick();
 
 
@@ -481,7 +480,6 @@ int main(void)
                          output_currents[2], output_currents[3]);
 
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
-    /* USER CODE BEGIN 3 */
     // Map DT7 right switch to RGB LED states
     const RC_ctrl_t *rc = get_remote_control_point();
     if (rc != NULL)
@@ -497,7 +495,7 @@ int main(void)
         }
     }
   }
-  /* USER CODE END 3 */
+  /* USER CODE END WHILE */
 }
 
 /**
