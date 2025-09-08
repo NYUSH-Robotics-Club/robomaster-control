@@ -1,4 +1,5 @@
-starter/remote_control.o: ..\Core\Src\remote_control.c \
+starter/shooter_controller.o: ..\Core\Src\shooter_controller.c \
+  ..\Core\Inc\shooter_controller.h ..\Core\Inc\pid.h \
   ..\Core\Inc\remote_control.h ..\Core\Inc\main.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal.h \
   ..\Core\Inc\stm32f4xx_hal_conf.h \
@@ -23,4 +24,6 @@ starter/remote_control.o: ..\Core\Src\remote_control.c \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr_ex.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_uart.h \
-  ..\Core\Inc\bsp_rc.h ..\Drivers\CMSIS\Include\cmsis_compiler.h
+  ..\Core\Inc\bsp_rc.h ..\Drivers\CMSIS\Include\cmsis_compiler.h \
+  ..\Core\Inc\gimbal.h ..\Core\Inc\motor_feedback.h ..\Core\Inc\can.h \
+  ..\Core\Inc\can_manager.h ..\Core\Inc\chassis_controller.h

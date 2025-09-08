@@ -398,9 +398,9 @@
               <FilePath>../Core/Src/main.c</FilePath>
             </File>
             <File>
-              <FileName>gm6020.c</FileName>
+              <FileName>pitch.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Core/Src/gm6020.c</FilePath>
+              <FilePath>../Core/Src/pitch.c</FilePath>
             </File>
             <File>
               <FileName>pid.c</FileName>

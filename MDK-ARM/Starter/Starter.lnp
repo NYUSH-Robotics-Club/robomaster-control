@@ -1,7 +1,7 @@
 --cpu=Cortex-M4.fp.sp
 "starter\startup_stm32f407xx.o"
 "starter\main.o"
-"starter\gm6020.o"
+"starter\pitch.o"
 "starter\pid.o"
 "starter\gpio.o"
 "starter\can.o"
@@ -9,6 +9,9 @@
 "starter\usart.o"
 "starter\stm32f4xx_it.o"
 "starter\stm32f4xx_hal_msp.o"
+"starter\chassis_controller.o"
+"starter\shooter_controller.o"
+"starter\can_manager.o"
 "starter\remote_control.o"
 "starter\bsp_rc.o"
 "starter\stm32f4xx_hal_can.o"

@@ -112,9 +112,10 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
+  // Used for remote control
   remote_control_init();
 
-  // Initialize CAN managers
+  // Initialize CAN
   CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1, &chassis_controller, &shooter_controller);
   CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2, &chassis_controller, &shooter_controller);
   
@@ -124,7 +125,7 @@ int main(void)
   
   HAL_Delay(WAIT_ESC_BOOT_MS);
 
-  // Initialize controllers
+  // Initialize motor controllers
   ChassisController_Init(&chassis_controller);
   ShooterController_Init(&shooter_controller);
 

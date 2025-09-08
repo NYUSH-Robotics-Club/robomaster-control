@@ -1,5 +1,6 @@
 #include "shooter_controller.h"
 #include "can.h"
+#include "can_manager.h"
 #include <string.h>
 
 // External CAN handle
@@ -18,7 +19,13 @@ extern CAN_HandleTypeDef hcan2;
 // Shooter system motor ID definition
 #define MOTOR_STDID_5_8 (0x1FFU)
 
-// Smoothing function
+/**
+ * @brief Smoothly ramp a value towards a target by a fixed step.
+ * @param current Current value.
+ * @param target Target value to approach.
+ * @param step Maximum change per call.
+ * @return New value after applying the ramp step toward target.
+ */
 static float RampTowards(float current, float target, float step)
 {
     if (current < target)
@@ -40,7 +47,14 @@ static float RampTowards(float current, float target, float step)
     return current;
 }
 
-// Compute single motor current
+/**
+ * @brief Compute one motor's output current using PID based on feedback.
+ * @param pid PID controller pointer.
+ * @param target Target speed for this motor.
+ * @param feedback Motor feedback pointer.
+ * @param current_tick Current timestamp (ms).
+ * @return Output current command (int16).
+ */
 static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick)
 {
     if (current_tick - feedback->last_update_time > MOTOR_FEEDBACK_TIMEOUT_MS)
@@ -51,26 +65,12 @@ static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Moto
     return (int16_t)PID_Calculate(pid, target, current_speed);
 }
 
-// CAN send function
-static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1, int16_t i2, int16_t i3, int16_t i4)
-{
-    CAN_TxHeaderTypeDef tx = {0};
-    uint8_t d[8];
-    uint32_t mb;
 
-    tx.StdId = MOTOR_STDID_5_8;
-    tx.IDE   = CAN_ID_STD;
-    tx.RTR   = CAN_RTR_DATA;
-    tx.DLC   = 8;
 
-    d[0] = (uint8_t)(i1 >> 8); d[1] = (uint8_t)i1;
-    d[2] = (uint8_t)(i2 >> 8); d[3] = (uint8_t)i2;
-    d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
-    d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
-
-    return HAL_CAN_AddTxMessage(&hcan2, &tx, d, &mb);
-}
-
+/**
+ * @brief Initialize shooter controller and its PIDs; init gimbal pitch.
+ * @param controller Shooter controller pointer.
+ */
 void ShooterController_Init(ShooterController *controller)
 {
     if (controller == NULL) return;
@@ -86,10 +86,16 @@ void ShooterController_Init(ShooterController *controller)
     PID_Init(&controller->shooter2_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, 
              SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     
-    // Initialize GM6020
-    gm6020_init(7);
+    // Initialize gimbal pitch
+    pitch_init(7);
 }
 
+/**
+ * @brief Update shooter state and smooth targets from RC input.
+ * @param controller Shooter controller pointer.
+ * @param rc_data Remote control data pointer (can be NULL).
+ * @param current_tick Current timestamp (ms).
+ */
 void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick)
 {
     if (controller == NULL) return;
@@ -114,11 +120,11 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
     
-    // GM6020 gimbal control
+    // Gimbal pitch control
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
-        controller->gimbal_current = gm6020_control_from_joystick(7, rc_data->rc.ch[1]);
+        controller->gimbal_current = pitch_control_from_joystick(7, rc_data->rc.ch[1]);
     }
     else
     {
@@ -126,6 +132,11 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     }
 }
 
+/**
+ * @brief Compute all shooter currents and send via CAN.
+ * @param controller Shooter controller pointer.
+ * @param current_tick Current timestamp (ms).
+ */
 void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t current_tick)
 {
     if (controller == NULL) return;
@@ -158,7 +169,9 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
     );
     
     // Send CAN command
-    CAN_SendMotorCurrents4(
+    CAN_Manager_SendMotorCurrents4(
+        &hcan2,
+        MOTOR_STDID_5_8,
         controller->output_currents[0],  // Turntable
         controller->output_currents[1],  // Shooter wheel 1
         controller->output_currents[2],  // GM6020 gimbal
@@ -166,12 +179,25 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
     );
 }
 
+/**
+ * @brief Set turntable target speed.
+ * @note Currently not used by main loop; reserved for future control inputs.
+ * @param controller Shooter controller pointer.
+ * @param speed Target speed.
+ */
 void ShooterController_SetTurntableSpeed(ShooterController *controller, float speed)
 {
     if (controller == NULL) return;
     controller->turntable_target = speed;
 }
 
+/**
+ * @brief Set shooter wheels target speeds.
+ * @note Currently not used by main loop; reserved for future control inputs.
+ * @param controller Shooter controller pointer.
+ * @param shooter1_speed Target speed for shooter1.
+ * @param shooter2_speed Target speed for shooter2.
+ */
 void ShooterController_SetShooterSpeeds(ShooterController *controller, float shooter1_speed, float shooter2_speed)
 {
     if (controller == NULL) return;
@@ -179,6 +205,11 @@ void ShooterController_SetShooterSpeeds(ShooterController *controller, float sho
     controller->shooter2_target = shooter2_speed;
 }
 
+/**
+ * @brief Stop shooter system and reset integrals/targets.
+ * @note Currently not used by main loop; can be used by higher-level logic.
+ * @param controller Shooter controller pointer.
+ */
 void ShooterController_Stop(ShooterController *controller)
 {
     if (controller == NULL) return;
@@ -195,12 +226,23 @@ void ShooterController_Stop(ShooterController *controller)
     controller->shooter2_pid.integral = 0.0f;
 }
 
+/**
+ * @brief Get latest shooter output currents.
+ * @note Currently not used externally; handy for diagnostics/telemetry.
+ * @param controller Shooter controller pointer.
+ * @return Pointer to 4-element int16 array or NULL.
+ */
 const int16_t* ShooterController_GetOutputCurrents(const ShooterController *controller)
 {
     if (controller == NULL) return NULL;
     return controller->output_currents;
 }
 
+/**
+ * @brief Check whether shooter has any active demand.
+ * @param controller Shooter controller pointer.
+ * @return true if any demand/current is non-zero.
+ */
 bool ShooterController_IsRunning(const ShooterController *controller)
 {
     if (controller == NULL) return false;
@@ -212,6 +254,16 @@ bool ShooterController_IsRunning(const ShooterController *controller)
            controller->gimbal_current != 0;
 }
 
+/**
+ * @brief Update feedback for one shooter motor from CAN receive path.
+ * @param controller Shooter controller pointer.
+ * @param motor_id Motor ID (4=turntable, 5=shooter1, 7=shooter2).
+ * @param angle Encoder angle.
+ * @param speed Speed (RPM).
+ * @param current Motor current.
+ * @param temp Temperature.
+ * @param current_tick Timestamp in ms.
+ */
 void ShooterController_UpdateMotorFeedback(ShooterController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick)
 {
     if (controller == NULL) return;

@@ -1,8 +1,8 @@
 #include "chassis_controller.h"
 #include "can.h"
+#include "can_manager.h"
 #include <string.h>
 
-// External CAN handle
 extern CAN_HandleTypeDef hcan1;
 
 // PID parameters
@@ -18,7 +18,13 @@ extern CAN_HandleTypeDef hcan1;
 // Chassis motor ID definition
 #define MOTOR_STDID_1_4 (0x200U)
 
-// Smoothing function
+/**
+ * @brief Smoothly ramp a value towards a target by a fixed step.
+ * @param current Current value.
+ * @param target Target value to approach.
+ * @param step Maximum change per call.
+ * @return New value after applying the ramp step toward target.
+ */
 static float RampTowards(float current, float target, float step)
 {
     if (current < target)
@@ -40,7 +46,10 @@ static float RampTowards(float current, float target, float step)
     return current;
 }
 
-// Reset PID integrals
+/**
+ * @brief Reset the integral term of all wheel speed PID controllers.
+ * @param controller Chassis controller pointer (must not be NULL).
+ */
 static void ResetPidIntegrals(ChassisController *controller)
 {
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++)
@@ -49,7 +58,14 @@ static void ResetPidIntegrals(ChassisController *controller)
     }
 }
 
-// Compute single motor current
+/**
+ * @brief Compute one motor's output current using PID based on feedback.
+ * @param pid PID controller pointer.
+ * @param target Target speed for this motor.
+ * @param feedback Motor feedback pointer (angle/speed/current/temp/timestamp).
+ * @param current_tick Current timestamp (ms).
+ * @return Output current command (int16).
+ */
 static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick)
 {
     if (current_tick - feedback->last_update_time > MOTOR_FEEDBACK_TIMEOUT_MS)
@@ -60,26 +76,10 @@ static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Moto
     return (int16_t)PID_Calculate(pid, target, current_speed);
 }
 
-// CAN send function
-static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1, int16_t i2, int16_t i3, int16_t i4)
-{
-    CAN_TxHeaderTypeDef tx = {0};
-    uint8_t d[8];
-    uint32_t mb;
-
-    tx.StdId = MOTOR_STDID_1_4;
-    tx.IDE   = CAN_ID_STD;
-    tx.RTR   = CAN_RTR_DATA;
-    tx.DLC   = 8;
-
-    d[0] = (uint8_t)(i1 >> 8); d[1] = (uint8_t)i1;
-    d[2] = (uint8_t)(i2 >> 8); d[3] = (uint8_t)i2;
-    d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
-    d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
-
-    return HAL_CAN_AddTxMessage(&hcan1, &tx, d, &mb);
-}
-
+/**
+ * @brief Initialize chassis controller: zero fields and setup PID controllers.
+ * @param controller Chassis controller pointer.
+ */
 void ChassisController_Init(ChassisController *controller)
 {
     if (controller == NULL) return;
@@ -101,6 +101,12 @@ void ChassisController_Init(ChassisController *controller)
     controller->target_speeds[3] = CHASSIS_DEMO_TARGET_SPEED;   // Right rear
 }
 
+/**
+ * @brief Update chassis state machine and smooth target speeds.
+ * @param controller Chassis controller pointer.
+ * @param rc_data Remote control data pointer (can be NULL).
+ * @param current_tick Current timestamp (ms).
+ */
 void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick)
 {
     if (controller == NULL) return;
@@ -135,6 +141,11 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
     }
 }
 
+/**
+ * @brief Compute all motor currents and send them via CAN.
+ * @param controller Chassis controller pointer.
+ * @param current_tick Current timestamp (ms).
+ */
 void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t current_tick)
 {
     if (controller == NULL) return;
@@ -151,7 +162,9 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
     }
     
     // Send CAN command
-    CAN_SendMotorCurrents4(
+    CAN_Manager_SendMotorCurrents4(
+        &hcan1,
+        MOTOR_STDID_1_4,
         controller->output_currents[0],
         controller->output_currents[1],
         controller->output_currents[2],
@@ -159,6 +172,12 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
     );
 }
 
+/**
+ * @brief Set target speeds for the 4 chassis motors.
+ * @note Currently not used by main loop; reserved for future control inputs.
+ * @param controller Chassis controller pointer.
+ * @param speeds Array of 4 target speeds.
+ */
 void ChassisController_SetTargetSpeeds(ChassisController *controller, const float speeds[CHASSIS_MOTOR_COUNT])
 {
     if (controller == NULL || speeds == NULL) return;
@@ -169,6 +188,11 @@ void ChassisController_SetTargetSpeeds(ChassisController *controller, const floa
     }
 }
 
+/**
+ * @brief Stop the chassis: clear running state, reset integrals and targets.
+ * @note Currently not used by main loop; can be used by higher-level logic.
+ * @param controller Chassis controller pointer.
+ */
 void ChassisController_Stop(ChassisController *controller)
 {
     if (controller == NULL) return;
@@ -183,12 +207,23 @@ void ChassisController_Stop(ChassisController *controller)
     }
 }
 
+/**
+ * @brief Get the pointer to the latest computed output currents.
+ * @note Currently not used externally; handy for diagnostics/telemetry.
+ * @param controller Chassis controller pointer.
+ * @return Pointer to 4-element int16 current array, or NULL if controller NULL.
+ */
 const int16_t* ChassisController_GetOutputCurrents(const ChassisController *controller)
 {
     if (controller == NULL) return NULL;
     return controller->output_currents;
 }
 
+/**
+ * @brief Check if any motor target is non-zero (chassis considered running).
+ * @param controller Chassis controller pointer.
+ * @return true if any target after ramping is non-zero.
+ */
 bool ChassisController_IsRunning(const ChassisController *controller)
 {
     if (controller == NULL) return false;
@@ -203,7 +238,16 @@ bool ChassisController_IsRunning(const ChassisController *controller)
     return false;
 }
 
-// Motor feedback update function (for external calls)
+/**
+ * @brief Update one motor's feedback from CAN receive path.
+ * @param controller Chassis controller pointer.
+ * @param motor_id Motor index in range 0..3.
+ * @param angle Encoder angle.
+ * @param speed Motor speed (RPM).
+ * @param current Motor current.
+ * @param temp Motor temperature.
+ * @param current_tick Timestamp when feedback was received (ms).
+ */
 void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick)
 {
     if (controller == NULL || motor_id >= CHASSIS_MOTOR_COUNT) return;
