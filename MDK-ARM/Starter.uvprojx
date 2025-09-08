@@ -657,6 +657,21 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f4xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>chassis_controller.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/chassis_controller.c</FilePath>
+            </File>
+            <File>
+              <FileName>shooter_controller.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/shooter_controller.c</FilePath>
+            </File>
+            <File>
+              <FileName>can_manager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/can_manager.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
