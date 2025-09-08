@@ -1,0 +1,244 @@
+#include "shooter_controller.h"
+#include "can.h"
+#include <string.h>
+
+// External CAN handle
+extern CAN_HandleTypeDef hcan2;
+
+// PID parameters
+#define SPEED_PID_KP (5.0f)
+#define SPEED_PID_KI (0.5f)
+#define SPEED_PID_KD (0.1f)
+#define SPEED_PID_OUTPUT_MAX (15000)
+#define SPEED_PID_INTEGRAL_MAX (7500)
+
+// Motor feedback timeout
+#define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
+
+// Shooter system motor ID definition
+#define MOTOR_STDID_5_8 (0x1FFU)
+
+// Smoothing function
+static float RampTowards(float current, float target, float step)
+{
+    if (current < target)
+    {
+        current += step;
+        if (current > target)
+        {
+            current = target;
+        }
+    }
+    else if (current > target)
+    {
+        current -= step;
+        if (current < target)
+        {
+            current = target;
+        }
+    }
+    return current;
+}
+
+// Compute single motor current
+static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Motor_Feedback *feedback, uint32_t current_tick)
+{
+    if (current_tick - feedback->last_update_time > MOTOR_FEEDBACK_TIMEOUT_MS)
+    {
+        return 0;
+    }
+    float current_speed = feedback->speed;
+    return (int16_t)PID_Calculate(pid, target, current_speed);
+}
+
+// CAN send function
+static HAL_StatusTypeDef CAN_SendMotorCurrents4(int16_t i1, int16_t i2, int16_t i3, int16_t i4)
+{
+    CAN_TxHeaderTypeDef tx = {0};
+    uint8_t d[8];
+    uint32_t mb;
+
+    tx.StdId = MOTOR_STDID_5_8;
+    tx.IDE   = CAN_ID_STD;
+    tx.RTR   = CAN_RTR_DATA;
+    tx.DLC   = 8;
+
+    d[0] = (uint8_t)(i1 >> 8); d[1] = (uint8_t)i1;
+    d[2] = (uint8_t)(i2 >> 8); d[3] = (uint8_t)i2;
+    d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
+    d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
+
+    return HAL_CAN_AddTxMessage(&hcan2, &tx, d, &mb);
+}
+
+void ShooterController_Init(ShooterController *controller)
+{
+    if (controller == NULL) return;
+    
+    // Initialize all members to 0
+    memset(controller, 0, sizeof(ShooterController));
+    
+    // Initialize PID controllers
+    PID_Init(&controller->turntable_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, 
+             SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+    PID_Init(&controller->shooter1_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, 
+             SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+    PID_Init(&controller->shooter2_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, 
+             SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
+    
+    // Initialize GM6020
+    gm6020_init(7);
+}
+
+void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick)
+{
+    if (controller == NULL) return;
+    
+    // Check remote control data
+    bool right_switch_up = false;
+    if (rc_data != NULL)
+    {
+        right_switch_up = switch_is_up(rc_data->rc.s[1]);
+    }
+    
+    // Control shooter system based on right switch
+    controller->enabled = right_switch_up;
+    
+    // Turntable control
+    float turntable_target = controller->enabled ? MOTOR5_CONST_SPEED : 0.0f;
+    controller->ramped_turntable = RampTowards(controller->ramped_turntable, turntable_target, SHOOTER_RAMP_STEP);
+    
+    // Shooter wheel control
+    float shooter1_target = controller->enabled ? -SHOOTER_CONST_SPEED : 0.0f;
+    float shooter2_target = controller->enabled ? SHOOTER_CONST_SPEED : 0.0f;
+    controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
+    controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
+    
+    // GM6020 gimbal control
+    controller->gimbal_enabled = (rc_data != NULL);
+    if (controller->gimbal_enabled)
+    {
+        controller->gimbal_current = gm6020_control_from_joystick(7, rc_data->rc.ch[1]);
+    }
+    else
+    {
+        controller->gimbal_current = 0;
+    }
+}
+
+void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t current_tick)
+{
+    if (controller == NULL) return;
+    
+    // Compute turntable current (motor 5)
+    controller->output_currents[0] = ComputeSingleMotorCurrent(
+        &controller->turntable_pid, 
+        controller->ramped_turntable, 
+        &controller->turntable_feedback, 
+        current_tick
+    );
+    
+    // Compute shooter wheel 1 current (motor 6)
+    controller->output_currents[1] = ComputeSingleMotorCurrent(
+        &controller->shooter1_pid, 
+        controller->ramped_shooter1, 
+        &controller->shooter1_feedback, 
+        current_tick
+    );
+    
+    // Motor 7 (GM6020 gimbal)
+    controller->output_currents[2] = controller->gimbal_current;
+    
+    // Compute shooter wheel 2 current (motor 8)
+    controller->output_currents[3] = ComputeSingleMotorCurrent(
+        &controller->shooter2_pid, 
+        controller->ramped_shooter2, 
+        &controller->shooter2_feedback, 
+        current_tick
+    );
+    
+    // Send CAN command
+    CAN_SendMotorCurrents4(
+        controller->output_currents[0],  // Turntable
+        controller->output_currents[1],  // Shooter wheel 1
+        controller->output_currents[2],  // GM6020 gimbal
+        controller->output_currents[3]   // Shooter wheel 2
+    );
+}
+
+void ShooterController_SetTurntableSpeed(ShooterController *controller, float speed)
+{
+    if (controller == NULL) return;
+    controller->turntable_target = speed;
+}
+
+void ShooterController_SetShooterSpeeds(ShooterController *controller, float shooter1_speed, float shooter2_speed)
+{
+    if (controller == NULL) return;
+    controller->shooter1_target = shooter1_speed;
+    controller->shooter2_target = shooter2_speed;
+}
+
+void ShooterController_Stop(ShooterController *controller)
+{
+    if (controller == NULL) return;
+    
+    controller->enabled = false;
+    controller->turntable_target = 0.0f;
+    controller->shooter1_target = 0.0f;
+    controller->shooter2_target = 0.0f;
+    controller->gimbal_current = 0;
+    
+    // Reset PID integrals
+    controller->turntable_pid.integral = 0.0f;
+    controller->shooter1_pid.integral = 0.0f;
+    controller->shooter2_pid.integral = 0.0f;
+}
+
+const int16_t* ShooterController_GetOutputCurrents(const ShooterController *controller)
+{
+    if (controller == NULL) return NULL;
+    return controller->output_currents;
+}
+
+bool ShooterController_IsRunning(const ShooterController *controller)
+{
+    if (controller == NULL) return false;
+    
+    return controller->enabled || 
+           controller->ramped_turntable != 0 || 
+           controller->ramped_shooter1 != 0 || 
+           controller->ramped_shooter2 != 0 ||
+           controller->gimbal_current != 0;
+}
+
+void ShooterController_UpdateMotorFeedback(ShooterController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick)
+{
+    if (controller == NULL) return;
+    
+    Motor_Feedback *feedback = NULL;
+    
+    switch (motor_id)
+    {
+        case 4: // Turntable
+            feedback = &controller->turntable_feedback;
+            break;
+        case 5: // Shooter wheel 1
+            feedback = &controller->shooter1_feedback;
+            break;
+        case 7: // Shooter wheel 2
+            feedback = &controller->shooter2_feedback;
+            break;
+        default:
+            return;
+    }
+    
+    if (feedback != NULL)
+    {
+        feedback->angle = angle;
+        feedback->speed = speed;
+        feedback->current = current;
+        feedback->temp = temp;
+        feedback->last_update_time = current_tick;
+    }
+}
