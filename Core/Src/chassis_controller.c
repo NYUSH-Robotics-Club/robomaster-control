@@ -124,7 +124,7 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
     // Left stick: ch[3] vertical (forward/back), ch[2] horizontal (strafe)
     // Right stick: ch[0] horizontal (yaw rotation)
     int16_t vx_raw = 0; // forward/backward
-    int16_t vy_raw = 0; // right/left strafe (right positive)
+    int16_t vy_raw = 0; // right/left strafe
     int16_t wz_raw = 0; // yaw rotation (right positive: CCW)
     if (rc_data != NULL)
     {
@@ -141,7 +141,7 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
     // Scale to target speed units
     const float scale = (float)CHASSIS_DEMO_TARGET_SPEED / (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET); // 7000/660
     float vx = (-(float)vx_raw * scale) / 3.0f; // forward + (1/3 sensitivity)
-    float vy = ((float)vy_raw * scale) / 3.0f; // right + (1/3 sensitivity)
+    float vy = (-(float)vy_raw * scale) / 3.0f; // left + (1/3 sensitivity)
     float omega = (-(float)wz_raw * scale) / 3.0f; // CCW + (1/3 sensitivity)
 
     // Mecanum kinematics with rotation
