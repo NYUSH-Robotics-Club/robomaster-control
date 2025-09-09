@@ -3,8 +3,9 @@
 #include "can_manager.h"
 #include <string.h>
 
-// External CAN handle
+// External CAN handles
 extern CAN_HandleTypeDef hcan2;
+extern CAN_HandleTypeDef hcan1;
 
 // PID parameters
 #define SPEED_PID_KP (5.0f)
@@ -168,15 +169,19 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
         current_tick
     );
     
-    // Send CAN command
+    // Send CAN commands
+    // 1) Send motors 5,6,8 on CAN2 (StdId 0x1FF). Leave slot for motor 7 empty here.
     CAN_Manager_SendMotorCurrents4(
         &hcan2,
         MOTOR_STDID_5_8,
-        controller->output_currents[0],  // Turntable
-        controller->output_currents[1],  // Shooter wheel 1
-        controller->output_currents[2],  // GM6020 gimbal
-        controller->output_currents[3]   // Shooter wheel 2
+        controller->output_currents[0],  // Turntable (motor 5)
+        controller->output_currents[1],  // Shooter wheel 1 (motor 6)
+        0,                               // Skip GM6020 here (motor 7 sent on CAN1/0x2FF)
+        controller->output_currents[3]   // Shooter wheel 2 (motor 8)
     );
+
+    // 2) Send GM6020 pitch current on CAN1 using StdId 0x2FF addressing (motor id 7)
+    CAN_Manager_SendGM6020Current(&hcan1, 7, controller->gimbal_current);
 }
 
 /**

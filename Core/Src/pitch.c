@@ -3,8 +3,8 @@
 #include "can.h"
 #include "can_manager.h"
 
-#define GM6020_MAX_TARGET_RPM           (300.0f)
-#define GM6020_JOYSTICK_DEADZONE        (60)
+#define GM6020_MAX_TARGET_RPM           (100.0f)
+#define GM6020_JOYSTICK_DEADZONE        (30)
 #define GM6020_JOYSTICK_FULL_SCALE      (660.0f)
 #define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (100.0f)
 #define GM6020_ANGLE_HOLD_MIN_RPM          (120.0f)
