@@ -1,3 +1,41 @@
+# C++ build artifacts
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.out
+*.a
+*.lib
+
+# CMake build directory
+/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Visual Studio files
+*.vcxproj*
+*.sln
+*.user
+*.opensdf
+*.sdf
+*.ipch
+*.pdb
+
+# CLion IDE files
+.idea/
+*.iml
+
+# Other IDEs
+.vscode/
+*.swp
+
+# Generated files
+*.log
+*.tmp
+
+# Custom ignores
 keil-assistant.log
 uv4.log
 uv4.log.lock
