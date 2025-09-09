@@ -18,6 +18,14 @@ extern CAN_HandleTypeDef hcan1;
 // Chassis motor ID definition
 #define MOTOR_STDID_1_4 (0x200U)
 
+// Motor direction: +1 for left side, -1 for right side (aligns physical forward)
+static const int8_t MOTOR_DIR[CHASSIS_MOTOR_COUNT] = {
+    -1, // RR (ID1) - right side
+    +1, // LR (ID2) - left side
+    +1, // LF (ID3) - left side
+    -1  // RF (ID4) - right side
+};
+
 /**
  * @brief Smoothly ramp a value towards a target by a fixed step.
  * @param current Current value.
@@ -133,10 +141,10 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 
     // Mecanum kinematics without rotation (omega = 0)
     // Motor order by CAN IDs: 1: Right Rear, 2: Left Rear, 3: Left Front, 4: Right Front
-    controller->target_speeds[0] = vx - vy; // RR (ID1)
-    controller->target_speeds[1] = vx + vy; // LR (ID2)
-    controller->target_speeds[2] = vx - vy; // LF (ID3)
-    controller->target_speeds[3] = vx + vy; // RF (ID4)
+    controller->target_speeds[0] = MOTOR_DIR[0] * (vx - vy); // RR (ID1)
+    controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy); // LR (ID2)
+    controller->target_speeds[2] = MOTOR_DIR[2] * (vx - vy); // LF (ID3)
+    controller->target_speeds[3] = MOTOR_DIR[3] * (vx + vy); // RF (ID4)
 
     // Running state based on stick activity
     controller->running = (vx_raw != 0 || vy_raw != 0);
@@ -160,12 +168,13 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
     // Compute current for each motor
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++)
     {
-        controller->output_currents[i] = ComputeSingleMotorCurrent(
-            &controller->speed_pids[i], 
-            controller->ramped_targets[i], 
-            &controller->motor_feedbacks[i], 
+        int16_t motor_current = ComputeSingleMotorCurrent(
+            &controller->speed_pids[i],
+            controller->ramped_targets[i],
+            &controller->motor_feedbacks[i],
             current_tick
         );
+        controller->output_currents[i] = motor_current;
     }
     
     // Send CAN command
