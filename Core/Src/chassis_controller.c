@@ -94,11 +94,12 @@ void ChassisController_Init(ChassisController *controller)
                  SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     }
     
-    // Set default target speeds (Mecanum wheel configuration)
-    controller->target_speeds[0] = CHASSIS_DEMO_TARGET_SPEED;   // Right front
-    controller->target_speeds[1] = -CHASSIS_DEMO_TARGET_SPEED;  // Left front
-    controller->target_speeds[2] = -CHASSIS_DEMO_TARGET_SPEED;  // Left rear
-    controller->target_speeds[3] = CHASSIS_DEMO_TARGET_SPEED;   // Right rear
+    // Default targets to zero
+    for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++)
+    {
+        controller->target_speeds[i] = 0.0f;
+        controller->ramped_targets[i] = 0.0f;
+    }
 }
 
 /**
@@ -111,33 +112,39 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 {
     if (controller == NULL) return;
     
-    // Check remote control data
-    bool left_switch_up = false;
+    // Map left stick to chassis velocities (no switch control)
+    // ch[3]: left vertical (forward/back); ch[2]: left horizontal (strafe)
+    int16_t vx_raw = 0; // forward/backward
+    int16_t vy_raw = 0; // right/left strafe (right positive)
     if (rc_data != NULL)
     {
-        left_switch_up = switch_is_up(rc_data->rc.s[0]);
+        vx_raw = (int16_t)(rc_data->rc.ch[3]);
+        vy_raw = (int16_t)(rc_data->rc.ch[2]);
+        // deadband
+        const int16_t deadband = 10;
+        if (vx_raw > -deadband && vx_raw < deadband) vx_raw = 0;
+        if (vy_raw > -deadband && vy_raw < deadband) vy_raw = 0;
     }
-    
-    // State machine: control running state based on left switch
-    static bool last_left_switch_up = false;
-    if (left_switch_up && !last_left_switch_up)
-    {
-        // Start running
-        controller->running = true;
-    }
-    else if (!left_switch_up && last_left_switch_up)
-    {
-        // Stop running
-        controller->running = false;
-        ResetPidIntegrals(controller);
-    }
-    last_left_switch_up = left_switch_up;
-    
+
+    // Scale to target speed units
+    const float scale = (float)CHASSIS_DEMO_TARGET_SPEED / (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET); // 7000/660
+    float vx = (float)vx_raw * scale; // forward +
+    float vy = (float)vy_raw * scale; // right +
+
+    // Mecanum kinematics without rotation (omega = 0)
+    // Motor order by CAN IDs: 1: Right Rear, 2: Left Rear, 3: Left Front, 4: Right Front
+    controller->target_speeds[0] = vx - vy; // RR (ID1)
+    controller->target_speeds[1] = vx + vy; // LR (ID2)
+    controller->target_speeds[2] = vx - vy; // LF (ID3)
+    controller->target_speeds[3] = vx + vy; // RF (ID4)
+
+    // Running state based on stick activity
+    controller->running = (vx_raw != 0 || vy_raw != 0);
+
     // Smooth target speeds
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++)
     {
-        float target = controller->running ? controller->target_speeds[i] : 0.0f;
-        controller->ramped_targets[i] = RampTowards(controller->ramped_targets[i], target, CHASSIS_RAMP_STEP);
+        controller->ramped_targets[i] = RampTowards(controller->ramped_targets[i], controller->target_speeds[i], CHASSIS_RAMP_STEP);
     }
 }
 
