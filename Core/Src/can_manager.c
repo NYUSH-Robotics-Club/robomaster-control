@@ -145,7 +145,7 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx, d) != HAL_OK) return;
     
     // Gimbal pitch feedback (CAN1 only)
-    if (manager->filter_bank == CAN1_FILTER_BANK && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x208) {
+    if (manager->filter_bank == CAN1_FILTER_BANK && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
         uint8_t gid = (uint8_t)(rx.StdId - 0x204);
         if (gid >= 1 && gid <= 7) {
             uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);

@@ -3,7 +3,7 @@
 #include "can.h"
 #include "can_manager.h"
 
-#define GM6020_MAX_TARGET_RPM           (100.0f)
+#define GM6020_MAX_TARGET_RPM           (50.0f)
 #define GM6020_JOYSTICK_DEADZONE        (30)
 #define GM6020_JOYSTICK_FULL_SCALE      (660.0f)
 #define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (100.0f)
@@ -63,13 +63,15 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
   // Within deadzone: target speed = 0
   if (raw > -GM6020_JOYSTICK_DEADZONE && raw < GM6020_JOYSTICK_DEADZONE)
   {
-    float target_rpm = 0.0f;
-    int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
-    return cmd;
+    // Immediate stop: zero output, clear integral to avoid residual torque
+    c->speed_pid.integral = 0.0f;
+    return 0;
   }
 
   // Beyond deadzone: run at constant speed toward stick direction
-  float target_rpm = (raw > 0 ? 1.0f : -1.0f) * GM6020_MAX_TARGET_RPM;
+  float target_rpm = ((float)raw / GM6020_JOYSTICK_FULL_SCALE) * GM6020_MAX_TARGET_RPM;
+  if (target_rpm >  GM6020_MAX_TARGET_RPM) target_rpm =  GM6020_MAX_TARGET_RPM;
+  if (target_rpm < -GM6020_MAX_TARGET_RPM) target_rpm = -GM6020_MAX_TARGET_RPM;
   int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
   return cmd;
 }
