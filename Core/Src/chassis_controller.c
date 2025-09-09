@@ -120,34 +120,40 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 {
     if (controller == NULL) return;
     
-    // Map left stick to chassis velocities (no switch control)
-    // ch[3]: left vertical (forward/back); ch[2]: left horizontal (strafe)
+    // Map sticks to chassis velocities
+    // Left stick: ch[3] vertical (forward/back), ch[2] horizontal (strafe)
+    // Right stick: ch[0] horizontal (yaw rotation)
     int16_t vx_raw = 0; // forward/backward
     int16_t vy_raw = 0; // right/left strafe (right positive)
+    int16_t wz_raw = 0; // yaw rotation (right positive: CCW)
     if (rc_data != NULL)
     {
         vx_raw = (int16_t)(rc_data->rc.ch[3]);
         vy_raw = (int16_t)(rc_data->rc.ch[2]);
+        wz_raw = (int16_t)(rc_data->rc.ch[0]);
         // deadband
         const int16_t deadband = 10;
         if (vx_raw > -deadband && vx_raw < deadband) vx_raw = 0;
         if (vy_raw > -deadband && vy_raw < deadband) vy_raw = 0;
+        if (wz_raw > -deadband && wz_raw < deadband) wz_raw = 0;
     }
 
     // Scale to target speed units
     const float scale = (float)CHASSIS_DEMO_TARGET_SPEED / (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET); // 7000/660
     float vx = (float)vx_raw * scale; // forward +
     float vy = (float)vy_raw * scale; // right +
+    float omega = (float)wz_raw * scale; // CCW +
 
-    // Mecanum kinematics without rotation (omega = 0)
+    // Mecanum kinematics with rotation
     // Motor order by CAN IDs: 1: Right Rear, 2: Left Rear, 3: Left Front, 4: Right Front
-    controller->target_speeds[0] = MOTOR_DIR[0] * (vx - vy); // RR (ID1)
-    controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy); // LR (ID2)
-    controller->target_speeds[2] = MOTOR_DIR[2] * (vx - vy); // LF (ID3)
-    controller->target_speeds[3] = MOTOR_DIR[3] * (vx + vy); // RF (ID4)
+    // RR: vx - vy + omega; LR: vx + vy - omega; LF: vx - vy - omega; RF: vx + vy + omega
+    controller->target_speeds[0] = MOTOR_DIR[0] * (vx - vy + omega); // RR (ID1)
+    controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy - omega); // LR (ID2)
+    controller->target_speeds[2] = MOTOR_DIR[2] * (vx - vy - omega); // LF (ID3)
+    controller->target_speeds[3] = MOTOR_DIR[3] * (vx + vy + omega); // RF (ID4)
 
     // Running state based on stick activity
-    controller->running = (vx_raw != 0 || vy_raw != 0);
+    controller->running = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
 
     // Smooth target speeds
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++)
