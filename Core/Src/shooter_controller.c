@@ -101,23 +101,27 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
 {
     if (controller == NULL) return;
     
-    // Check remote control data
-    bool right_switch_up = false;
+    // Check left switch position: down/off, mid/preheat (shooters only), up/all on
+    bool left_switch_up = false;
+    bool left_switch_mid = false;
+    bool left_switch_down = false;
     if (rc_data != NULL)
     {
-        right_switch_up = switch_is_up(rc_data->rc.s[1]);
+        left_switch_up = switch_is_up(rc_data->rc.s[0]);
+        left_switch_mid = switch_is_mid(rc_data->rc.s[0]);
+        left_switch_down = switch_is_down(rc_data->rc.s[0]);
     }
     
-    // Control shooter system based on right switch
-    controller->enabled = right_switch_up;
+    // Enabled if any shooter/turntable should run (mid or up)
+    controller->enabled = (left_switch_up || left_switch_mid);
     
-    // Turntable control
-    float turntable_target = controller->enabled ? MOTOR5_CONST_SPEED : 0.0f;
+    // Targets based on mode
+    float turntable_target = left_switch_up ? MOTOR5_CONST_SPEED : 0.0f;
+    float shooter1_target = (left_switch_up || left_switch_mid) ? -SHOOTER_CONST_SPEED : 0.0f;
+    float shooter2_target = (left_switch_up || left_switch_mid) ?  SHOOTER_CONST_SPEED : 0.0f;
+    
+    // Apply ramping
     controller->ramped_turntable = RampTowards(controller->ramped_turntable, turntable_target, SHOOTER_RAMP_STEP);
-    
-    // Shooter wheel control
-    float shooter1_target = controller->enabled ? -SHOOTER_CONST_SPEED : 0.0f;
-    float shooter2_target = controller->enabled ? SHOOTER_CONST_SPEED : 0.0f;
     controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
     
