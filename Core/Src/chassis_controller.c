@@ -140,9 +140,9 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 
     // Scale to target speed units
     const float scale = (float)CHASSIS_DEMO_TARGET_SPEED / (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET); // 7000/660
-    float vx = -(float)vx_raw * scale; // forward +
-    float vy = (float)vy_raw * scale; // right +
-    float omega = (float)wz_raw * scale; // CCW +
+    float vx = (-(float)vx_raw * scale) / 3.0f; // forward + (1/3 sensitivity)
+    float vy = ((float)vy_raw * scale) / 3.0f; // right + (1/3 sensitivity)
+    float omega = (-(float)wz_raw * scale) / 3.0f; // CCW + (1/3 sensitivity)
 
     // Mecanum kinematics with rotation
     // Motor order by CAN IDs: 1: Right Rear, 2: Left Rear, 3: Left Front, 4: Right Front
