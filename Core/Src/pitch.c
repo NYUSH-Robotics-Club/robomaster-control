@@ -26,6 +26,11 @@
 #define GM6020_HOLD_MAX_RPM                (GM6020_MAX_TARGET_RPM)
 #define GM6020_DECAY_INTEGRAL              (0.90f)
 
+// Software clockwise limit relative to power-on angle
+#define GM6020_CW_LIMIT_DEG                 (60.0f)
+#define GM6020_CW_SIGN                      (1)    // +1 if encoder counts increase when rotating clockwise, else -1
+#define GM6020_POSITIVE_CMD_INCREASES_COUNTS (1)   // +1 if positive command drives counts increasing
+
 typedef struct {
   uint8_t   id;
   uint16_t  angle_raw;
@@ -34,6 +39,7 @@ typedef struct {
   uint8_t   hold_inited;
   int32_t   zero_raw;     // encoder raw value at horizontal
   int8_t    dir_sign;     // +1 or -1
+  int32_t   home_angle_raw; // power-on reference angle
   PID_Controller speed_pid;
 } gm6020_ctx_t;
 
@@ -63,6 +69,11 @@ static inline float clampf(float v, float lo, float hi)
   return v;
 }
 
+static inline int32_t deg_to_counts(float deg)
+{
+  return (int32_t)(deg * (GM6020_ENCODER_CPR / 360.0f));
+}
+
 void pitch_init(uint8_t id)
 {
   if (id < 1 || id > 7) return;
@@ -74,6 +85,7 @@ void pitch_init(uint8_t id)
   c->hold_inited = 0;
   c->zero_raw = GM6020_PITCH_ZERO_RAW_DEFAULT;
   c->dir_sign = (int8_t)GM6020_PITCH_DIR_SIGN;
+  c->home_angle_raw = 0;
   PID_Init(&c->speed_pid, 10.0f, 0.3f, 0.05f, 30000.0f, 25000.0f);
 }
 
@@ -85,6 +97,7 @@ void pitch_on_feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   c->speed_rpm = speed_rpm;
   if (!c->hold_inited) {
     c->hold_angle_raw = angle_raw;
+    c->home_angle_raw = angle_raw;  // record power-on/home angle
     c->hold_inited = 1;
   }
 }
@@ -109,6 +122,10 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
   if (fabsf(current_rpm) < GM6020_STATIC_SPEED_EPS_RPM) {
     I_g += (sinf(theta) >= 0.0f ? 1.0f : -1.0f) * GM6020_STATIC_FRICTION_CURRENT;
   }
+
+  // Compute clockwise delta from home (in encoder counts)
+  int32_t cw_delta_counts = GM6020_CW_SIGN * wrap_counts_diff((int32_t)c->angle_raw - (int32_t)c->home_angle_raw);
+  int32_t cw_limit_counts = deg_to_counts(GM6020_CW_LIMIT_DEG);
 
   // Within deadzone: position hold + gravity feedforward
   if (raw > -GM6020_JOYSTICK_DEADZONE && raw < GM6020_JOYSTICK_DEADZONE)
@@ -135,6 +152,10 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
 
     int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
     int32_t cmd_ff = (int32_t)cmd + (int32_t)I_g;
+    // Enforce CW software limit: block commands that would further increase CW delta beyond limit
+    if (cw_delta_counts >= cw_limit_counts && (cmd_ff * GM6020_POSITIVE_CMD_INCREASES_COUNTS * GM6020_CW_SIGN) > 0) {
+      cmd_ff = 0;
+    }
     if (cmd_ff > 30000) cmd_ff = 30000;
     if (cmd_ff < -30000) cmd_ff = -30000;
     return (int16_t)cmd_ff;
@@ -145,11 +166,21 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
   if (target_rpm >  GM6020_MAX_TARGET_RPM) target_rpm =  GM6020_MAX_TARGET_RPM;
   if (target_rpm < -GM6020_MAX_TARGET_RPM) target_rpm = -GM6020_MAX_TARGET_RPM;
 
+  // If at CW limit and command requests further CW motion, block it
+  if (cw_delta_counts >= cw_limit_counts && (target_rpm * GM6020_POSITIVE_CMD_INCREASES_COUNTS * GM6020_CW_SIGN) > 0.0f) {
+    target_rpm = 0.0f;
+    c->speed_pid.integral *= GM6020_DECAY_INTEGRAL;
+  }
+
   // Update hold angle to current so re-entering deadzone does not jerk back
   c->hold_angle_raw = c->angle_raw;
 
   int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
   int32_t cmd_ff = (int32_t)cmd + (int32_t)I_g;
+  // Enforce CW software limit for final command as well
+  if (cw_delta_counts >= cw_limit_counts && (cmd_ff * GM6020_POSITIVE_CMD_INCREASES_COUNTS * GM6020_CW_SIGN) > 0) {
+    cmd_ff = 0;
+  }
   if (cmd_ff > 30000) cmd_ff = 30000;
   if (cmd_ff < -30000) cmd_ff = -30000;
   return (int16_t)cmd_ff;
