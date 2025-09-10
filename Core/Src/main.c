@@ -109,6 +109,7 @@ int main(void)
   MX_CAN1_Init();
   MX_CAN2_Init();
   MX_USART3_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
@@ -135,6 +136,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+    HAL_UART_Transmit(&huart1, "ABCDEF", 6, 1000);
+    HAL_Delay(1000);
     uint32_t current_tick = HAL_GetTick();
     const RC_ctrl_t *rc_data = get_remote_control_point();
 
@@ -251,7 +255,7 @@ void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+     ex: printf("Wrong parameters value: file %s on line %\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
