@@ -125,11 +125,11 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
     
-    // Gimbal pitch control
+    // Gimbal pitch control by DT7 left top dial (rc.ch[4])
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
-        controller->gimbal_current = pitch_control_from_joystick(7, rc_data->rc.ch[1]);
+        controller->gimbal_current = pitch_control_from_dial(7, rc_data->rc.ch[4]);
     }
     else
     {

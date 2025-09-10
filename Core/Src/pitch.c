@@ -75,3 +75,31 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
 }
 
 
+/**
+ * @brief Dial control: map DT7 dial (rc.ch[4]) linearly to target rpm via PID.
+ *        Deadzone near center; full scale at extremes.
+ * @param id Motor id (1..7).
+ * @param dial_ch4 Dial raw value (approx -660..+660 after offset removal).
+ * @return Current command for GM6020 (int16).
+ */
+int16_t pitch_control_from_dial(uint8_t id, int16_t dial_ch4)
+{
+  if (id < 1 || id > 7) return 0;
+  gm6020_ctx_t *c = &g_ctx[id-1];
+
+  int16_t raw = dial_ch4;
+  // deadzone
+  if (raw > -GM6020_JOYSTICK_DEADZONE && raw < GM6020_JOYSTICK_DEADZONE)
+  {
+    raw = 0;
+  }
+
+  // scale to rpm: raw in [-660,660] -> [-GM6020_MAX_TARGET_RPM, GM6020_MAX_TARGET_RPM]
+  float scale = GM6020_MAX_TARGET_RPM / GM6020_JOYSTICK_FULL_SCALE;
+  float target_rpm = (float)raw * scale;
+  float current_rpm = (float)c->speed_rpm;
+  int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
+  return cmd;
+}
+
+
