@@ -2,12 +2,29 @@
 #include "pid.h"
 #include "can.h"
 #include "can_manager.h"
+#include <math.h>
 
-#define GM6020_MAX_TARGET_RPM           (50.0f)
-#define GM6020_JOYSTICK_DEADZONE        (30)
-#define GM6020_JOYSTICK_FULL_SCALE      (660.0f)
+#define GM6020_MAX_TARGET_RPM              (50.0f)
+#define GM6020_JOYSTICK_DEADZONE           (30)
+#define GM6020_JOYSTICK_FULL_SCALE         (660.0f)
 #define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (100.0f)
-#define GM6020_ANGLE_HOLD_MIN_RPM          (120.0f)
+#define GM6020_ANGLE_HOLD_MIN_RPM          (10.0f)
+
+// Encoder and geometry
+#define GM6020_ENCODER_CPR                 (8192.0f)
+#define PITCH_PI                           (3.14159265358979323846f)
+
+// Gravity feedforward parameters (tunable)
+#define GM6020_PITCH_ZERO_RAW_DEFAULT      (0)     // set to horizontal encoder raw
+#define GM6020_PITCH_DIR_SIGN              (1)     // +1 or -1 depending on mounting
+#define GM6020_GRAVITY_K                   (1500.0f)
+#define GM6020_STATIC_FRICTION_CURRENT     (200.0f)
+#define GM6020_STATIC_SPEED_EPS_RPM        (5.0f)
+
+// Hold behavior
+#define GM6020_ANGLE_HOLD_DEG_EPS          (0.3f)
+#define GM6020_HOLD_MAX_RPM                (GM6020_MAX_TARGET_RPM)
+#define GM6020_DECAY_INTEGRAL              (0.90f)
 
 typedef struct {
   uint8_t   id;
@@ -15,12 +32,36 @@ typedef struct {
   int16_t   speed_rpm;
   int32_t   hold_angle_raw;
   uint8_t   hold_inited;
+  int32_t   zero_raw;     // encoder raw value at horizontal
+  int8_t    dir_sign;     // +1 or -1
   PID_Controller speed_pid;
 } gm6020_ctx_t;
 
 static gm6020_ctx_t g_ctx[8];
 
 #define send_current_by_id(id, cur) CAN_Manager_SendGM6020Current(&hcan1, (id), (cur))
+
+static inline int32_t wrap_counts_diff(int32_t diff)
+{
+  if (diff > 4096) diff -= 8192;
+  if (diff < -4096) diff += 8192;
+  return diff;
+}
+
+static inline float raw_to_theta_rad(uint16_t angle_raw, int32_t zero_raw, int8_t dir_sign)
+{
+  int32_t diff = (int32_t)angle_raw - zero_raw;
+  diff = wrap_counts_diff(diff);
+  float revolutions = (float)diff / GM6020_ENCODER_CPR;
+  return (float)dir_sign * (revolutions * 2.0f * PITCH_PI);
+}
+
+static inline float clampf(float v, float lo, float hi)
+{
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
 
 void pitch_init(uint8_t id)
 {
@@ -31,6 +72,8 @@ void pitch_init(uint8_t id)
   c->speed_rpm = 0;
   c->hold_angle_raw = 0;
   c->hold_inited = 0;
+  c->zero_raw = GM6020_PITCH_ZERO_RAW_DEFAULT;
+  c->dir_sign = (int8_t)GM6020_PITCH_DIR_SIGN;
   PID_Init(&c->speed_pid, 10.0f, 0.3f, 0.05f, 30000.0f, 25000.0f);
 }
 
@@ -60,20 +103,56 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
   int16_t raw = joystick_ch1;
   float current_rpm = (float)c->speed_rpm;
 
-  // Within deadzone: target speed = 0
-  if (raw > -GM6020_JOYSTICK_DEADZONE && raw < GM6020_JOYSTICK_DEADZONE)
-  {
-    // Immediate stop: zero output, clear integral to avoid residual torque
-    c->speed_pid.integral = 0.0f;
-    return 0;
+  // Gravity feedforward (based on current angle)
+  float theta = raw_to_theta_rad(c->angle_raw, c->zero_raw, c->dir_sign);
+  float I_g = GM6020_GRAVITY_K * sinf(theta);
+  if (fabsf(current_rpm) < GM6020_STATIC_SPEED_EPS_RPM) {
+    I_g += (sinf(theta) >= 0.0f ? 1.0f : -1.0f) * GM6020_STATIC_FRICTION_CURRENT;
   }
 
-  // Beyond deadzone: run at constant speed toward stick direction
+  // Within deadzone: position hold + gravity feedforward
+  if (raw > -GM6020_JOYSTICK_DEADZONE && raw < GM6020_JOYSTICK_DEADZONE)
+  {
+    if (!c->hold_inited) {
+      c->hold_angle_raw = c->angle_raw;
+      c->hold_inited = 1;
+    }
+
+    int32_t diff_counts = wrap_counts_diff((int32_t)c->hold_angle_raw - (int32_t)c->angle_raw);
+    float error_deg = ((float)diff_counts) * (360.0f / GM6020_ENCODER_CPR);
+    float target_rpm = GM6020_ANGLE_HOLD_KP_RPM_PER_DEG * error_deg;
+    target_rpm = clampf(target_rpm, -GM6020_HOLD_MAX_RPM, GM6020_HOLD_MAX_RPM);
+
+    if (fabsf(error_deg) > GM6020_ANGLE_HOLD_DEG_EPS) {
+      float min_mag = GM6020_ANGLE_HOLD_MIN_RPM;
+      if (fabsf(target_rpm) < min_mag) {
+        target_rpm = (target_rpm >= 0.0f ? 1.0f : -1.0f) * min_mag;
+      }
+    } else {
+      // near target, soften integral to avoid residual torque
+      c->speed_pid.integral *= GM6020_DECAY_INTEGRAL;
+    }
+
+    int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
+    int32_t cmd_ff = (int32_t)cmd + (int32_t)I_g;
+    if (cmd_ff > 30000) cmd_ff = 30000;
+    if (cmd_ff < -30000) cmd_ff = -30000;
+    return (int16_t)cmd_ff;
+  }
+
+  // Beyond deadzone: run at constant speed toward stick direction + gravity feedforward
   float target_rpm = ((float)raw / GM6020_JOYSTICK_FULL_SCALE) * GM6020_MAX_TARGET_RPM;
   if (target_rpm >  GM6020_MAX_TARGET_RPM) target_rpm =  GM6020_MAX_TARGET_RPM;
   if (target_rpm < -GM6020_MAX_TARGET_RPM) target_rpm = -GM6020_MAX_TARGET_RPM;
+
+  // Update hold angle to current so re-entering deadzone does not jerk back
+  c->hold_angle_raw = c->angle_raw;
+
   int16_t cmd = (int16_t)PID_Calculate(&c->speed_pid, target_rpm, current_rpm);
-  return cmd;
+  int32_t cmd_ff = (int32_t)cmd + (int32_t)I_g;
+  if (cmd_ff > 30000) cmd_ff = 30000;
+  if (cmd_ff < -30000) cmd_ff = -30000;
+  return (int16_t)cmd_ff;
 }
 
 
