@@ -21,10 +21,12 @@ starter/main.o: ..\Core\Src\main.c ..\Core\Inc\main.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ramfunc.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr_ex.h \
+  ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_spi.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_uart.h \
-  ..\Core\Inc\can.h ..\Core\Inc\dma.h ..\Core\Inc\usart.h \
-  ..\Core\Inc\gpio.h ..\Core\Inc\remote_control.h ..\Core\Inc\bsp_rc.h \
-  ..\Drivers\CMSIS\Include\cmsis_compiler.h \
+  ..\Core\Inc\can.h ..\Core\Inc\dma.h ..\Core\Inc\spi.h \
+  ..\Core\Inc\usart.h ..\Core\Inc\gpio.h ..\Core\Inc\remote_control.h \
+  ..\Core\Inc\bsp_rc.h ..\Drivers\CMSIS\Include\cmsis_compiler.h \
   ..\Core\Inc\chassis_controller.h ..\Core\Inc\pid.h \
   ..\Core\Inc\motor_feedback.h ..\Core\Inc\shooter_controller.h \
-  ..\Core\Inc\gimbal.h ..\Core\Inc\can_manager.h
+  ..\Core\Inc\gimbal.h ..\Core\Inc\can_manager.h \
+  ..\Core\Inc\BMI088driver.h

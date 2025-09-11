@@ -22,6 +22,7 @@ starter/can_manager.o: ..\Core\Src\can_manager.c \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ramfunc.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr_ex.h \
+  ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_spi.h \
   ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_uart.h \
   ..\Core\Inc\chassis_controller.h ..\Core\Inc\pid.h \
   ..\Core\Inc\remote_control.h ..\Core\Inc\bsp_rc.h \

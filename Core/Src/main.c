@@ -15,6 +15,7 @@
 #include "main.h"
 #include "can.h"
 #include "dma.h"
+#include "spi.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -26,6 +27,7 @@
 #include "chassis_controller.h"
 #include "shooter_controller.h"
 #include "can_manager.h"
+#include "BMI088driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,6 +49,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+
+float gyro[3], accel[3], temp;
 // Controller instances
 ChassisController chassis_controller;
 ShooterController shooter_controller;
@@ -109,6 +113,8 @@ int main(void)
   MX_CAN1_Init();
   MX_CAN2_Init();
   MX_USART3_UART_Init();
+  MX_SPI1_Init();
+ // while(BMI088_init());
   /* USER CODE BEGIN 2 */
 
   // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
@@ -137,7 +143,16 @@ int main(void)
   {
     uint32_t current_tick = HAL_GetTick();
     const RC_ctrl_t *rc_data = get_remote_control_point();
+    BMI088_read(gyro, accel, &temp);
+    int x = accel[0]*100;
+    int y = accel[1]*100;
+    int z = accel[2]*100;
+    if(x > 900){
+      LED_SetRGB(1,0,0);
 
+    }else if(x < -900){
+      LED_SetRGB(0,1,0);
+    }
     // Update controllers
     ChassisController_Update(&chassis_controller, rc_data, current_tick);
     ShooterController_Update(&shooter_controller, rc_data, current_tick);
@@ -149,14 +164,14 @@ int main(void)
     // LED status indication
     bool chassis_running = ChassisController_IsRunning(&chassis_controller);
     bool shooter_running = ShooterController_IsRunning(&shooter_controller);
-    if (chassis_running || shooter_running)
-    {
-        LED_SetRGB(0, 1, 0); // Green when running
-    }
-    else
-    {
-        LED_SetRGB(1, 0, 0); // Red when stopped
-    }
+    // if (chassis_running || shooter_running)
+    // {
+    //     LED_SetRGB(0, 1, 0); // Green when running
+    // }
+    // else
+    // {
+    //     LED_SetRGB(1, 0, 0); // Red when stopped
+    // }
 
     HAL_Delay(CMD_REFRESH_INTERVAL_MS);
   }
