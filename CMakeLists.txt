@@ -45,6 +45,13 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    Src/bsp_rc.c
+    Src/can_manager.c
+    Src/chassis_controller.c
+    Src/pid.c
+    Src/pitch.c
+    Src/remote_control.c
+    Src/shooter_controller.c
 )
 
 # Add include paths
