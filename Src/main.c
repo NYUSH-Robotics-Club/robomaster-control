@@ -174,7 +174,7 @@ int main(void)
 	}
 	else
 	{
-		LED_SetRGB(1, 0, 0); // Red when stopped
+		LED_SetRGB(1, 0, 1); // Red when stopped
 	}
 
 	HAL_Delay(CMD_REFRESH_INTERVAL_MS);
