@@ -26,7 +26,7 @@ After it finishes, click to extensions on the left and download Cmake tools and 
 
 <p align="center"><sub><strong>Figure 1</strong>: extensions</sub></p>
 
-![c/c++.png](assets/c:c++.png)
+![c++.png](assets/c++.png)
 
 <p align="center"><sub><strong>Figure 2</strong>: c/c++</sub></p>
 
