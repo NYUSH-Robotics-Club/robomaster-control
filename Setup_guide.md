@@ -1,22 +1,20 @@
 
 
-### Sections
+## Sections
 
-1. [**The Unit Circle**](#circle)
-2. [**Collision detection theory**](#collision)
-    1. [**Circle-to-circle collisions**](#circle-to-circle)
-    2. [**Point-to-circle collisions**](#point-to-circle)
-    3. [**Box-to-box collisions**](#box-to-box)
-    4. [**Point-to-box collisions**](#point-to-box)
-
-mac上装cubemx，cubeprogrammer，vs code里装cmake tools，c/c++ extensions pack, 最后brew install --cask gcc-arm-embedded，然后vs code命令行里点build，build好用programmer烧录
+1. [**Step 1: Download STMCube Stuff**](#step-1-Download-STMCube-Stuff)
+2. [**Step 2: Setup VSCode**](#step-2-setup-vscode)
+3. [**Step 3: Cloning from GitHub**](#step-3-cloning-from-github)
+4. [**Step 4: Installing Packages**](#step-4-installing-packages)
+5. [**Step 5: Flashing Code onto the C Board**](#step-5-flashing-code-onto-the-c-board)
 
 
-### Step 1: Download STMCube Stuff
+
+# Step 1: Download STMCube Stuff
 
 
 Download [**STM32CubeMx**](https://www.st.com/en/development-tools/stm32cubemx.html) and [**STM32CubeProgrammer**](https://www.st.com/en/development-tools/stm32cubeprog.html) for your own machine. If it tells you to sign in just simply make an STaccount. 
-### Step 2: Setup VScode
+# Step 2: Setup VScode
 
 Download [**VScode**](https://code.visualstudio.com/download) for your own machinese (Windows/Mac). 
 
@@ -33,9 +31,11 @@ After it finishes, click to extensions on the left and download Cmake tools and 
 ![cmake](assets/cmake.png)
 
 
-### Step 3: Cloning from github 
+# Step 3: Cloning from github 
 
-#### MAC Users
+**PLEASE NOTE THAT THE SETUP FOR THIS PART IS DIFFERENT FOR MAC AND WINDOWS, MAKE SURE TO FOLLOW YOUR SPECIFIC GUIDE**
+
+## MAC Users
 
 Run the following code within the terminal to install homebrew
 
@@ -77,14 +77,15 @@ After that, just open up vscode and open the folder and you should be able to se
 Click [**here**](github_commands.md) for more github commands that we will be using
 
 
-#### Windows Users
+## Windows Users
 
  TBD by Tony
 
 
-### Step 4: Installing Packages
+# Step 4: Installing Packages
 
-#### Mac Users
+**AGAIN THIS PART IS DIFFERENT FOR MAC AND WINDOWS**
+## Mac Users
 Run the following code in your terminal to install arm-embedded
 ```
 brew install --cask gcc-arm-embedded
@@ -111,14 +112,61 @@ after all this, click the search bar at the top and write
 >Developer: Reload Window
 ```
 
+![reload](assets/reload.png)
+
+
+<p align="center"><sub><strong>Figure 6</strong>: reload</sub></p>
+
 and you should be able to see a little build button at the bottom
 
 
 ![build](assets/build.png)
 
-<p align="center"><sub><strong>Figure 6</strong>: build</sub></p>
+<p align="center"><sub><strong>Figure 7</strong>: build</sub></p>
 
 once you click the build button, just click the debug option and you should be allllll good
 
-### Step 5: flashing code onto the C Board
+# Step 5: flashing code onto the C Board
 
+
+Take a Robomaster C board, and connect the C board to your computer using a usb wire. 
+
+![connecting](assets/connecting.HEIC)
+
+
+<p align="center"><sub><strong>Figure 8</strong>: connecting board to computer</sub></p>
+
+Once you have connected the board, take a breadboard wire and insert it into the top two pins of boot and click the RST button on the right. 
+
+![bootwire2](assets/bootwire2.png)
+
+<p align="center"><sub><strong>Figure 9</strong>: switch to boot</sub></p>
+
+![rstbutton](assets/bootwire1.png)
+
+<p align="center"><sub><strong>Figure 10</strong>: RST button</sub></p>
+
+Open up STM32CubeProgrammer, at the top right, click ST-Link and change it to USB. 
+
+![USB](assets/changeUSB.png)
+
+<p align="center"><sub><strong>Figure 11</strong>: Change to USB</sub></p>
+
+
+
+Once you have done so, you should now see a USB1 there, if not, click the refresh button next to it. 
+
+![USB1](assets/USB1connect.png)
+
+<p align="center"><sub><strong>Figure 12</strong>: USB1 Connect</sub></p>
+
+After this, please click the erasing and programming button on the left, and swithc the file to the **.elf file** that was generated in robomasters/build/debug
+
+![erasing&programming](assets/erasure&programming.png)
+
+<p align="center"><sub><strong>Figure </strong>: code page</sub></p>
+
+![elf](assets/elffile.png)
+
+
+Finally, click the connect light on the top right, and then click start programming. Then remove the breadboard wire and click reset, and your board should light up purple. 
