@@ -164,9 +164,22 @@ After this, please click the erasing and programming button on the left, and swi
 
 ![erasing&programming](assets/erasure&programming.png)
 
-<p align="center"><sub><strong>Figure </strong>: code page</sub></p>
+<p align="center"><sub><strong>Figure 13</strong>: cswtich to erasure and programming</sub></p>
 
 ![elf](assets/elffile.png)
 
+<p align="center"><sub><strong>Figure 14</strong>: choose elf file</sub></p>
 
-Finally, click the connect light on the top right, and then click start programming. Then remove the breadboard wire and click reset, and your board should light up purple. 
+
+Click the connect light on the top right, the not connected sign will change from red to green and from not connected to connected
+
+![elf](assets/connect.png)
+
+<p align="center"><sub><strong>Figure 15</strong>: connect to board</sub></p>
+
+Finally, click programming, and you are alll good! Congrats :D
+
+![elf](assets/start-programming.png)
+
+<p align="center"><sub><strong>Figure 15</strong>: program to board</sub></p>
+
