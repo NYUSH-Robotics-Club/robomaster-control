@@ -29,7 +29,10 @@
 /* USER CODE BEGIN Includes */
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include <stdbool.h>
+
 #include "remote_control.h"
 #include "chassis_controller.h"
 #include "shooter_controller.h"
@@ -49,6 +52,10 @@
 #define WAIT_ESC_BOOT_MS                (500U)
 // Main loop refresh interval
 #define CMD_REFRESH_INTERVAL_MS         (5U)
+
+
+extern UART_HandleTypeDef huart1;
+extern DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USER CODE END PD */
 
@@ -90,6 +97,50 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   CAN_Manager_GlobalCallback(hcan);
 }
 
+void usart1_tx_dma_enable(uint8_t *data, uint16_t len)
+{
+
+    //disable DMA
+    //ʧЧDMA
+    __HAL_DMA_DISABLE(&hdma_usart1_tx);
+    while(hdma_usart1_tx.Instance->CR & DMA_SxCR_EN)
+    {
+        __HAL_DMA_DISABLE(&hdma_usart1_tx);
+    }
+
+    //clear flag
+    //�����־λ
+    __HAL_DMA_CLEAR_FLAG(&hdma_usart1_tx, DMA_HISR_TCIF7);
+    __HAL_DMA_CLEAR_FLAG(&hdma_usart1_tx, DMA_HISR_HTIF7);
+
+    //set data address
+    //�������ݵ�ַ
+    hdma_usart1_tx.Instance->M0AR = (uint32_t)(data);
+    //set data length
+    //�������ݳ���
+    hdma_usart1_tx.Instance->NDTR = len;
+
+    //enable DMA
+    //ʹ��DMA
+    __HAL_DMA_ENABLE(&hdma_usart1_tx);
+}
+
+void usart_printf(const char *fmt,...)
+{
+    static uint8_t tx_buf[256] = {0};
+    static va_list ap;
+    static uint16_t len;
+    va_start(ap, fmt);
+
+    //return length of string 
+    //�����ַ�������
+    len = vsprintf((char *)tx_buf, fmt, ap);
+
+    va_end(ap);
+
+    usart1_tx_dma_enable(tx_buf, len);
+
+}
 /* USER CODE END 0 */
 
 /**
@@ -157,6 +208,29 @@ int main(void)
 	uint32_t current_tick = HAL_GetTick();
 	const RC_ctrl_t *rc_data = get_remote_control_point();
 
+
+  usart_printf(
+"**********\r\n\
+ch0:%d\r\n\
+ch1:%d\r\n\
+ch2:%d\r\n\
+ch3:%d\r\n\
+ch4:%d\r\n\
+s1:%d\r\n\
+s2:%d\r\n\
+mouse_x:%d\r\n\
+mouse_y:%d\r\n\
+press_l:%d\r\n\
+press_r:%d\r\n\
+key:%d\r\n\
+**********\r\n",
+            rc_data->rc.ch[0], rc_data->rc.ch[1], rc_data->rc.ch[2], rc_data->rc.ch[3], rc_data->rc.ch[4],
+            rc_data->rc.s[0], rc_data->rc.s[1],
+            rc_data->mouse.x, rc_data->mouse.y,rc_data->mouse.z, rc_data->mouse.press_l, rc_data->mouse.press_r,
+            rc_data->key.v);
+
+  
+  
 	// Update controllers
 	ChassisController_Update(&chassis_controller, rc_data, current_tick);
 	ShooterController_Update(&shooter_controller, rc_data, current_tick);
@@ -176,8 +250,10 @@ int main(void)
 	{
 		LED_SetRGB(1, 0, 1); // Red when stopped
 	}
+  printf("hello world");
 
 	HAL_Delay(CMD_REFRESH_INTERVAL_MS);
+
 
     /* USER CODE END WHILE */
 
