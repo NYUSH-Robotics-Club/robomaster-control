@@ -22,14 +22,16 @@
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
-#include "usbd_cdc_if.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "buzzer.h"
+#include "usbd_cdc_if.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -138,6 +140,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
@@ -158,6 +161,12 @@ int main(void)
   ChassisController_Init(&chassis_controller);
   ShooterController_Init(&shooter_controller);
 
+  // Play boot beep sound
+  Buzzer_PlayBeep();
+  
+  // Ensure system is ready after boot song
+  HAL_Delay(100);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -170,6 +179,9 @@ int main(void)
 	// Update controllers
 	ChassisController_Update(&chassis_controller, rc_data, current_tick);
 	ShooterController_Update(&shooter_controller, rc_data, current_tick);
+	
+	// Update buzzer music playback
+	Buzzer_Update();
 
 	// Compute and send motor currents
 	ChassisController_ComputeCurrents(&chassis_controller, current_tick);
