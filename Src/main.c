@@ -26,12 +26,12 @@
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
-#include "buzzer.h"
-#include "usbd_cdc_if.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "buzzer.h"
+#include "usbd_cdc_if.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
