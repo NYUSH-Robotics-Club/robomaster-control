@@ -56,7 +56,7 @@
 // Main loop refresh interval
 #define CMD_REFRESH_INTERVAL_MS         (5U)
 // Debug info interval
-#define USB_DEBUG_INTERVAL_MS           (200U)
+#define USB_DEBUG_INTERVAL_MS           (1000U)
 
 /* USER CODE END PD */
 
@@ -114,6 +114,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  // Optional: initial tiny transmission (currently disabled)
+  // USB_CDC_SendString("\r\n");
 
   /* USER CODE END 1 */
 
@@ -206,24 +208,27 @@ int main(void)
   if (current_tick - last_debug_time >= USB_DEBUG_INTERVAL_MS)
   {
     last_debug_time = current_tick;
-    uint32_t fc = RC_GetFrameCount();
-    int16_t ch0 = rc_data->rc.ch[0];
-    int16_t ch1 = rc_data->rc.ch[1];
-    int16_t ch2 = rc_data->rc.ch[2];
-    int16_t ch3 = rc_data->rc.ch[3];
-    int16_t ch4 = rc_data->rc.ch[4];
-    uint8_t s0 = rc_data->rc.s[0];
-    uint8_t s1 = rc_data->rc.s[1];
-    const int16_t *curr = ChassisController_GetOutputCurrents(&chassis_controller);
-    USB_CDC_Printf("[DBG %lu ms] FC=%lu(+%lu) ch:%d %d %d %d %d s:%u %u currents:%d %d %d %d running:%d\r\n",
-      (unsigned long)current_tick,
-      (unsigned long)fc,
-      (unsigned long)(fc - last_frame_count),
-      (int)ch0,(int)ch1,(int)ch2,(int)ch3,(int)ch4,
-      (unsigned)s0,(unsigned)s1,
-      (int)curr[0],(int)curr[1],(int)curr[2],(int)curr[3],
-      ChassisController_IsRunning(&chassis_controller));
-    last_frame_count = fc;
+  uint32_t fc = RC_GetFrameCount();
+  (void)last_frame_count; // suppress unused if RC debug disabled
+
+    // CAN1 stats
+    USB_CDC_Printf("CAN1 tx_ok=%lu tx_err=%lu rx=%lu last_rx_id=0x%03lX last_tx=%lums last_rx=%lums\r\n",
+        (unsigned long)CAN_Manager_GetTxOk(&can1_manager),
+        (unsigned long)CAN_Manager_GetTxErr(&can1_manager),
+        (unsigned long)CAN_Manager_GetRxFrames(&can1_manager),
+        (unsigned long)CAN_Manager_GetLastRxId(&can1_manager),
+        (unsigned long)(current_tick - CAN_Manager_GetLastTxTime(&can1_manager)),
+        (unsigned long)(current_tick - CAN_Manager_GetLastRxTime(&can1_manager)));
+
+    // CAN2 stats
+    USB_CDC_Printf("CAN2 tx_ok=%lu tx_err=%lu rx=%lu last_rx_id=0x%03lX last_tx=%lums last_rx=%lums\r\n",
+        (unsigned long)CAN_Manager_GetTxOk(&can2_manager),
+        (unsigned long)CAN_Manager_GetTxErr(&can2_manager),
+        (unsigned long)CAN_Manager_GetRxFrames(&can2_manager),
+        (unsigned long)CAN_Manager_GetLastRxId(&can2_manager),
+        (unsigned long)(current_tick - CAN_Manager_GetLastTxTime(&can2_manager)),
+        (unsigned long)(current_tick - CAN_Manager_GetLastRxTime(&can2_manager)));
+    last_frame_count = fc; // kept to avoid large delta when re-enabled
   }
 
 	HAL_Delay(CMD_REFRESH_INTERVAL_MS);
@@ -295,6 +300,9 @@ static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b)
 /*
 Send string message via USB CDC
 */
+#if defined(__GNUC__)
+__attribute__((unused))
+#endif
 static void USB_CDC_SendString(const char* message)
 {
   if (message != NULL)

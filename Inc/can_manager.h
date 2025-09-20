@@ -22,6 +22,13 @@ typedef struct {
     uint8_t initialized;
     ChassisController *chassis_controller;
     ShooterController *shooter_controller;
+    // Debug counters
+    uint32_t tx_ok;
+    uint32_t tx_err;
+    uint32_t rx_frames;
+    uint32_t last_rx_id;
+    uint32_t last_tx_time;
+    uint32_t last_rx_time;
 } CAN_Manager_t;
 
 /**
@@ -98,5 +105,13 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
  * @param hcan CAN handle that triggered the callback
  */
 void CAN_Manager_GlobalCallback(CAN_HandleTypeDef *hcan);
+
+// Debug accessor helpers
+uint32_t CAN_Manager_GetTxOk(const CAN_Manager_t *m);
+uint32_t CAN_Manager_GetTxErr(const CAN_Manager_t *m);
+uint32_t CAN_Manager_GetRxFrames(const CAN_Manager_t *m);
+uint32_t CAN_Manager_GetLastRxId(const CAN_Manager_t *m);
+uint32_t CAN_Manager_GetLastTxTime(const CAN_Manager_t *m);
+uint32_t CAN_Manager_GetLastRxTime(const CAN_Manager_t *m);
 
 #endif // CAN_MANAGER_H

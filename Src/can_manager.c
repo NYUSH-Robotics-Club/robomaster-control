@@ -143,6 +143,9 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
     uint32_t current_tick = HAL_GetTick();
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx, d) != HAL_OK) return;
+    manager->rx_frames++;
+    manager->last_rx_id = rx.StdId;
+    manager->last_rx_time = current_tick;
     
     // Gimbal pitch feedback (CAN1 only)
     if (manager->filter_bank == CAN1_FILTER_BANK && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
@@ -223,7 +226,16 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
     d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
     d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
 
-    return HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
+    HAL_StatusTypeDef st = HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
+    // Update debug counters: find which manager this handle belongs to
+    extern CAN_Manager_t can1_manager; extern CAN_Manager_t can2_manager;
+    CAN_Manager_t *m = NULL;
+    if (hcan == can1_manager.hcan) m = &can1_manager; else if (hcan == can2_manager.hcan) m = &can2_manager;
+    if (m) {
+        if (st == HAL_OK) m->tx_ok++; else m->tx_err++;
+        m->last_tx_time = HAL_GetTick();
+    }
+    return st;
 }
 
 /**
@@ -256,5 +268,21 @@ HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t
     d[slot*2 + 0] = (uint8_t)((current >> 8) & 0xFF);
     d[slot*2 + 1] = (uint8_t)( current       & 0xFF);
 
-    return HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
+    HAL_StatusTypeDef st = HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
+    extern CAN_Manager_t can1_manager; extern CAN_Manager_t can2_manager;
+    CAN_Manager_t *m = NULL;
+    if (hcan == can1_manager.hcan) m = &can1_manager; else if (hcan == can2_manager.hcan) m = &can2_manager;
+    if (m) {
+        if (st == HAL_OK) m->tx_ok++; else m->tx_err++;
+        m->last_tx_time = HAL_GetTick();
+    }
+    return st;
 }
+
+// Accessor implementations
+uint32_t CAN_Manager_GetTxOk(const CAN_Manager_t *m){ return m?m->tx_ok:0; }
+uint32_t CAN_Manager_GetTxErr(const CAN_Manager_t *m){ return m?m->tx_err:0; }
+uint32_t CAN_Manager_GetRxFrames(const CAN_Manager_t *m){ return m?m->rx_frames:0; }
+uint32_t CAN_Manager_GetLastRxId(const CAN_Manager_t *m){ return m?m->last_rx_id:0; }
+uint32_t CAN_Manager_GetLastTxTime(const CAN_Manager_t *m){ return m?m->last_tx_time:0; }
+uint32_t CAN_Manager_GetLastRxTime(const CAN_Manager_t *m){ return m?m->last_rx_time:0; }
