@@ -32,6 +32,11 @@
 /* USER CODE BEGIN Private variables */
 
 static bool buzzer_initialized = false;
+static uint32_t last_button_press_time = 0;
+static bool music_playing = false;
+static uint32_t music_note_index = 0;
+static uint32_t music_note_start_time = 0;
+static uint32_t music_note_duration = 0;
 
 /* USER CODE END Private variables */
 
@@ -184,6 +189,75 @@ void Buzzer_PlayTwinkleStarFull(void)
         if (i < melody_length - 1) { // Don't delay after the last note
             HAL_Delay(NOTE_REST_GAP);
         }
+    }
+}
+
+/**
+ * @brief Play a short beep sound
+ * @retval None
+ */
+void Buzzer_PlayBeep(void)
+{
+    Buzzer_Start(NOTE_B4);
+    HAL_Delay(200);
+    Buzzer_Stop();
+}
+
+/**
+ * @brief Handle button press for music control
+ * @retval None
+ */
+void Buzzer_HandleButtonPress(void)
+{
+    uint32_t current_time = HAL_GetTick();
+    
+    // Software debouncing: ignore button presses within 20ms
+    if (current_time - last_button_press_time < 20) {
+        return;
+    }
+    
+    last_button_press_time = current_time;
+    
+    // Start music playback if not already playing
+    if (!music_playing) {
+        music_playing = true;
+        music_note_index = 0;
+        music_note_start_time = current_time;
+        music_note_duration = 0;
+    }
+}
+
+/**
+ * @brief Update music playback (call this in main loop)
+ * @retval None
+ */
+void Buzzer_Update(void)
+{
+    if (!music_playing) {
+        return;
+    }
+    
+    uint32_t current_time = HAL_GetTick();
+    uint32_t melody_length = sizeof(twinkle_star_full_melody) / sizeof(MusicalNote);
+    
+    // Check if current note duration has elapsed
+    if (current_time - music_note_start_time >= music_note_duration) {
+        // Stop current note
+        Buzzer_Stop();
+        
+        // Move to next note
+        music_note_index++;
+        
+        if (music_note_index >= melody_length) {
+            // Music finished
+            music_playing = false;
+            return;
+        }
+        
+        // Start next note
+        Buzzer_Start(twinkle_star_full_melody[music_note_index].frequency);
+        music_note_start_time = current_time;
+        music_note_duration = twinkle_star_full_melody[music_note_index].duration;
     }
 }
 

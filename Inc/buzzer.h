@@ -93,6 +93,24 @@ void Buzzer_Init(void);
  */
 void Buzzer_PlayTwinkleStarFull(void);
 
+/**
+ * @brief Play a short beep sound
+ * @retval None
+ */
+void Buzzer_PlayBeep(void);
+
+/**
+ * @brief Handle button press for music control
+ * @retval None
+ */
+void Buzzer_HandleButtonPress(void);
+
+/**
+ * @brief Update music playback (call this in main loop)
+ * @retval None
+ */
+void Buzzer_Update(void);
+
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus
