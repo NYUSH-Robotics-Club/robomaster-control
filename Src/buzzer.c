@@ -50,6 +50,33 @@ static void Buzzer_CalculatePWM(uint32_t frequency, uint32_t *prescaler, uint32_
 
 /* USER CODE BEGIN Private user code */
 
+// Twinkle Twinkle Little Star melody (full version - enhanced contrast)
+static const MusicalNote twinkle_star_full_melody[] = {
+    // Twinkle, twinkle, little star (增强对比度)
+    {NOTE_C4, DURATION_QUARTER}, {NOTE_C4, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER},
+    {NOTE_A5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER}, {NOTE_G5, DURATION_HALF},
+    
+    // How I wonder what you are
+    {NOTE_F5, DURATION_QUARTER}, {NOTE_F5, DURATION_QUARTER}, {NOTE_E5, DURATION_QUARTER}, {NOTE_E5, DURATION_QUARTER},
+    {NOTE_D5, DURATION_QUARTER}, {NOTE_D5, DURATION_QUARTER}, {NOTE_C5, DURATION_HALF},
+    
+    // Up above the world so high
+    {NOTE_G5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_F5, DURATION_QUARTER}, {NOTE_F5, DURATION_QUARTER},
+    {NOTE_E5, DURATION_QUARTER}, {NOTE_E5, DURATION_QUARTER}, {NOTE_D5, DURATION_HALF},
+    
+    // Like a diamond in the sky
+    {NOTE_G5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_F5, DURATION_QUARTER}, {NOTE_F5, DURATION_QUARTER},
+    {NOTE_E5, DURATION_QUARTER}, {NOTE_E5, DURATION_QUARTER}, {NOTE_D5, DURATION_HALF},
+    
+    // Twinkle, twinkle, little star
+    {NOTE_C4, DURATION_QUARTER}, {NOTE_C4, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER},
+    {NOTE_A5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER}, {NOTE_G5, DURATION_HALF},
+    
+    // How I wonder what you are
+    {NOTE_F5, DURATION_QUARTER}, {NOTE_F5, DURATION_QUARTER}, {NOTE_E5, DURATION_QUARTER}, {NOTE_E5, DURATION_QUARTER},
+    {NOTE_D5, DURATION_QUARTER}, {NOTE_D5, DURATION_QUARTER}, {NOTE_C5, DURATION_HALF}
+};
+
 /**
  * @brief Calculate PWM parameters
  * @param frequency Target frequency
@@ -59,10 +86,11 @@ static void Buzzer_CalculatePWM(uint32_t frequency, uint32_t *prescaler, uint32_
  */
 static void Buzzer_CalculatePWM(uint32_t frequency, uint32_t *prescaler, uint32_t *period)
 {
-    // PWM frequency = System clock frequency / ((Prescaler + 1) * (Period + 1))
+    // PWM frequency = TIM4 clock frequency / ((Prescaler + 1) * (Period + 1))
+    // TIM4 is on APB1 bus with 36MHz clock
     // For better accuracy, we select an appropriate prescaler value
     
-    uint32_t target_period = SYSTEM_CLOCK_FREQ / frequency;
+    uint32_t target_period = TIM4_CLOCK_FREQ / frequency;
     
     // If target period is too large, need to increase prescaler
     if (target_period > 65535) {
@@ -110,6 +138,9 @@ void Buzzer_Start(uint32_t frequency)
         Buzzer_Init();
     }
     
+    // Stop PWM before changing parameters
+    HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_3);
+    
     uint32_t prescaler, period;
     Buzzer_CalculatePWM(frequency, &prescaler, &period);
     
@@ -119,6 +150,9 @@ void Buzzer_Start(uint32_t frequency)
     
     // Set duty cycle to 50%
     __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3, period / 2);
+    
+    // Restart PWM with new parameters
+    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
 }
 
 /**
@@ -133,25 +167,24 @@ void Buzzer_Stop(void)
 }
 
 /**
- * @brief Beep for specified duration
- * @param frequency Buzzer frequency (Hz)
- * @param duration_ms Duration in milliseconds
+ * @brief Play Twinkle Twinkle Little Star (full version)
  * @retval None
  */
-void Buzzer_Beep(uint32_t frequency, uint32_t duration_ms)
+void Buzzer_PlayTwinkleStarFull(void)
 {
-    Buzzer_Start(frequency);
-    HAL_Delay(duration_ms);
-    Buzzer_Stop();
-}
-
-/**
- * @brief Boot beep once
- * @retval None
- */
-void Buzzer_BootBeep(void)
-{
-    Buzzer_Beep(BUZZER_DEFAULT_FREQ, BUZZER_BOOT_BEEP);
+    uint32_t melody_length = sizeof(twinkle_star_full_melody) / sizeof(MusicalNote);
+    
+    for (uint32_t i = 0; i < melody_length; i++) {
+        // Play the note
+        Buzzer_Start(twinkle_star_full_melody[i].frequency);
+        HAL_Delay(twinkle_star_full_melody[i].duration);
+        Buzzer_Stop();
+        
+        // Add small gap between notes for better sound
+        if (i < melody_length - 1) { // Don't delay after the last note
+            HAL_Delay(NOTE_REST_GAP);
+        }
+    }
 }
 
 /* USER CODE END 0 */

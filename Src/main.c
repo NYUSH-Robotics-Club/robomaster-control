@@ -161,7 +161,11 @@ int main(void)
   ChassisController_Init(&chassis_controller);
   ShooterController_Init(&shooter_controller);
 
-  Buzzer_BootBeep();
+  // Play boot song - Twinkle Twinkle Little Star (full version)
+  Buzzer_PlayTwinkleStarFull();
+  
+  // Ensure system is ready after boot song
+  HAL_Delay(100);
 
   /* USER CODE END 2 */
 

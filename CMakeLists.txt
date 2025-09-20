@@ -46,6 +46,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Src/bsp_rc.c
+    Src/buzzer.c
     Src/can_manager.c
     Src/chassis_controller.c
     Src/pid.c
