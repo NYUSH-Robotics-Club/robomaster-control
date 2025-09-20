@@ -96,5 +96,7 @@ extern void remote_control_init(void);
   */
 extern const RC_ctrl_t *get_remote_control_point(void);
 uint32_t RC_GetFrameCount(void);
+// Debug helper: copy last raw SBUS frame (18 bytes)
+void RC_GetLastFrame(uint8_t out[RC_FRAME_LENGTH]);
 
 #endif

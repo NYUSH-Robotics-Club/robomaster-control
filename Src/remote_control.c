@@ -12,6 +12,7 @@
 #include "remote_control.h"
 
 #include "main.h"
+#include <string.h>
 
 
 extern UART_HandleTypeDef huart3;
@@ -38,6 +39,8 @@ RC_ctrl_t rc_ctrl;
 static uint8_t sbus_rx_buf[2][SBUS_RX_BUF_NUM];
 // frame counter
 static volatile uint32_t rc_frame_count = 0;
+// keep a snapshot of last 18-byte SBUS frame for debugging
+static uint8_t last_sbus_frame[RC_FRAME_LENGTH];
 
 uint32_t RC_GetFrameCount(void)
 {
@@ -57,6 +60,12 @@ uint32_t RC_GetFrameCount(void)
 void remote_control_init(void)
 {
     RC_init(sbus_rx_buf[0], sbus_rx_buf[1], SBUS_RX_BUF_NUM);
+}
+
+void RC_GetLastFrame(uint8_t out[RC_FRAME_LENGTH])
+{
+    if (!out) return;
+    memcpy(out, last_sbus_frame, RC_FRAME_LENGTH);
 }
 /**
   * @brief          get remote control data point
@@ -108,6 +117,7 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
             if(this_time_rx_len == RC_FRAME_LENGTH)
             {
                 sbus_to_rc(sbus_rx_buf[0], &rc_ctrl);
+        memcpy(last_sbus_frame, (const void*)sbus_rx_buf[0], RC_FRAME_LENGTH);
         rc_frame_count++;
             }
         }
@@ -132,6 +142,7 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
             if(this_time_rx_len == RC_FRAME_LENGTH)
             {
                 sbus_to_rc(sbus_rx_buf[1], &rc_ctrl);
+        memcpy(last_sbus_frame, (const void*)sbus_rx_buf[1], RC_FRAME_LENGTH);
         rc_frame_count++;
             }
         }
@@ -165,7 +176,7 @@ static void sbus_to_rc(volatile const uint8_t *sbus_buf, RC_ctrl_t *rc_ctrl)
     rc_ctrl->mouse.press_l = sbus_buf[12];                                  //!< Mouse Left Is Press ?
     rc_ctrl->mouse.press_r = sbus_buf[13];                                  //!< Mouse Right Is Press ?
     rc_ctrl->key.v = sbus_buf[14] | (sbus_buf[15] << 8);                    //!< KeyBoard value
-    rc_ctrl->rc.ch[4] = sbus_buf[16] | (sbus_buf[17] << 8);                 //NULL
+    rc_ctrl->rc.ch[4] = (sbus_buf[16] | (sbus_buf[17] << 8)) & 0x07ff;      // Channel 4
 
     rc_ctrl->rc.ch[0] -= RC_CH_VALUE_OFFSET;
     rc_ctrl->rc.ch[1] -= RC_CH_VALUE_OFFSET;
