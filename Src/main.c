@@ -24,6 +24,7 @@
 #include "spi.h"
 #include "usart.h"
 #include "usb_device.h"
+#include "usbd_cdc_if.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -31,6 +32,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include "remote_control.h"
 #include "chassis_controller.h"
 #include "shooter_controller.h"
@@ -50,6 +52,8 @@
 #define WAIT_ESC_BOOT_MS                (500U)
 // Main loop refresh interval
 #define CMD_REFRESH_INTERVAL_MS         (5U)
+// USB CDC message send interval
+#define USB_CDC_SEND_INTERVAL_MS        (1000U)
 
 /* USER CODE END PD */
 
@@ -70,6 +74,9 @@ ShooterController shooter_controller;
 CAN_Manager_t can1_manager;
 CAN_Manager_t can2_manager;
 
+// USB CDC variables
+static uint32_t last_usb_send_time = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,6 +84,7 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
+static void USB_CDC_SendString(const char* message);
 
 /* USER CODE END PFP */
 
@@ -179,6 +187,12 @@ int main(void)
 		LED_SetRGB(1, 0, 1); // Red when stopped
 	}
 
+	if (current_tick - last_usb_send_time >= USB_CDC_SEND_INTERVAL_MS)
+	{
+		USB_CDC_SendString("Hello World\r\n");
+		last_usb_send_time = current_tick;
+	}
+
 	HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
     /* USER CODE END WHILE */
@@ -244,6 +258,18 @@ static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b)
   HAL_GPIO_WritePin(GPIOH, GPIO_PIN_11, g ? GPIO_PIN_SET : GPIO_PIN_RESET); // G
   HAL_GPIO_WritePin(GPIOH, GPIO_PIN_10, b ? GPIO_PIN_SET : GPIO_PIN_RESET); // B
 }
+
+/*
+Send string message via USB CDC
+*/
+static void USB_CDC_SendString(const char* message)
+{
+  if (message != NULL)
+  {
+    CDC_Transmit_FS((uint8_t*)message, strlen(message));
+  }
+}
+
 
 /* USER CODE END 4 */
 
