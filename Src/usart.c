@@ -183,6 +183,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     __HAL_LINKDMA(uartHandle,hdmarx,hdma_usart3_rx);
 
   /* USER CODE BEGIN USART3_MspInit 1 */
+    // Enable USART3 global interrupt so that IDLE line detection works
+    HAL_NVIC_SetPriority(USART3_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(USART3_IRQn);
 
   /* USER CODE END USART3_MspInit 1 */
   }

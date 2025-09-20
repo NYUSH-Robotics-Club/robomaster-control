@@ -95,5 +95,6 @@ extern void remote_control_init(void);
   * @retval         remote control data point
   */
 extern const RC_ctrl_t *get_remote_control_point(void);
+uint32_t RC_GetFrameCount(void);
 
 #endif

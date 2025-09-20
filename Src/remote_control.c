@@ -36,6 +36,13 @@ RC_ctrl_t rc_ctrl;
 
 //receive data, 18 bytes one frame, but set 36 bytes
 static uint8_t sbus_rx_buf[2][SBUS_RX_BUF_NUM];
+// frame counter
+static volatile uint32_t rc_frame_count = 0;
+
+uint32_t RC_GetFrameCount(void)
+{
+  return rc_frame_count;
+}
 
 /**
   * @brief          remote control init
@@ -101,6 +108,7 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
             if(this_time_rx_len == RC_FRAME_LENGTH)
             {
                 sbus_to_rc(sbus_rx_buf[0], &rc_ctrl);
+        rc_frame_count++;
             }
         }
         else
@@ -124,6 +132,7 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
             if(this_time_rx_len == RC_FRAME_LENGTH)
             {
                 sbus_to_rc(sbus_rx_buf[1], &rc_ctrl);
+        rc_frame_count++;
             }
         }
     }

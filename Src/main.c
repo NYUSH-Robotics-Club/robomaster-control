@@ -39,6 +39,7 @@
 #include "chassis_controller.h"
 #include "shooter_controller.h"
 #include "can_manager.h"
+#include <stdarg.h>
 
 /* USER CODE END Includes */
 
@@ -54,8 +55,8 @@
 #define WAIT_ESC_BOOT_MS                (500U)
 // Main loop refresh interval
 #define CMD_REFRESH_INTERVAL_MS         (5U)
-// USB CDC message send interval
-#define USB_CDC_SEND_INTERVAL_MS        (1000U)
+// Debug info interval
+#define USB_DEBUG_INTERVAL_MS           (200U)
 
 /* USER CODE END PD */
 
@@ -77,7 +78,8 @@ CAN_Manager_t can1_manager;
 CAN_Manager_t can2_manager;
 
 // USB CDC variables
-static uint32_t last_usb_send_time = 0;
+static uint32_t last_debug_time = 0;
+static uint32_t last_frame_count = 0;
 
 /* USER CODE END PV */
 
@@ -87,6 +89,7 @@ void SystemClock_Config(void);
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 static void USB_CDC_SendString(const char* message);
+static void USB_CDC_Printf(const char *fmt, ...);
 
 /* USER CODE END PFP */
 
@@ -199,11 +202,29 @@ int main(void)
 		LED_SetRGB(1, 0, 1); // Red when stopped
 	}
 
-	if (current_tick - last_usb_send_time >= USB_CDC_SEND_INTERVAL_MS)
-	{
-		USB_CDC_SendString("Hello World\r\n");
-		last_usb_send_time = current_tick;
-	}
+  // Periodic debug output
+  if (current_tick - last_debug_time >= USB_DEBUG_INTERVAL_MS)
+  {
+    last_debug_time = current_tick;
+    uint32_t fc = RC_GetFrameCount();
+    int16_t ch0 = rc_data->rc.ch[0];
+    int16_t ch1 = rc_data->rc.ch[1];
+    int16_t ch2 = rc_data->rc.ch[2];
+    int16_t ch3 = rc_data->rc.ch[3];
+    int16_t ch4 = rc_data->rc.ch[4];
+    uint8_t s0 = rc_data->rc.s[0];
+    uint8_t s1 = rc_data->rc.s[1];
+    const int16_t *curr = ChassisController_GetOutputCurrents(&chassis_controller);
+    USB_CDC_Printf("[DBG %lu ms] FC=%lu(+%lu) ch:%d %d %d %d %d s:%u %u currents:%d %d %d %d running:%d\r\n",
+      (unsigned long)current_tick,
+      (unsigned long)fc,
+      (unsigned long)(fc - last_frame_count),
+      (int)ch0,(int)ch1,(int)ch2,(int)ch3,(int)ch4,
+      (unsigned)s0,(unsigned)s1,
+      (int)curr[0],(int)curr[1],(int)curr[2],(int)curr[3],
+      ChassisController_IsRunning(&chassis_controller));
+    last_frame_count = fc;
+  }
 
 	HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
@@ -280,6 +301,21 @@ static void USB_CDC_SendString(const char* message)
   {
     CDC_Transmit_FS((uint8_t*)message, strlen(message));
   }
+}
+
+/*
+Formatted print over USB CDC (non-blocking best-effort)
+*/
+static void USB_CDC_Printf(const char *fmt, ...)
+{
+  char buf[128];
+  va_list ap;
+  va_start(ap, fmt);
+  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  if (n < 0) return;
+  if (n > (int)sizeof(buf)) n = sizeof(buf);
+  CDC_Transmit_FS((uint8_t*)buf, (uint16_t)n);
 }
 
 

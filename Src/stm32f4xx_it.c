@@ -62,6 +62,8 @@ extern DMA_HandleTypeDef hdma_spi1_tx;
 extern DMA_HandleTypeDef hdma_usart1_tx;
 extern DMA_HandleTypeDef hdma_usart3_rx;
 /* USER CODE BEGIN EV */
+extern UART_HandleTypeDef huart3;
+void REMOTE_USART3_IDLE_IRQHandler(void);
 
 /* USER CODE END EV */
 
@@ -288,6 +290,26 @@ void DMA2_Stream7_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+  * @brief This function handles USART3 global interrupt.
+  * It dispatches to HAL handler and then processes IDLE line for remote control.
+  */
+void USART3_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART3_IRQn 0 */
+  // Check for IDLE flag before HAL handler clears it
+  if (__HAL_UART_GET_FLAG(&huart3, UART_FLAG_IDLE))
+  {
+    // Call user idle handler to parse SBUS frame
+    REMOTE_USART3_IDLE_IRQHandler();
+    // Clear IDLE flag (reading SR then DR already done in handler)
+  }
+  /* USER CODE END USART3_IRQn 0 */
+  HAL_UART_IRQHandler(&huart3);
+  /* USER CODE BEGIN USART3_IRQn 1 */
+  /* USER CODE END USART3_IRQn 1 */
+}
 
 /**
   * @brief  EXTI line detection callbacks.
