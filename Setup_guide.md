@@ -49,6 +49,12 @@ then run the following code to install git commands for github
 brew install git
 ```
 
+then also run the following code to install cmake
+
+```
+brew install cmake
+```
+
 
 
 
