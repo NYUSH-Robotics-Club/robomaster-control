@@ -157,7 +157,7 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
         }
     }
     // Motor feedback (both CAN1 and CAN2)
-    else if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x208) {
+    else if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x20B) {
         uint8_t  mid   = rx.StdId - 0x201;
         if (mid < 8) {
             uint16_t angle = (d[0]<<8) | d[1];

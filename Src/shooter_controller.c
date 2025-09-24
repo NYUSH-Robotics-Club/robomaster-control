@@ -130,6 +130,7 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     if (controller->gimbal_enabled)
     {
         controller->gimbal_current = pitch_control_from_joystick(7, rc_data->rc.ch[4]);
+
     }
     else
     {

@@ -48,6 +48,8 @@ typedef struct {
     // GM6020 gimbal control
     bool gimbal_enabled;
     int16_t gimbal_current;
+    float target_rpm;
+    float current_rpm;
 } ShooterController;
 
 /**
