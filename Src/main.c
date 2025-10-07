@@ -288,6 +288,7 @@ int main(void)
       bool sh_run = ShooterController_IsRunning(&shooter_controller);
       USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
 
+      
 
       // Chassis targets and outputs
       USB_CDC_Printf("CH tgt=[%d,%d,%d,%d] out=[%d,%d,%d,%d]\r\n",

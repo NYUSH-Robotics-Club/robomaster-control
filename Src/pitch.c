@@ -13,7 +13,7 @@
 #define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (100.0f)
 #define GM6020_ANGLE_HOLD_MIN_RPM          (120.0f)
 #define KP  20.0f
-#define KI  2.0f
+#define KI  1.0f
 #define KD  0.1f
 typedef struct {
   uint8_t   id;
@@ -76,7 +76,7 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
   c->phase_offset_rad = 0.0f; // For now, assume mech offset is zero.
   c->max_encoder = 8192.0f;   // For now, assume GM6020 with 8192 ticks/rev
   c->pitch_direction = 1.0f;  // For now, assume +1 direction
-  c->gravity_effort = 6000.0f; // For now, assume
+  c->gravity_effort = 7000.0f; // For now, assume
   // // Within deadzone: target speed = 0
   // if (raw > -GM6020_JOYSTICK_DEADZONE && raw < GM6020_JOYSTICK_DEADZONE)
   // {
