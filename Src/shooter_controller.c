@@ -89,6 +89,7 @@ void ShooterController_Init(ShooterController *controller)
     
     // Initialize gimbal pitch
     pitch_init(7);
+    pitch_init(6);
 }
 
 /**
@@ -105,11 +106,14 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     bool left_switch_up = false;
     bool left_switch_mid = false;
     bool left_switch_down = false;
+
+    int16_t yaw = 0;
     if (rc_data != NULL)
     {
         left_switch_up = switch_is_up(rc_data->rc.s[0]);
         left_switch_mid = switch_is_mid(rc_data->rc.s[0]);
         left_switch_down = switch_is_down(rc_data->rc.s[0]);
+        
     }
     
     // Enabled if any shooter/turntable should run (mid or up)
@@ -124,17 +128,20 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->ramped_turntable = RampTowards(controller->ramped_turntable, turntable_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
-    
+
+
     // Gimbal pitch control
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
         controller->gimbal_current = pitch_control_from_joystick(7, rc_data->rc.ch[4]);
+        controller->gimbal_yaw_current = pitch_control_from_joystick(6, -rc_data->rc.ch[0]);
 
     }
     else
     {
         controller->gimbal_current = 0;
+        controller->gimbal_yaw_current = 0;
     }
 }
 
@@ -173,6 +180,8 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
         &controller->shooter2_feedback, 
         current_tick
     );
+
+    
     
     // Send CAN commands
     // 1) Send motors 5,6,8 on CAN2 (StdId 0x1FF). Leave slot for motor 7 empty here.
@@ -187,6 +196,8 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
 
     // 2) Send GM6020 pitch current on CAN1 using StdId 0x2FF addressing (motor id 7)
     CAN_Manager_SendGM6020Current(&hcan1, 7, controller->gimbal_current);
+    CAN_Manager_SendGM6020Current(&hcan1, 6, controller->gimbal_yaw_current);
+    
 }
 
 /**
@@ -229,6 +240,8 @@ void ShooterController_Stop(ShooterController *controller)
     controller->shooter1_target = 0.0f;
     controller->shooter2_target = 0.0f;
     controller->gimbal_current = 0;
+    controller->gimbal_yaw_current = 0;
+
     
     // Reset PID integrals
     controller->turntable_pid.integral = 0.0f;
@@ -261,7 +274,8 @@ bool ShooterController_IsRunning(const ShooterController *controller)
            controller->ramped_turntable != 0 || 
            controller->ramped_shooter1 != 0 || 
            controller->ramped_shooter2 != 0 ||
-           controller->gimbal_current != 0;
+           controller->gimbal_current != 0 ||
+           controller->gimbal_yaw_current != 0;
 }
 
 /**

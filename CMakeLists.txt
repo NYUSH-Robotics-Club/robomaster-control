@@ -47,6 +47,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Src/bsp_rc.c
     Src/buzzer.c
+    Src/BMI088driver.c
+    Src/BMI088Middleware.c
     Src/can_manager.c
     Src/chassis_controller.c
     Src/pid.c

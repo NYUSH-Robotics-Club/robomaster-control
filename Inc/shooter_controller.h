@@ -28,6 +28,7 @@ typedef struct {
     float shooter2_target;
     float ramped_shooter1;
     float ramped_shooter2;
+    float ramped_yaw;
     
     // Running state
     bool enabled;
@@ -36,6 +37,7 @@ typedef struct {
     PID_Controller turntable_pid;
     PID_Controller shooter1_pid;
     PID_Controller shooter2_pid;
+    PID_Controller yaw_pid;
     
     // Motor feedbacks (turntable and shooter wheels)
     Motor_Feedback turntable_feedback;
@@ -50,6 +52,9 @@ typedef struct {
     int16_t gimbal_current;
     float target_rpm;
     float current_rpm;
+
+    //GM6020 yaw control
+    int16_t gimbal_yaw_current;
 } ShooterController;
 
 /**

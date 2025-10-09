@@ -97,12 +97,18 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
   float gravity_ff = c->pitch_direction * c->gravity_effort * sinf(ang_rad);
 
   // 4) Sum + clamp, then cast once
-  float out = cmd + gravity_ff;
+
+  if(id == 7) {
+    cmd = cmd + gravity_ff;
+    
+  }
   float max_abs = 16000.0f; // or c->speed_pid.max_output if that matches your ESC
-  if (out >  max_abs) out =  max_abs;
-  if (out < -max_abs) out = -max_abs;
-  return (int16_t)out;
+  if (cmd >  max_abs) cmd =  max_abs;
+  if (cmd < -max_abs) cmd = -max_abs;
+  return (int16_t)cmd;
 
 }
+
+
 
 

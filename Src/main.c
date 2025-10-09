@@ -25,8 +25,8 @@
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
+#include "BMI088driver.h"
 #include "gpio.h"
-#include "gimbal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -90,6 +90,8 @@ static uint32_t last_rc_fc = 0;
 static int16_t rc_baseline[5] = {0};
 static uint8_t rc_baseline_set = 0;
 static RC_ctrl_t rc_sanitized;
+
+float gyro[3], accel[3], temp;
 
 /* USER CODE END PV */
 
@@ -159,6 +161,11 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
   MX_TIM4_Init();
+  BMI088_init();
+  // while()
+  //   {
+  //       ;
+  //   }
   /* USER CODE BEGIN 2 */
 
   // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
@@ -195,6 +202,7 @@ int main(void)
 	const RC_ctrl_t *raw_rc = get_remote_control_point();
 	// RC health gating based on frame count activity
 	uint32_t fc_now = RC_GetFrameCount();
+  BMI088_read(gyro, accel, &temp);
 	if (fc_now != last_rc_fc)
 	{
 		last_rc_fc = fc_now;
@@ -287,6 +295,11 @@ int main(void)
       bool ch_run = ChassisController_IsRunning(&chassis_controller);
       bool sh_run = ShooterController_IsRunning(&shooter_controller);
       USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
+
+      USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
+        gyro[0], gyro[1], gyro[2],
+        accel[0], accel[1], accel[2],
+        temp);
 
       
 
