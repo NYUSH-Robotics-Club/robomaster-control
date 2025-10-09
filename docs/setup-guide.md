@@ -1,0 +1,190 @@
+# Setup Guide
+
+This guide will walk you through setting up your development environment for the RoboMaster control project.
+
+# Sections
+
+1. [**Step 1: Prerequisites**](#step-1-prerequisites)
+2. [**Step 2: Setup VS Code**](#step-2-setup-vs-code)
+3. [**Step 3: Cloning from GitHub**](#step-3-cloning-from-github)
+4. [**Step 4: Installing Packages**](#step-4-installing-packages)
+5. [**Step 5: Building the Project**](#step-5-building-the-project)
+6. [**Step 6: Flashing Code onto the C Board**](#step-6-flashing-code-onto-the-c-board)
+
+
+# Step 1: Prerequisites
+## Hardware
+- RoboMaster Development Board **Type C** (provided)
+- Type-C/Type-A to MicroUSB cable (provided)
+
+## Software
+- [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html)
+- [STM32CubeMX (optional)](https://www.st.com/en/development-tools/stm32cubemx.html#get-software)
+- [VS Code](https://code.visualstudio.com/download)
+
+# Step 2: Setup VS Code
+
+After it finishes, click Extensions on the left and install `CMake Tools` and `C/C++ Extension Pack`.
+
+![extensions.png](assets/extensions.png)
+
+<p align="center"><sub><strong>Figure 1</strong>: extensions</sub></p>
+
+![c++.png](assets/c++.png)
+
+<p align="center"><sub><strong>Figure 2</strong>: c/c++</sub></p>
+
+![cmake](assets/cmake.png)
+
+<p align="center"><sub><strong>Figure 3</strong>: CMake Tools</sub></p>
+
+# Step 3: Cloning from GitHub 
+
+**PLEASE NOTE THAT THE SETUP FOR THIS PART IS DIFFERENT FOR MAC AND WINDOWS, MAKE SURE TO FOLLOW YOUR SPECIFIC GUIDE**
+
+## Mac Users
+
+Run the following code within the terminal to install `Homebrew`
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+then run the following code to install `git` commands for GitHub 
+
+```bash
+brew install git
+```
+
+![terminal](assets/terminal.png)
+
+<p align="center"><sub><strong>Figure 4</strong>: opening the terminal</sub></p>
+
+Then write the following command into the terminal to clone the repository
+
+```bash
+git clone https://github.com/NYUSH-Robotics-Club/robomaster-control.git
+```
+
+Follow the directions to clone the repository, if you cannot clone it, please contact one of the leads to invite you into the repository
+
+After that, just open up VS Code and open the folder you have cloned and you should be able to see the following screen with the code
+
+
+![code_page](assets/code_page.png)
+
+<p align="center"><sub><strong>Figure 5</strong>: code page</sub></p>
+
+Click [**here**](github-commands.md) for more GitHub commands that we will be using
+
+
+## Windows Users
+Please download and install Git from the [official Git website](https://git-scm.com/downloads). During installation, you can accept the default settings.
+
+Once installed, open a new terminal (like PowerShell or Git Bash) and run the following command to clone the repository:
+```bash
+git clone https://github.com/NYUSH-Robotics-Club/robomaster-control.git
+```
+
+# Step 4: Installing Packages
+
+**AGAIN THIS PART IS DIFFERENT FOR MAC AND WINDOWS**
+
+## Mac Users
+Run the following command in your terminal to install arm-embedded
+
+```bash
+brew install --cask gcc-arm-embedded
+brew install ninja
+brew install cmake
+```
+
+## Windows Users
+
+First, download and install the following tools from their official websites:
+
+- [**ARM GNU Toolchain**](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads): Download the `arm-gnu-toolchain-14.3.rel1-mingw-w64-x86_64-arm-none-eabi.exe` installer and run it.
+
+- [**CMake**](https://cmake.org/download/): Download and run the `.msi` installer. **Important:** During installation, ensure you select the option to "Add CMake to the system PATH for all users" or "for the current user". This is crucial for the build process.
+
+Next, open PowerShell as an administrator and run the following command to install Ninja:
+```powershell
+winget install -e --id Ninja-build.Ninja
+```
+
+
+# Step 5: Building the Project
+
+Go back to VS Code, click the search bar at the top and write
+
+```text
+>Developer: Reload Window
+```
+
+![reload](assets/reload.png)
+
+
+<p align="center"><sub><strong>Figure 6</strong>: Reload</sub></p>
+
+and you should be able to see a little build button at the bottom
+
+
+![build](assets/build.png)
+
+<p align="center"><sub><strong>Figure 7</strong>: Build</sub></p>
+
+once you click the build button, just click the debug option and you should be allllll good
+
+# Step 6: Flashing code onto the C Board
+
+Take a RoboMaster C Board, and connect the C Board to your computer using a USB cable. 
+
+![connecting](assets/connecting.png)
+
+<p align="center"><sub><strong>Figure 8</strong>: Connecting board to computer</sub></p>
+
+Once you have connected the board, take a breadboard wire and insert it into the top two pins of boot and click the RST button on the right. 
+
+![bootwire2](assets/bootwire2.png)
+
+<p align="center"><sub><strong>Figure 9</strong>: Switch to boot</sub></p>
+
+![rstbutton](assets/bootwire1.png)
+
+<p align="center"><sub><strong>Figure 10</strong>: RST button</sub></p>
+
+Open up STM32CubeProgrammer, at the top right, click ST-Link and change it to USB. 
+
+![USB](assets/changeUSB.png)
+
+<p align="center"><sub><strong>Figure 11</strong>: Change to USB</sub></p>
+
+
+Once you have done so, you should now see a USB1 there, if not, click the refresh button next to it. 
+
+![USB1](assets/USB1connect.png)
+
+<p align="center"><sub><strong>Figure 12</strong>: USB1 Connect</sub></p>
+
+After this, please click the erasing and programming button on the left, and switch the file to the `.elf` file that was generated in your `robomasters-control/build/Debug` folder (e.g., `NYUSH_Infantry.elf`).
+
+![erasing&programming](assets/erasure&programming.png)
+
+<p align="center"><sub><strong>Figure 13</strong>: Switch to erasure and programming</sub></p>
+
+![elf](assets/elffile.png)
+
+<p align="center"><sub><strong>Figure 14</strong>: Choose elf file</sub></p>
+
+
+Click the connect light on the top right, the not connected sign will change from red to green and from not connected to connected
+
+![elf](assets/connect.png)
+
+<p align="center"><sub><strong>Figure 15</strong>: Connect to the board</sub></p>
+
+Finally, click programming, and you are all good! Congrats :D
+
+![elf](assets/start-programming.png)
+
+<p align="center"><sub><strong>Figure 16</strong>: Program to the board</sub></p>
