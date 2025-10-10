@@ -147,8 +147,8 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
     manager->last_rx_id = rx.StdId;
     manager->last_rx_time = current_tick;
     
-    // Gimbal pitch feedback (CAN1 only)
-    if (manager->filter_bank == CAN1_FILTER_BANK && rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
+    // Gimbal pitch/yaw GM6020 feedback (allow on CAN1 and CAN2)
+    if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x205 && rx.StdId<=0x20B) {
         uint8_t gid = (uint8_t)(rx.StdId - 0x204);
         if (gid >= 1 && gid <= 7) {
             uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
@@ -157,7 +157,7 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
         }
     }
     // Motor feedback (both CAN1 and CAN2)
-    else if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x20B) {
+    if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x20B) {
         uint8_t  mid   = rx.StdId - 0x201;
         if (mid < 8) {
             uint16_t angle = (d[0]<<8) | d[1];

@@ -34,7 +34,7 @@ static gm6020_ctx_t g_ctx[8];
 float tar_rpm = 0.0f;
 float cur_rpm = 0.0f;
 
-#define send_current_by_id(id, cur) CAN_Manager_SendGM6020Current(&hcan1, (id), (cur))
+#define send_current_by_id(id, cur) CAN_Manager_SendGM6020Current(&hcan2, (id), (cur))
 
 void pitch_init(uint8_t id)
 {

@@ -194,8 +194,8 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
         controller->output_currents[3]   // Shooter wheel 2 (motor 8)
     );
 
-    // 2) Send GM6020 pitch current on CAN1 using StdId 0x2FF addressing (motor id 7)
-    CAN_Manager_SendGM6020Current(&hcan1, 7, controller->gimbal_current);
+    // 2) Send GM6020 currents: pitch on CAN2 (id=7), yaw on CAN1 (id=3)
+    CAN_Manager_SendGM6020Current(&hcan2, 7, controller->gimbal_current);
     CAN_Manager_SendGM6020Current(&hcan1, 6, controller->gimbal_yaw_current);
     
 }
