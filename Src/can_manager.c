@@ -242,32 +242,42 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
  * @brief Send a single GM6020 (gimbal pitch) current by logical motor id (1..7).
  * @param hcan HAL CAN handle to send on (typically CAN1).
  * @param motor_id GM6020 id in 1..7; selects StdId 0x1FF (1..4) or 0x2FF (5..7) and slot.
- * @param current Desired current; clamped to [-30000, 30000].
+ * @param current Desired current; clamped to [-25000, 25000].
  * @return HAL status from transmit.
  */
 HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t motor_id, int16_t current)
 {
     if (hcan == NULL) return HAL_ERROR;
+    //if wrong motor id is given put a error
     if (motor_id < 1 || motor_id > 7) return HAL_ERROR;
 
-    if (current >  30000) current =  30000;
-    if (current < -30000) current = -30000;
+    //Clamps the current so if it goes over the max it can only give max input
+    if (current >  25000) current =  25000;
+    if (current < -25000) current = -25000;
 
+    //sets the id of the motor tepending on whether or not it is 1-4 or 5-7
     uint16_t stdId = (motor_id <= 4) ? 0x1FF : 0x2FF;
+    
+    //determines which data slot it is supposed to be 
     uint8_t  slot  = (motor_id <= 4) ? (uint8_t)(motor_id - 1) : (uint8_t)(motor_id - 5);
 
+
     CAN_TxHeaderTypeDef tx = (CAN_TxHeaderTypeDef){0};
+    //the DATA field
     uint8_t d[8] = {0};
     uint32_t mb;
 
+    //sets StdId, IDE, RTR, DLC respectively
     tx.StdId = stdId;
     tx.IDE   = CAN_ID_STD;
     tx.RTR   = CAN_RTR_DATA;
     tx.DLC   = 8;
 
+    //splits the current value into two to put into the data list
     d[slot*2 + 0] = (uint8_t)((current >> 8) & 0xFF);
     d[slot*2 + 1] = (uint8_t)( current       & 0xFF);
 
+    //sends the CAN message
     HAL_StatusTypeDef st = HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
     extern CAN_Manager_t can1_manager; extern CAN_Manager_t can2_manager;
     CAN_Manager_t *m = NULL;
@@ -278,7 +288,6 @@ HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t
     }
     return st;
 }
-
 // Accessor implementations
 uint32_t CAN_Manager_GetTxOk(const CAN_Manager_t *m){ return m?m->tx_ok:0; }
 uint32_t CAN_Manager_GetTxErr(const CAN_Manager_t *m){ return m?m->tx_err:0; }

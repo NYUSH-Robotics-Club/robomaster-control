@@ -18,7 +18,8 @@ extern CAN_HandleTypeDef hcan1;
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
 
 // Shooter system motor ID definition
-#define MOTOR_STDID_5_8 (0x1FFU)
+#define MOTOR_STDID_1_4 (0x1FFU)
+#define MOTOR_STDID_5_8 (0x2FFU)
 
 /**
  * @brief Smoothly ramp a value towards a target by a fixed step.
@@ -187,7 +188,7 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
     // 1) Send motors 5,6,8 on CAN2 (StdId 0x1FF). Leave slot for motor 7 empty here.
     CAN_Manager_SendMotorCurrents4(
         &hcan2,
-        MOTOR_STDID_5_8,
+        MOTOR_STDID_1_4,
         controller->output_currents[0],  // Turntable (motor 5)
         controller->output_currents[1],  // Shooter wheel 1 (motor 6)
         0,                               // Skip GM6020 here (motor 7 sent on CAN1/0x2FF)
