@@ -202,6 +202,8 @@ int main(void)
 	const RC_ctrl_t *raw_rc = get_remote_control_point();
 	// RC health gating based on frame count activity
 	uint32_t fc_now = RC_GetFrameCount();
+
+  //read the IMU data from the C board
   BMI088_read(gyro, accel, &temp);
 	if (fc_now != last_rc_fc)
 	{

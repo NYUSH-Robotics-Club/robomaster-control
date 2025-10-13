@@ -130,7 +130,7 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
     {
         vx_raw = (int16_t)(rc_data->rc.ch[3]);
         vy_raw = (int16_t)(rc_data->rc.ch[2]);
-        // wz_raw = (int16_t)(rc_data->rc.ch[0]);
+        wz_raw = (int16_t)(rc_data->rc.ch[1]);
         // deadband
         const int16_t deadband = 10;
         if (vx_raw > -deadband && vx_raw < deadband) vx_raw = 0;
