@@ -212,6 +212,13 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
                                                 int16_t i1, int16_t i2, int16_t i3, int16_t i4)
 {
     if (hcan == NULL) return HAL_ERROR;
+    static uint32_t last_tx_tick = 0;   
+    uint32_t now = HAL_GetTick();
+    // Send only every 4 ms ≈ 250 Hz
+    if (now - last_tx_tick < 4) {
+        return HAL_OK;  // Skip send, but not an error
+    }
+
     CAN_TxHeaderTypeDef tx = (CAN_TxHeaderTypeDef){0};
     uint8_t d[8];
     uint32_t mb;
@@ -248,6 +255,13 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
 HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t motor_id, int16_t current)
 {
     if (hcan == NULL) return HAL_ERROR;
+
+    static uint32_t last_tx_tick = 0;   
+    uint32_t now = HAL_GetTick();
+    // Send only every 1.5 ms ≈ 666 Hz
+    if (now - last_tx_tick < 1.5) {
+        return HAL_OK;  // Skip send, but not an error
+    }
     //if wrong motor id is given put a error
     if (motor_id < 1 || motor_id > 7) return HAL_ERROR;
 
