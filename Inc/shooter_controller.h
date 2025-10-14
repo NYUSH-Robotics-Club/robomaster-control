@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "pid.h"
 #include "remote_control.h"
-#include "gimbal.h"
+#include "GM6020_Motor.h"
 #include "motor_feedback.h"
 
 // Shooter system motor count
@@ -52,6 +52,7 @@ typedef struct {
     int16_t gimbal_current;
     float target_rpm;
     float current_rpm;
+    float target_angle_rad;
 
     //GM6020 yaw control
     int16_t gimbal_yaw_current;

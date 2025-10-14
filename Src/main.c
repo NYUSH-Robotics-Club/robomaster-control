@@ -282,51 +282,49 @@ int main(void)
       bool c0 = (ch0 > -deadband && ch0 < deadband);
       bool c2 = (ch2 > -deadband && ch2 < deadband);
       bool c3 = (ch3 > -deadband && ch3 < deadband);
-      USB_CDC_Printf("RC centered: ch0=%d ch2=%d ch3=%d\r\n", c0?1:0, c2?1:0, c3?1:0);
+      // USB_CDC_Printf("RC centered: ch0=%d ch2=%d ch3=%d\r\n", c0?1:0, c2?1:0, c3?1:0);
 
       // Dump last SBUS frame bytes for mapping investigation
       uint8_t sbus_dump[RC_FRAME_LENGTH];
       memset(sbus_dump, 0, sizeof(sbus_dump));
       RC_GetLastFrame(sbus_dump);
-      USB_CDC_Printf("SBUS:");
-      for (int i = 0; i < (int)RC_FRAME_LENGTH; ++i) {
-        USB_CDC_Printf(" %02X", (unsigned int)sbus_dump[i]);
-      }
-      USB_CDC_Printf("\r\n");
+      // USB_CDC_Printf("SBUS:");
+      // for (int i = 0; i < (int)RC_FRAME_LENGTH; ++i) {
+      //   USB_CDC_Printf(" %02X", (unsigned int)sbus_dump[i]);
+      // }
+      // USB_CDC_Printf("\r\n");
 
       bool ch_run = ChassisController_IsRunning(&chassis_controller);
       bool sh_run = ShooterController_IsRunning(&shooter_controller);
-      USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
+      // USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
 
-      USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
-        gyro[0], gyro[1], gyro[2],
-        accel[0], accel[1], accel[2],
-        temp);
+      // USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
+      //   gyro[0], gyro[1], gyro[2],
+      //   accel[0], accel[1], accel[2],
+      //   temp);
 
       
 
       // Chassis targets and outputs
-      USB_CDC_Printf("CH tgt=[%d,%d,%d,%d] out=[%d,%d,%d,%d]\r\n",
-        (int)chassis_controller.ramped_targets[0],
-        (int)chassis_controller.ramped_targets[1],
-        (int)chassis_controller.ramped_targets[2],
-        (int)chassis_controller.ramped_targets[3],
-        (int)chassis_controller.output_currents[0],
-        (int)chassis_controller.output_currents[1],
-        (int)chassis_controller.output_currents[2],
-        (int)chassis_controller.output_currents[3]);
+      // USB_CDC_Printf("CH tgt=[%d,%d,%d,%d] out=[%d,%d,%d,%d]\r\n",
+      //   (int)chassis_controller.ramped_targets[0],
+      //   (int)chassis_controller.ramped_targets[1],
+      //   (int)chassis_controller.ramped_targets[2],
+      //   (int)chassis_controller.ramped_targets[3],
+      //   (int)chassis_controller.output_currents[0],
+      //   (int)chassis_controller.output_currents[1],
+      //   (int)chassis_controller.output_currents[2],
+      //   (int)chassis_controller.output_currents[3]);
 
-      // Shooter outputs and gimbal current
-      // const int16_t *sh_out = ShooterController_GetOutputCurrents(&shooter_controller);
-      // int16_t sh0 = 0, sh1 = 0, sh2 = 0, sh3 = 0;
-      // if (sh_out) { sh0 = sh_out[0]; sh1 = sh_out[1]; sh2 = sh_out[2]; sh3 = sh_out[3]; }
-      // USB_CDC_Printf("SH out=[%d,%d,%d,%d]\r\n", (int)sh0, (int)sh1, (int)sh2, (int)sh3);
+      // // Shooter outputs and gimbal current
+      // // const int16_t *sh_out = ShooterController_GetOutputCurrents(&shooter_controller);
+      // // int16_t sh0 = 0, sh1 = 0, sh2 = 0, sh3 = 0;
+      // // if (sh_out) { sh0 = sh_out[0]; sh1 = sh_out[1]; sh2 = sh_out[2]; sh3 = sh_out[3]; }
+      // // USB_CDC_Printf("SH out=[%d,%d,%d,%d]\r\n", (int)sh0, (int)sh1, (int)sh2, (int)sh3);
    
 
-      USB_CDC_Printf("GM6020 gimbal_enabled=%d  current=%d\r\n",
-        shooter_controller.gimbal_enabled ? 1 : 0,
-        
-        (int)shooter_controller.gimbal_current);
+      
+
     }
     last_frame_count = fc; // kept to avoid large delta when re-enabled
   }

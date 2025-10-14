@@ -6,7 +6,7 @@
 #include "can.h"
 #include "chassis_controller.h"
 #include "shooter_controller.h"
-#include "gimbal.h"
+#include "GM6020_Motor.h"
 
 // CAN channel enumeration
 typedef enum {

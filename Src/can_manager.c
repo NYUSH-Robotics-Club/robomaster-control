@@ -153,7 +153,7 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
         if (gid >= 1 && gid <= 7) {
             uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
             int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
-            pitch_on_feedback(gid, angle_raw, speed_rpm);
+            GM6020_Motor_Feedback(gid, angle_raw, speed_rpm);
         }
     }
     // Motor feedback (both CAN1 and CAN2)

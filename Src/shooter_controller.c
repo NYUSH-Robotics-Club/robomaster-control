@@ -3,6 +3,7 @@
 #include "can_manager.h"
 #include <string.h>
 
+
 // External CAN handles
 extern CAN_HandleTypeDef hcan2;
 extern CAN_HandleTypeDef hcan1;
@@ -89,8 +90,8 @@ void ShooterController_Init(ShooterController *controller)
              SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     
     // Initialize gimbal pitch
-    pitch_init(7);
-    pitch_init(6);
+    Motor_Init(7, 10.0f, 1.0f, 20.0f);
+    Motor_Init(6, 10.0f, 1.0f, 1.0f);
 }
 
 /**
@@ -135,8 +136,8 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
-        controller->gimbal_current = pitch_control_from_joystick(7, rc_data->rc.ch[4]);
-        controller->gimbal_yaw_current = pitch_control_from_joystick(6, -rc_data->rc.ch[0]);
+        controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[4]);
+        controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0]);
 
     }
     else
