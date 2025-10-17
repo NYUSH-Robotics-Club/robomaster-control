@@ -102,10 +102,10 @@ int16_t pitch_control_from_joystick(uint8_t id, int16_t joystick_ch1)
     cmd = cmd + gravity_ff;
     
   }
-  float max_abs = 16000.0f; // or c->speed_pid.max_output if that matches your ESC
+  float max_abs = 30000.0f; // or c->speed_pid.max_output if that matches your ESC
   if (cmd >  max_abs) cmd =  max_abs;
   if (cmd < -max_abs) cmd = -max_abs;
-  return (int16_t)cmd;
+  return (int16_t)cmd/2;
 
 }
 
