@@ -41,6 +41,7 @@
 #include "shooter_controller.h"
 #include "can_manager.h"
 #include <stdarg.h>
+#include "Printing.h"
 
 /* USER CODE END Includes */
 
@@ -100,11 +101,7 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
-static void USB_CDC_SendString(const char* message);
-static void USB_CDC_Printf(const char *fmt, ...);
-// Debug helpers (CAN prints extracted, currently disabled by default)
-static void Debug_PrintCANStatus(uint32_t current_tick);
-static void Debug_PrintCANDiag(void);
+
 
 /* USER CODE END PFP */
 
@@ -282,21 +279,21 @@ int main(void)
       bool c0 = (ch0 > -deadband && ch0 < deadband);
       bool c2 = (ch2 > -deadband && ch2 < deadband);
       bool c3 = (ch3 > -deadband && ch3 < deadband);
-      USB_CDC_Printf("RC centered: ch0=%d ch2=%d ch3=%d\r\n", c0?1:0, c2?1:0, c3?1:0);
+      // USB_CDC_Printf("RC centered: ch0=%d ch2=%d ch3=%d\r\n", c0?1:0, c2?1:0, c3?1:0);
 
       // Dump last SBUS frame bytes for mapping investigation
       uint8_t sbus_dump[RC_FRAME_LENGTH];
       memset(sbus_dump, 0, sizeof(sbus_dump));
       RC_GetLastFrame(sbus_dump);
-      USB_CDC_Printf("SBUS:");
-      for (int i = 0; i < (int)RC_FRAME_LENGTH; ++i) {
-        USB_CDC_Printf(" %02X", (unsigned int)sbus_dump[i]);
-      }
-      USB_CDC_Printf("\r\n");
+      // USB_CDC_Printf("SBUS:");
+      // for (int i = 0; i < (int)RC_FRAME_LENGTH; ++i) {
+      //   USB_CDC_Printf(" %02X", (unsigned int)sbus_dump[i]);
+      // }
+      // USB_CDC_Printf("\r\n");
 
       bool ch_run = ChassisController_IsRunning(&chassis_controller);
       bool sh_run = ShooterController_IsRunning(&shooter_controller);
-      USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
+      // USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
 
       USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
         gyro[0], gyro[1], gyro[2],
@@ -306,27 +303,25 @@ int main(void)
       
 
       // Chassis targets and outputs
-      USB_CDC_Printf("CH tgt=[%d,%d,%d,%d] out=[%d,%d,%d,%d]\r\n",
-        (int)chassis_controller.ramped_targets[0],
-        (int)chassis_controller.ramped_targets[1],
-        (int)chassis_controller.ramped_targets[2],
-        (int)chassis_controller.ramped_targets[3],
-        (int)chassis_controller.output_currents[0],
-        (int)chassis_controller.output_currents[1],
-        (int)chassis_controller.output_currents[2],
-        (int)chassis_controller.output_currents[3]);
+      // USB_CDC_Printf("CH tgt=[%d,%d,%d,%d] out=[%d,%d,%d,%d]\r\n",
+      //   (int)chassis_controller.ramped_targets[0],
+      //   (int)chassis_controller.ramped_targets[1],
+      //   (int)chassis_controller.ramped_targets[2],
+      //   (int)chassis_controller.ramped_targets[3],
+      //   (int)chassis_controller.output_currents[0],
+      //   (int)chassis_controller.output_currents[1],
+      //   (int)chassis_controller.output_currents[2],
+      //   (int)chassis_controller.output_currents[3]);
 
-      // Shooter outputs and gimbal current
-      // const int16_t *sh_out = ShooterController_GetOutputCurrents(&shooter_controller);
-      // int16_t sh0 = 0, sh1 = 0, sh2 = 0, sh3 = 0;
-      // if (sh_out) { sh0 = sh_out[0]; sh1 = sh_out[1]; sh2 = sh_out[2]; sh3 = sh_out[3]; }
-      // USB_CDC_Printf("SH out=[%d,%d,%d,%d]\r\n", (int)sh0, (int)sh1, (int)sh2, (int)sh3);
+      // // Shooter outputs and gimbal current
+      // // const int16_t *sh_out = ShooterController_GetOutputCurrents(&shooter_controller);
+      // // int16_t sh0 = 0, sh1 = 0, sh2 = 0, sh3 = 0;
+      // // if (sh_out) { sh0 = sh_out[0]; sh1 = sh_out[1]; sh2 = sh_out[2]; sh3 = sh_out[3]; }
+      // // USB_CDC_Printf("SH out=[%d,%d,%d,%d]\r\n", (int)sh0, (int)sh1, (int)sh2, (int)sh3);
    
 
-      USB_CDC_Printf("GM6020 gimbal_enabled=%d  current=%d\r\n",
-        shooter_controller.gimbal_enabled ? 1 : 0,
-        
-        (int)shooter_controller.gimbal_current);
+      
+
     }
     last_frame_count = fc; // kept to avoid large delta when re-enabled
   }
@@ -397,69 +392,7 @@ static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b)
   HAL_GPIO_WritePin(GPIOH, GPIO_PIN_10, b ? GPIO_PIN_SET : GPIO_PIN_RESET); // B
 }
 
-/*
-Send string message via USB CDC
-*/
-#if defined(__GNUC__)
-__attribute__((unused))
-#endif
-static void USB_CDC_SendString(const char* message)
-{
-  if (message != NULL)
-  {
-    CDC_Transmit_FS((uint8_t*)message, strlen(message));
-  }
-}
 
-/*
-Formatted print over USB CDC (non-blocking best-effort)
-*/
-static void USB_CDC_Printf(const char *fmt, ...)
-{
-  char buf[128];
-  va_list ap;
-  va_start(ap, fmt);
-  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
-  va_end(ap);
-  if (n < 0) return;
-  if (n > (int)sizeof(buf)) n = sizeof(buf);
-  CDC_Transmit_FS((uint8_t*)buf, (uint16_t)n);
-}
-
-
-static void Debug_PrintCANStatus(uint32_t current_tick)
-{
-  USB_CDC_Printf("CAN1 tx_ok=%lu tx_err=%lu rx=%lu last_rx_id=0x%03lX last_tx=%lums last_rx=%lums\r\n",
-      (unsigned long)CAN_Manager_GetTxOk(&can1_manager),
-      (unsigned long)CAN_Manager_GetTxErr(&can1_manager),
-      (unsigned long)CAN_Manager_GetRxFrames(&can1_manager),
-      (unsigned long)CAN_Manager_GetLastRxId(&can1_manager),
-      (unsigned long)(current_tick - CAN_Manager_GetLastTxTime(&can1_manager)),
-      (unsigned long)(current_tick - CAN_Manager_GetLastRxTime(&can1_manager)));
-
-  USB_CDC_Printf("CAN2 tx_ok=%lu tx_err=%lu rx=%lu last_rx_id=0x%03lX last_tx=%lums last_rx=%lums\r\n",
-      (unsigned long)CAN_Manager_GetTxOk(&can2_manager),
-      (unsigned long)CAN_Manager_GetTxErr(&can2_manager),
-      (unsigned long)CAN_Manager_GetRxFrames(&can2_manager),
-      (unsigned long)CAN_Manager_GetLastRxId(&can2_manager),
-      (unsigned long)(current_tick - CAN_Manager_GetLastTxTime(&can2_manager)),
-      (unsigned long)(current_tick - CAN_Manager_GetLastRxTime(&can2_manager)));
-}
-
-static void Debug_PrintCANDiag(void)
-{
-  uint32_t can2_err  = HAL_CAN_GetError(&hcan2);
-  uint32_t can2_esr  = hcan2.Instance->ESR;
-  uint32_t can2_tsr  = hcan2.Instance->TSR;
-  uint32_t can2_rf0r = hcan2.Instance->RF0R;
-  uint32_t can2_tx_free = HAL_CAN_GetTxMailboxesFreeLevel(&hcan2);
-  USB_CDC_Printf("CAN2 diag err=0x%08lX ESR=0x%08lX TSR=0x%08lX RF0R=0x%08lX TXMB_FREE=%lu\r\n",
-    (unsigned long)can2_err,
-    (unsigned long)can2_esr,
-    (unsigned long)can2_tsr,
-    (unsigned long)can2_rf0r,
-    (unsigned long)can2_tx_free);
-}
 
 /* USER CODE END 4 */
 

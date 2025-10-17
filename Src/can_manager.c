@@ -153,7 +153,7 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
         if (gid >= 1 && gid <= 7) {
             uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
             int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
-            pitch_on_feedback(gid, angle_raw, speed_rpm);
+            GM6020_Motor_Feedback(gid, angle_raw, speed_rpm);
         }
     }
     // Motor feedback (both CAN1 and CAN2)
@@ -212,6 +212,13 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
                                                 int16_t i1, int16_t i2, int16_t i3, int16_t i4)
 {
     if (hcan == NULL) return HAL_ERROR;
+    static uint32_t last_tx_tick = 0;   
+    uint32_t now = HAL_GetTick();
+    // Send only every 4 ms ≈ 250 Hz
+    if (now - last_tx_tick < 4) {
+        return HAL_OK;  // Skip send, but not an error
+    }
+
     CAN_TxHeaderTypeDef tx = (CAN_TxHeaderTypeDef){0};
     uint8_t d[8];
     uint32_t mb;
@@ -248,6 +255,13 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
 HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t motor_id, int16_t current)
 {
     if (hcan == NULL) return HAL_ERROR;
+
+    static uint32_t last_tx_tick = 0;   
+    uint32_t now = HAL_GetTick();
+    // Send only every 1.5 ms ≈ 666 Hz
+    if (now - last_tx_tick < 1.5) {
+        return HAL_OK;  // Skip send, but not an error
+    }
     //if wrong motor id is given put a error
     if (motor_id < 1 || motor_id > 7) return HAL_ERROR;
 

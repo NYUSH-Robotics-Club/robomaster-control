@@ -52,9 +52,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Src/can_manager.c
     Src/chassis_controller.c
     Src/pid.c
-    Src/pitch.c
+    Src/GM6020_Motor.c
     Src/remote_control.c
     Src/shooter_controller.c
+    Src/Printing.c
 )
 
 # Add include paths
