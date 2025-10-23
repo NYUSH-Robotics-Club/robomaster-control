@@ -25,12 +25,11 @@
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
-#include "BMI088driver.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "BMI088driver.h"
 #include "buzzer.h"
 #include "usbd_cdc_if.h"
 #include <stdint.h>
@@ -158,13 +157,8 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
   MX_TIM4_Init();
-  BMI088_init();
-  // while()
-  //   {
-  //       ;
-  //   }
   /* USER CODE BEGIN 2 */
-
+  BMI088_init();
   // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
   // Used for remote control
   remote_control_init();
