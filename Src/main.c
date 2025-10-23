@@ -41,6 +41,7 @@
 #include "can_manager.h"
 #include <stdarg.h>
 #include "Printing.h"
+#include "wt61c.h"
 
 /* USER CODE END Includes */
 
@@ -92,6 +93,11 @@ static uint8_t rc_baseline_set = 0;
 static RC_ctrl_t rc_sanitized;
 
 float gyro[3], accel[3], temp;
+
+// WT61C-TTL IMU sensor on USART1
+#define WT61C_UART_HANDLE  huart1
+#define RX_DMA_BUF_SZ 256
+static uint8_t wt61c_rxbuf[RX_DMA_BUF_SZ];
 
 /* USER CODE END PV */
 
@@ -179,9 +185,25 @@ int main(void)
 
   // Play boot beep sound
   Buzzer_PlayBeep();
-  
+
   // Ensure system is ready after boot song
   HAL_Delay(100);
+
+  // Initialize WT61C-TTL IMU sensor on USART1
+  WT61C_Init(&WT61C_UART_HANDLE);
+  // Start UART DMA reception with idle line detection
+  HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
+  // Disable half-transfer interrupt to reduce callback overhead
+  __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
+
+  // Optional: Configure WT61C for 100Hz output rate
+  // HAL_Delay(50);
+  // WT61C_Unlock(&WT61C_UART_HANDLE);
+  // HAL_Delay(10);
+  // WT61C_SetReturnRate(&WT61C_UART_HANDLE, 0x09); // 100Hz
+  // HAL_Delay(10);
+  // WT61C_Save(&WT61C_UART_HANDLE);
+  // HAL_Delay(10);
 
   /* USER CODE END 2 */
 
@@ -386,7 +408,35 @@ static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b)
   HAL_GPIO_WritePin(GPIOH, GPIO_PIN_10, b ? GPIO_PIN_SET : GPIO_PIN_RESET); // B
 }
 
+/*
+UART DMA/Idle callback for WT61C sensor data reception
+*/
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+  if (huart == &WT61C_UART_HANDLE) {
+    // Process received data
+    WT61C_ProcessBytes(wt61c_rxbuf, Size);
+    // Restart DMA reception
+    HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
+    __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
+  }
+}
 
+/*
+WT61C new data callback - sends JSON formatted data via USB CDC
+*/
+void WT61C_OnNewData(const WT61C_Data *d)
+{
+  // Output JSON format for easy parsing by host
+  USB_CDC_Printf("{\"ax\":%.4f,\"ay\":%.4f,\"az\":%.4f,"
+                 "\"gx\":%.2f,\"gy\":%.2f,\"gz\":%.2f,"
+                 "\"roll\":%.2f,\"pitch\":%.2f,\"yaw\":%.2f,"
+                 "\"T\":%.2f}\r\n",
+                 d->ax, d->ay, d->az,
+                 d->gx, d->gy, d->gz,
+                 d->roll, d->pitch, d->yaw,
+                 d->temperature);
+}
 
 /* USER CODE END 4 */
 
