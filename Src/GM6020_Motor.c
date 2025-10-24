@@ -111,7 +111,15 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
 
     // --- Run Position PID ---
     float current_angle = (float)c->angle_raw;
-    float cmd = PID_Calculate(&c->angle_pid, c->angle_target, current_angle);
+
+    // Calculate shortest path error considering encoder wrap-around
+    float error = c->angle_target - current_angle;
+    if (error > c->max_encoder / 2.0f)
+        error -= c->max_encoder;
+    else if (error < -c->max_encoder / 2.0f)
+        error += c->max_encoder;
+
+    float cmd = PID_Calculate(&c->angle_pid, 0.0f, -error);
 
     // --- Gravity Compensation ---
     float ang01 = current_angle / c->max_encoder; // 0..1 fraction of revolution
