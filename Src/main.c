@@ -29,7 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "BMI088driver.h"
+#include "bmi088driver.h"
 #include "buzzer.h"
 #include "usbd_cdc_if.h"
 #include <stdint.h>
@@ -40,7 +40,7 @@
 #include "shooter_controller.h"
 #include "can_manager.h"
 #include <stdarg.h>
-#include "Printing.h"
+#include "printing.h"
 #include "wt61c.h"
 
 /* USER CODE END Includes */

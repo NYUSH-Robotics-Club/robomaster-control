@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "pid.h"
 #include "remote_control.h"
-#include "GM6020_Motor.h"
+#include "gm6020_motor.h"
 #include "motor_feedback.h"
 
 // Shooter system motor count

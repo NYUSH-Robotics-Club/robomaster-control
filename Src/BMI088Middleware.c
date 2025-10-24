@@ -1,4 +1,4 @@
-#include "BMI088Middleware.h"
+#include "bmi088middleware.h"
 #include "main.h"
 
 extern SPI_HandleTypeDef hspi1;

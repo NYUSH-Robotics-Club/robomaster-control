@@ -47,15 +47,15 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Src/bsp_rc.c
     Src/buzzer.c
-    Src/BMI088driver.c
-    Src/BMI088Middleware.c
+    Src/bmi088driver.c
+    Src/bmi088middleware.c
     Src/can_manager.c
     Src/chassis_controller.c
     Src/pid.c
-    Src/GM6020_Motor.c
+    Src/gm6020_motor.c
     Src/remote_control.c
     Src/shooter_controller.c
-    Src/Printing.c
+    Src/printing.c
     Src/wt61c.c
 )
 

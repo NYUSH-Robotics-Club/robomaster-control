@@ -1,9 +1,9 @@
-#include "GM6020_Motor.h"
+#include "gm6020_motor.h"
 #include "pid.h"
 #include "can.h"
 #include "can_manager.h"
 #include <math.h>
-#include "Printing.h"
+#include "printing.h"
 
 
 
