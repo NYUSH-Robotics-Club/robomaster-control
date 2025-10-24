@@ -295,10 +295,10 @@ int main(void)
       bool sh_run = ShooterController_IsRunning(&shooter_controller);
       // USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
 
-      USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
-        gyro[0], gyro[1], gyro[2],
-        accel[0], accel[1], accel[2],
-        temp);
+      USB_CDC_Printf("GYRO [%d, %d, %d] ACCEL [%d, %d, %d] TEMP %d\r\n",
+    (int)(gyro[0]*100), (int)(gyro[1]*100), (int)(gyro[2]*100),
+    (int)(accel[0]*100), (int)(accel[1]*100), (int)(accel[2]*100),
+    (int)(temp*100));
 
       
 

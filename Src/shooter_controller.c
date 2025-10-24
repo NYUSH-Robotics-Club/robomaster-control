@@ -90,8 +90,8 @@ void ShooterController_Init(ShooterController *controller)
              SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     
     // Initialize gimbal pitch
-    Motor_Init(7, 10.0f, 1.0f, 20.0f);
-    Motor_Init(6, 10.0f, 1.0f, 1.0f);
+    Motor_Init(7, 1.0f, 1.0f, 1.0f);
+    Motor_Init(6, 7.0f, 0.05f, 10.0f);
 }
 
 /**
