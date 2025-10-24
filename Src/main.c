@@ -280,41 +280,44 @@ int main(void)
     // RC and control path quick diagnostics
     {
       // Print sanitized channels (after baseline removal)
-      int16_t ch0 = 0, ch2 = 0, ch3 = 0, ch4 = 0; uint8_t swl = 0;
-      if (rc_data) { ch0 = rc_data->rc.ch[0]; ch2 = rc_data->rc.ch[2]; ch3 = rc_data->rc.ch[3]; ch4 = rc_data->rc.ch[4]; swl = (uint8_t)rc_data->rc.s[0]; }
-      USB_CDC_Printf("RC fc=%lu ch0=%d ch2=%d ch3=%d ch4=%d swL=%u\r\n",
-        (unsigned long)fc, (int)ch0, (int)ch2, (int)ch3, (int)ch4, (unsigned int)swl);
-      if (rc_baseline_set)
-      {
-        USB_CDC_Printf("RC baseline=[%d,%d,%d,%d,%d]\r\n",
-          (int)rc_baseline[0], (int)rc_baseline[1], (int)rc_baseline[2], (int)rc_baseline[3], (int)rc_baseline[4]);
-      }
+      // int16_t ch0 = 0, ch2 = 0, ch3 = 0, ch4 = 0; uint8_t swl = 0;
+      // if (rc_data) { ch0 = rc_data->rc.ch[0]; ch2 = rc_data->rc.ch[2]; ch3 = rc_data->rc.ch[3]; ch4 = rc_data->rc.ch[4]; swl = (uint8_t)rc_data->rc.s[0]; }
+      // USB_CDC_Printf("RC fc=%lu ch0=%d ch2=%d ch3=%d ch4=%d swL=%u\r\n",
+      //   (unsigned long)fc, (int)ch0, (int)ch2, (int)ch3, (int)ch4, (unsigned int)swl);
+      // if (rc_baseline_set)
+      // {
+      //   USB_CDC_Printf("RC baseline=[%d,%d,%d,%d,%d]\r\n",
+      //     (int)rc_baseline[0], (int)rc_baseline[1], (int)rc_baseline[2], (int)rc_baseline[3], (int)rc_baseline[4]);
+      // }
 
       // Centering and deadband check for chassis channels
-      const int16_t deadband = 10;
-      bool c0 = (ch0 > -deadband && ch0 < deadband);
-      bool c2 = (ch2 > -deadband && ch2 < deadband);
-      bool c3 = (ch3 > -deadband && ch3 < deadband);
+      // const int16_t deadband = 10;
+      // bool c0 = (ch0 > -deadband && ch0 < deadband);
+      // bool c2 = (ch2 > -deadband && ch2 < deadband);
+      // bool c3 = (ch3 > -deadband && ch3 < deadband);
       // USB_CDC_Printf("RC centered: ch0=%d ch2=%d ch3=%d\r\n", c0?1:0, c2?1:0, c3?1:0);
 
       // Dump last SBUS frame bytes for mapping investigation
-      uint8_t sbus_dump[RC_FRAME_LENGTH];
-      memset(sbus_dump, 0, sizeof(sbus_dump));
-      RC_GetLastFrame(sbus_dump);
+      // uint8_t sbus_dump[RC_FRAME_LENGTH];
+      // memset(sbus_dump, 0, sizeof(sbus_dump));
+      // RC_GetLastFrame(sbus_dump);
+
       // USB_CDC_Printf("SBUS:");
       // for (int i = 0; i < (int)RC_FRAME_LENGTH; ++i) {
       //   USB_CDC_Printf(" %02X", (unsigned int)sbus_dump[i]);
       // }
       // USB_CDC_Printf("\r\n");
 
-      bool ch_run = ChassisController_IsRunning(&chassis_controller);
-      bool sh_run = ShooterController_IsRunning(&shooter_controller);
+      // bool ch_run = ChassisController_IsRunning(&chassis_controller);
+      // bool sh_run = ShooterController_IsRunning(&shooter_controller);
+      
       // USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
 
-      USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
-        gyro[0], gyro[1], gyro[2],
-        accel[0], accel[1], accel[2],
-        temp);
+      // DISABLED: BMI088 data conflicts with WT61C output
+      // USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
+      //   gyro[0], gyro[1], gyro[2],
+      //   accel[0], accel[1], accel[2],
+      //   temp);
 
       
 
@@ -427,15 +430,39 @@ WT61C new data callback - sends JSON formatted data via USB CDC
 */
 void WT61C_OnNewData(const WT61C_Data *d)
 {
-  // Output JSON format for easy parsing by host
-  USB_CDC_Printf("{\"ax\":%.4f,\"ay\":%.4f,\"az\":%.4f,"
-                 "\"gx\":%.2f,\"gy\":%.2f,\"gz\":%.2f,"
-                 "\"roll\":%.2f,\"pitch\":%.2f,\"yaw\":%.2f,"
-                 "\"T\":%.2f}\r\n",
-                 d->ax, d->ay, d->az,
-                 d->gx, d->gy, d->gz,
-                 d->roll, d->pitch, d->yaw,
-                 d->temperature);
+  // Throttle output heavily to avoid USB buffer overflow
+  static uint32_t last_output_time = 0;
+  static uint32_t frame_count = 0;
+  uint32_t now = HAL_GetTick();
+
+  frame_count++;
+
+  // Output data only every 100ms to avoid overflow
+  if (now - last_output_time < 100) {
+    return; // Skip this update
+  }
+  last_output_time = now;
+
+  // Convert floats to integers for printf (workaround for missing float support)
+  int ax_i = (int)(d->ax * 1000);  // m/s^2 * 1000
+  int ay_i = (int)(d->ay * 1000);
+  int az_i = (int)(d->az * 1000);
+  int gx_i = (int)(d->gx * 10);    // deg/s * 10
+  int gy_i = (int)(d->gy * 10);
+  int gz_i = (int)(d->gz * 10);
+  int roll_i = (int)(d->roll * 10);
+  int pitch_i = (int)(d->pitch * 10);
+  int yaw_i = (int)(d->yaw * 10);
+  int temp_i = (int)(d->temperature * 10);
+
+  USB_CDC_Printf("{\"ax\":%d,\"ay\":%d,\"az\":%d,"
+                 "\"gx\":%d,\"gy\":%d,\"gz\":%d,"
+                 "\"roll\":%d,\"pitch\":%d,\"yaw\":%d,"
+                 "\"T\":%d}\r\n",
+                 ax_i, ay_i, az_i,
+                 gx_i, gy_i, gz_i,
+                 roll_i, pitch_i, yaw_i,
+                 temp_i);
 }
 
 /* USER CODE END 4 */
