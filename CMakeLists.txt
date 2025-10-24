@@ -56,6 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Src/remote_control.c
     Src/shooter_controller.c
     Src/Printing.c
+    Src/wt61c.c
 )
 
 # Add include paths

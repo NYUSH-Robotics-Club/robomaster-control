@@ -39,3 +39,5 @@ Release/
 
 # Windows
 Thumbs.db
+
+.claude/
