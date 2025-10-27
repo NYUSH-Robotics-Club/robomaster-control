@@ -53,7 +53,7 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
   if (id < 1 || id > 7) return;
   gm6020_ctx_t *c = &g_ctx[id-1];
   c->id = id;
-  c->angle_raw = initial_angle;
+  c->angle_raw = 0.0f;
   c->speed_rpm = 0;
   c->angle_target = initial_angle;
   c->angle_inited = 0;
@@ -111,11 +111,18 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     // --- Wrap Around Encoder Range (0..8192) ---
     if(id == PITCH_ID){
         if (c->angle_target > c->angle_max)
-            c->angle_target = c->angle_max;
+        c->angle_target = c->angle_max;
         if (c->angle_target < c->angle_min)
-            c->angle_target = c->angle_min;
+        c->angle_target = c->angle_min;
+    
+    } else {
+        if (c->angle_target >= c->angle_max)
+            c->angle_target -= c->angle_min;
+        else if (c->angle_target == c->angle_min)
+            c->angle_target += c->angle_max;
     }
     
+
     // --- Run Position PID ---
     float current_angle = (float)c->angle_raw;
 
