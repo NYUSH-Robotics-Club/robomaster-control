@@ -48,15 +48,23 @@ float cur_rpm = 0.0f;
 
 #define send_current_by_id(id, cur) CAN_Manager_SendGM6020Current(&hcan2, (id), (cur))
 
-void Motor_Init(uint8_t id, float KP, float KI, float KD)
+void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
 {
   if (id < 1 || id > 7) return;
   gm6020_ctx_t *c = &g_ctx[id-1];
   c->id = id;
-  c->angle_raw = 0;
+  c->angle_raw = initial_angle;
   c->speed_rpm = 0;
-  c->angle_target = -1.0f;
+  c->angle_target = initial_angle;
   c->angle_inited = 0;
+  if(id == PITCH_ID){
+    c->angle_min = 1000.0f;
+    c->angle_max = 4000.0f;
+
+  } else {
+    c->angle_min = 0.0f;
+    c->angle_max = 8192.0f;
+  }
   PID_Init(&c->speed_pid, KP, KI, KD, 30000.0f, 25000.0f);
   PID_Init(&c->angle_pid, KP, KI, KD, 30000.0f, 25000.0f);
 
@@ -69,10 +77,7 @@ void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   c->angle_raw = angle_raw;
   c->target_angle_rad = (float)c->angle_raw / c->max_encoder * 2.0f * M_PI;
   c->speed_rpm = speed_rpm;
-  if (!c->angle_inited) {
-    c->angle_target = (float)angle_raw;
-    c->angle_inited = 1;
-  }
+  
 }
 
 /**
@@ -89,7 +94,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     int16_t raw = joystick_ch1;
     c->max_encoder = 8192.0f;     // GM6020 encoder ticks per revolution
     c->pitch_direction = 1.0f;    // +1 = normal, -1 = inverted
-    c->gravity_effort = 7000.0f;  // feed-forward magnitude
+    c->gravity_effort = 5000.0f;  // feed-forward magnitude
     float sensitivity = 15.0f;     // joystick sensitivity in ticks per input step
 
     // If first run or not initialized, set current as target
@@ -104,11 +109,13 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     }
 
     // --- Wrap Around Encoder Range (0..8192) ---
-    if (c->angle_target > c->max_encoder)
-        c->angle_target -= c->max_encoder;
-    if (c->angle_target < 0)
-        c->angle_target += c->max_encoder;
-
+    if(id == PITCH_ID){
+        if (c->angle_target > c->angle_max)
+            c->angle_target = c->angle_max;
+        if (c->angle_target < c->angle_min)
+            c->angle_target = c->angle_min;
+    }
+    
     // --- Run Position PID ---
     float current_angle = (float)c->angle_raw;
 
@@ -121,15 +128,12 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
 
     float cmd = PID_Calculate(&c->angle_pid, 0.0f, -error);
 
-    // --- Gravity Compensation ---
-    float ang01 = current_angle / c->max_encoder; // 0..1 fraction of revolution
-    float ang_rad = ang01 * (2.0f * (float)M_PI);
-    float gravity_ff = c->pitch_direction * c->gravity_effort * sinf(ang_rad);
     if(id == PITCH_ID){
-      cmd += gravity_ff;
-      cmd = 0.0f;
+        float ang01 = current_angle / c->max_encoder; // 0..1 fraction of revolution
+        float ang_rad = ang01 * (2.0f * (float)M_PI);
+        float gravity_ff = c->pitch_direction * c->gravity_effort * sinf(ang_rad);
+        cmd += gravity_ff;
     }
-
     // --- Clamp Output ---
     float max_abs = 25000.0f;
     if (cmd >  max_abs) cmd =  max_abs;

@@ -12,6 +12,13 @@ extern CAN_HandleTypeDef hcan1;
 #define SPEED_PID_KP (5.0f)
 #define SPEED_PID_KI (0.5f)
 #define SPEED_PID_KD (0.1f)
+#define YAW_KP (5.0f)
+#define YAW_KI (0.5f)
+#define YAW_KD (0.1f)
+#define PITCH_KP (11.0f)
+#define PITCH_KI (0.0f)
+#define PITCH_KD (0.1f)
+#define INTIAL_PITCH_ANGLE (3200.0f)
 #define SPEED_PID_OUTPUT_MAX (15000)
 #define SPEED_PID_INTEGRAL_MAX (7500)
 
@@ -90,8 +97,9 @@ void ShooterController_Init(ShooterController *controller)
              SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     
     // Initialize gimbal pitch
-    Motor_Init(7, 1.0f, 1.0f, 1.0f);
-    Motor_Init(6, 7.0f, 0.05f, 10.0f);
+
+    Motor_Init(6, YAW_KP, YAW_KI, YAW_KD, 2000); // yaw
+    Motor_Init(7, PITCH_KP, PITCH_KI, PITCH_KD, INTIAL_PITCH_ANGLE); // pitch
 }
 
 /**
@@ -136,8 +144,8 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
-        controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[4]);
-        controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0]);
+        controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[0]);
+        // controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0]);
 
     }
     else
