@@ -55,7 +55,7 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
   c->id = id;
   c->angle_raw = 0.0f;
   c->speed_rpm = 0;
-  c->angle_target = initial_angle;
+  c->angle_target = initial_angle/360.0f * 8192.0f; // convert degrees to encoder ticks
   c->angle_inited = 0;
   if(id == PITCH_ID){
     c->angle_min = 1000.0f;
@@ -93,7 +93,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
 
     int16_t raw = joystick_ch1;
     c->max_encoder = 8192.0f;     // GM6020 encoder ticks per revolution
-    c->pitch_direction = 1.0f;    // +1 = normal, -1 = inverted
+    c->pitch_direction = -1.0f;    // +1 = normal, -1 = inverted
     c->gravity_effort = 5000.0f;  // feed-forward magnitude
     float sensitivity = 15.0f;     // joystick sensitivity in ticks per input step
 
