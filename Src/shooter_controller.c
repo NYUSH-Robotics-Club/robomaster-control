@@ -144,7 +144,7 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
-        controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[1]);
+        // controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[1]);
         controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0]);
 
     }

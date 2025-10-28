@@ -2,6 +2,7 @@
 #include "can.h"
 #include "can_manager.h"
 #include <string.h>
+#include <math.h>
 
 extern CAN_HandleTypeDef hcan1;
 
@@ -17,6 +18,22 @@ extern CAN_HandleTypeDef hcan1;
 
 // Chassis motor ID definition
 #define MOTOR_STDID_1_4 (0x200U)
+
+typedef struct {
+    float x;
+    float y;
+} Pair;
+
+Pair to_real_speed(Pair speed, float angle, float w) {
+    const float k = 0.01;
+    angle += k * w;
+    angle = 0;
+
+    Pair result;
+    result.x = speed.x * cos(angle) - speed.y * sin(angle);
+    result.y = speed.x * sin(angle) + speed.y * cos(angle);
+    return result;
+}
 
 // Motor direction: +1 for left side, -1 for right side (aligns physical forward)
 static const int8_t MOTOR_DIR[CHASSIS_MOTOR_COUNT] = {
@@ -116,7 +133,7 @@ void ChassisController_Init(ChassisController *controller)
  * @param rc_data Remote control data pointer (can be NULL).
  * @param current_tick Current timestamp (ms).
  */
-void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick)
+void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data)
 {
     if (controller == NULL) return;
     
@@ -130,7 +147,7 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
     {
         vx_raw = (int16_t)(rc_data->rc.ch[3]);
         vy_raw = (int16_t)(rc_data->rc.ch[2]);
-        // wz_raw = (int16_t)(-rc_data->rc.ch[1]);
+        wz_raw = (int16_t)(-rc_data->rc.ch[1]);
         // deadband
         const int16_t deadband = 10;
         if (vx_raw > -deadband && vx_raw < deadband) vx_raw = 0;
@@ -140,9 +157,15 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 
     // Scale to target speed units
     const float scale = (float)CHASSIS_DEMO_TARGET_SPEED / (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET); // 7000/660
-    float vx = (-(float)vx_raw * scale) / 3.0f; // forward + (1/3 sensitivity)
-    float vy = (-(float)vy_raw * scale) / 3.0f; // left + (1/3 sensitivity)
+    // float vx = (-(float)vx_raw * scale) / 3.0f; // forward + (1/3 sensitivity)
+    // float vy = (-(float)vy_raw * scale) / 3.0f; // left + (1/3 sensitivity)
+
     float omega = (-(float)wz_raw * scale) / 3.0f; // CCW + (1/3 sensitivity)
+
+    Pair _speed = (Pair){-(float)vx_raw * scale / 3.0f,
+        -(float)vy_raw * scale / 3.0f};
+    Pair speed = to_real_speed(_speed, sensor_data.yaw, omega);
+    float vx = speed.x, vy = speed.y;
 
     // Mecanum kinematics with rotation
     // Motor order by CAN IDs: 1: Right Rear, 2: Left Rear, 3: Left Front, 4: Right Front
