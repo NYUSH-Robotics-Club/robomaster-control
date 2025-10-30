@@ -21,7 +21,9 @@ typedef struct {
   
   // --- Position Hold Tracking ---
   float     angle_target;      // target position in encoder ticks
-  uint8_t   angle_inited;      // flag: 0 = not initialized, 1 = initialized
+  uint8_t   angle_inited;
+  float     w_chasis_raw;
+  float     angle_correction;     // flag: 0 = not initialized, 1 = initialized
 
   // --- PID Controllers ---
   PID_Controller speed_pid;    // optional (for cascade or debugging)
@@ -80,6 +82,12 @@ void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   
 }
 
+void Target_Angle_Correction(gm6020_ctx_t *c);//A function to keep the yaw stable
+{
+  &c->w_chasis_raw=BMI088_read(gyro[3])
+  &c->angle_correction=c->w_chasis_raw/900/(2*pi)*c->angle_max//900 is the weird unit for chasis gyro
+}
+
 /**
  * @brief Joystick control: deadzone => zero target speed via PID, beyond deadzone => constant speed.
  * @param id Motor id (1..7).
@@ -105,7 +113,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     if (raw > GM6020_JOYSTICK_DEADZONE || raw < -GM6020_JOYSTICK_DEADZONE)
     {
         // Move target proportionally to joystick input
-        c->angle_target += c->pitch_direction * sensitivity * ((float)raw / GM6020_JOYSTICK_FULL_SCALE);
+        c->angle_target += c->pitch_direction * sensitivity * ((float)raw / GM6020_JOYSTICK_FULL_SCALE)+c->angle_correction
     }
 
     // --- Wrap Around Encoder Range (0..8192) ---
@@ -151,6 +159,8 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     
     return (int16_t)cmd;
 }
+
+
 
  
 

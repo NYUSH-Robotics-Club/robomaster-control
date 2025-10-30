@@ -42,7 +42,7 @@ void Chasis_GetGyroZ(YawStabilizer *stabilizer)
  * @param stabilizer Yaw stabilizer pointer.
  * @param current_tick Current timestamp (ms).
  */
-void YawStabilizer_Update(YawStabilizer*stabilizer, uint32_t current_tick,bool stabilizer_enable,const RC_ctrl_t *rc_data);
+void YawStabilizer_Update(YawStabilizer*stabilizer, uint32_t current_tick, bool stabilizer_enable,const RC_ctrl_t *rc_data);
 {
     
 //Enable or disable yaw stabilization
@@ -52,17 +52,7 @@ if (rc_data==NULL)
         stabilizer->stabilizer_enabled = false;
         return;
     }
- if(rc_data!=NULL)
- {  // Check left switch position: down/off, mid/preheat (shooters only), up/all on
-    bool right_switch_up = false;
-    bool right_switch_mid = false;
-    bool right_switch_down = false;
-        right_switch_up = switch_is_up(rc_data->rc.s[0]);//!!!!!! Replace with actual switch index!!!!!!
-        right_switch_mid = switch_is_mid(rc_data->rc.s[0]);
-        right_switch_down = switch_is_down(rc_data->rc.s[0]);
- }
-    // Enabled if any shooter/turntable should run (mid or up)
-    stabilizer->stabilizer_enabled = right_switch_mid; 
+
     &stabilizer->yaw_targetspeed=stabilizer->w_chasis_raw * yaw_ratio
     &stabilizer->yaw_motor_feedback =motor_feedbacks[motor_id].speed ;//!!!!!!Replce motor_id with yaw motor id!!!!!!
 
@@ -83,5 +73,14 @@ void YawStabilizer_ComputeCurrent(YawStabilizer *stabilizer)
         stabilizer->yaw_motor_feedback
         &controller->gimbal_yaw_current=stabilizer->output_current
     );
+
+
+
+
+
+
+
+
+
 
 }
