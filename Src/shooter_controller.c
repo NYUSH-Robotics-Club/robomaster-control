@@ -113,26 +113,33 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     if (controller == NULL) return;
     
     // Check left switch position: down/off, mid/preheat (shooters only), up/all on
+    bool right_switch_up = false;
+    bool right_switch_mid = false;
+    bool right_switch_down = false;
     bool left_switch_up = false;
-    bool left_switch_mid = false;
-    bool left_switch_down = false;
 
     int16_t yaw = 0;
     if (rc_data != NULL)
     {
-        left_switch_up = switch_is_up(rc_data->rc.s[0]);
-        left_switch_mid = switch_is_mid(rc_data->rc.s[0]);
-        left_switch_down = switch_is_down(rc_data->rc.s[0]);
+        right_switch_up = switch_is_up(rc_data->rc.s[0]);
+        right_switch_mid = switch_is_mid(rc_data->rc.s[0]);
+        right_switch_down = switch_is_down(rc_data->rc.s[0]);
         
     }
     
+    left_switch_up = switch_is_up(rc_data->rc.s[1]);
+    if (left_switch_up) {
+        controller->gimbal_yaw_current = Joystick_control(6, 660);
+    }
+    
+    
     // Enabled if any shooter/turntable should run (mid or up)
-    controller->enabled = (left_switch_up || left_switch_mid);
+    controller->enabled = (right_switch_up || right_switch_mid);
     
     // Targets based on mode
-    float turntable_target = left_switch_up ? MOTOR5_CONST_SPEED : 0.0f;
-    float shooter1_target = (left_switch_up || left_switch_mid) ? -SHOOTER_CONST_SPEED : 0.0f;
-    float shooter2_target = (left_switch_up || left_switch_mid) ?  SHOOTER_CONST_SPEED : 0.0f;
+    float turntable_target = right_switch_up ? MOTOR5_CONST_SPEED : 0.0f;
+    float shooter1_target = (right_switch_up || right_switch_mid) ? -SHOOTER_CONST_SPEED : 0.0f;
+    float shooter2_target = (right_switch_up || right_switch_mid) ?  SHOOTER_CONST_SPEED : 0.0f;
     
     // Apply ramping
     controller->ramped_turntable = RampTowards(controller->ramped_turntable, turntable_target, SHOOTER_RAMP_STEP);

@@ -107,6 +107,7 @@ void SystemClock_Config(void);
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 
+SensorData sensor_data;
 
 /* USER CODE END PFP */
 
@@ -218,6 +219,18 @@ int main(void)
 
   //read the IMU data from the C board
   BMI088_read(gyro, accel, &temp);
+  static uint32_t last_output_time = 0;
+  static uint32_t frame_count = 0;
+  uint32_t now = HAL_GetTick();
+
+  frame_count++;
+
+  // Output data only every 100ms to avoid overflow
+  if (now - last_output_time > 100) {
+      USB_CDC_Printf("GYRO: %d, %d, %d\r\n", (int)gyro[0], (int)gyro[1], (int)gyro[2]);
+      last_output_time = now;
+  }
+
 	if (fc_now != last_rc_fc)
 	{
 		last_rc_fc = fc_now;
@@ -245,7 +258,7 @@ int main(void)
 	}
 
 	// Update controllers
-	ChassisController_Update(&chassis_controller, rc_data, current_tick);
+	ChassisController_Update(&chassis_controller, rc_data, current_tick, sensor_data);
 	ShooterController_Update(&shooter_controller, rc_data, current_tick);
 	
 	// Update buzzer music playback
@@ -444,25 +457,29 @@ void WT61C_OnNewData(const WT61C_Data *d)
   last_output_time = now;
 
   // Convert floats to integers for printf (workaround for missing float support)
-  int ax_i = (int)(d->ax * 1000);  // m/s^2 * 1000
-  int ay_i = (int)(d->ay * 1000);
-  int az_i = (int)(d->az * 1000);
-  int gx_i = (int)(d->gx * 10);    // deg/s * 10
-  int gy_i = (int)(d->gy * 10);
-  int gz_i = (int)(d->gz * 10);
-  int roll_i = (int)(d->roll * 10);
-  int pitch_i = (int)(d->pitch * 10);
-  int yaw_i = (int)(d->yaw * 10);
+  int ax_i = sensor_data.ax = (int)(d->ax * 1000);  // m/s^2 * 1000
+  int ay_i = sensor_data.ay = (int)(d->ay * 1000);
+  int az_i = sensor_data.az = (int)(d->az * 1000);
+  int gx_i = sensor_data.gx = (int)(d->gx * 10);    // deg/s * 10
+  int gy_i = sensor_data.gy = (int)(d->gy * 10);
+  int gz_i = sensor_data.gz = (int)(d->gz * 10);
+  int roll_i = sensor_data.roll = (int)(d->roll * 10);
+  int pitch_i = sensor_data.pitch = (int)(d->pitch * 10);
+  int yaw_i = sensor_data.yaw = (int)(d->yaw * 10);
   int temp_i = (int)(d->temperature * 10);
 
-  USB_CDC_Printf("{\"ax\":%d,\"ay\":%d,\"az\":%d,"
-                 "\"gx\":%d,\"gy\":%d,\"gz\":%d,"
-                 "\"roll\":%d,\"pitch\":%d,\"yaw\":%d,"
-                 "\"T\":%d}\r\n",
-                 ax_i, ay_i, az_i,
-                 gx_i, gy_i, gz_i,
-                 roll_i, pitch_i, yaw_i,
-                 temp_i);
+  // USB_CDC_Printf("{\"ax\":%d,\"ay\":%d,\"az\":%d,"
+  //                "\"gx\":%d,\"gy\":%d,\"gz\":%d,"
+  //                "\"roll\":%d,\"pitch\":%d,\"yaw\":%d,"
+  //                "\"T\":%d}\r\n",
+  //                (int)ax_i, (int)ay_i, (int)az_i,
+  //                (int)gx_i, (int)gy_i, (int)gz_i,
+  //                (int)roll_i, (int)pitch_i, (int)yaw_i,
+  //                (int)temp_i);
+
+  USB_CDC_Printf("\"gz\":%d", (int)gz_i, "\n");
+
+
 }
 
 /* USER CODE END 4 */

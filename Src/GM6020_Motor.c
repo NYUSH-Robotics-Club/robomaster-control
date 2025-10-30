@@ -105,9 +105,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     c->gravity_effort = 5000.0f;  // feed-forward magnitude
     float sensitivity = 15.0f;     // joystick sensitivity in ticks per input step
 
-    // If first run or not initialized, set current as target
-    if (c->angle_target < 0.0f)
-        c->angle_target = (float)c->angle_raw;
+
 
     // --- Incremental Target Update (Position-Hold Style) ---
     if (raw > GM6020_JOYSTICK_DEADZONE || raw < -GM6020_JOYSTICK_DEADZONE)
@@ -125,9 +123,9 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     
     } else {
         if (c->angle_target >= c->angle_max)
-            c->angle_target -= c->angle_min;
-        else if (c->angle_target == c->angle_min)
-            c->angle_target += c->angle_max;
+            c->angle_target = c->angle_min;
+        else if (c->angle_target < c->angle_min)
+            c->angle_target = c->angle_max;
     }
     
 
@@ -153,8 +151,8 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     float max_abs = 25000.0f;
     if (cmd >  max_abs) cmd =  max_abs;
     if (cmd < -max_abs) cmd = -max_abs;
-    USB_CDC_Printf("GM6020 ID=%d | Target=%d | Current=%d | Cmd=%d\r\n",
-        c->id, (int)c->angle_target, (int)current_angle, (int)cmd);
+    // USB_CDC_Printf("GM6020 ID=%d | Target=%d | Current=%d | Cmd=%d\r\n",
+    //     c->id, (int)c->angle_target, (int)current_angle, (int)cmd);
 
     
     return (int16_t)cmd;

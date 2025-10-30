@@ -31,6 +31,12 @@ typedef struct {
     int16_t output_currents[CHASSIS_MOTOR_COUNT];
 } ChassisController;
 
+typedef struct {
+    int ax, ay, az;
+    int gx, gy, gz;
+    int roll, pitch, yaw;
+} SensorData;
+
 /**
  * @brief Initialize chassis controller
  * @param controller Chassis controller pointer
@@ -43,7 +49,7 @@ void ChassisController_Init(ChassisController *controller);
  * @param rc_data Remote control data pointer
  * @param current_tick Current timestamp
  */
-void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick);
+void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data);
 
 /**
  * @brief Compute chassis motor currents
