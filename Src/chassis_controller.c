@@ -145,6 +145,8 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
     int16_t wz_raw = 0; // yaw rotation (right positive: CCW)
     if (rc_data != NULL)
     {
+        
+ 
         vx_raw = (int16_t)(rc_data->rc.ch[3]);
         vy_raw = (int16_t)(rc_data->rc.ch[2]);
         wz_raw = (int16_t)(-rc_data->rc.ch[4]);
