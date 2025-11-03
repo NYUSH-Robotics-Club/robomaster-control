@@ -4,7 +4,8 @@
 #include "can_manager.h"
 #include <math.h>
 #include "printing.h"
-
+#include "chasis_controller.c"
+#include "chassis_controller.h"
 
 
 
@@ -15,6 +16,7 @@
 #define GM6020_ANGLE_HOLD_MIN_RPM          (120.0f)
 #define PITCH_ID 7
 #define YAW_ID 6
+#define YAW_RAMP_STEP (25.0f)
 typedef struct {
   uint8_t   id;
   uint16_t  angle_raw;         // current encoder ticks (0–8191)
@@ -24,7 +26,9 @@ typedef struct {
   float     angle_target;      // target position in encoder ticks
   uint8_t   angle_inited;
   float     w_chasis_raw;
-  float     angle_correction;     // flag: 0 = not initialized, 1 = initialized
+  float     angle_correction; 
+  float     angle_correction_ramp;   
+   // flag: 0 = not initialized, 1 = initialized
 
   // --- PID Controllers ---
   PID_Controller speed_pid;    // optional (for cascade or debugging)
@@ -87,10 +91,10 @@ void Target_Angle_Correction(SensorData sensor_data)//A function to keep the yaw
 {
   gm6020_ctx_t *c = &g_ctx[YAW_ID-1];
   c->w_chasis_raw = sensor_data.gz;
-
-  c->angle_correction = c->w_chasis_raw / 900 / (2 * M_PI) * c->angle_max; //900 is the weird unit for chasis gyro
-  
-  USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d\r\n", (int)c->w_chasis_raw, (int)c->angle_correction);
+  c->angle_correction =c->w_chasis_raw / 520 / (2 * M_PI) * c->angle_max; //the weird unit for chasis gyro
+  static float RampTowards(c->angle_correction_ramp,c->angle_correction, YAW_RAMP_STEP)
+{
+  USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data.gimbal_gz);
 }
 
 /**
@@ -122,7 +126,8 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
     
     if(id == YAW_ID){
         Target_Angle_Correction(sensor_data);
-         c->angle_target += c->angle_correction;
+         c->angle_target -= c->angle_correction_ramp;
+        
     }
     
     // --- Wrap Around Encoder Range (0..8192) ---
@@ -166,8 +171,12 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
     float max_abs = 25000.0f;
     if (cmd >  max_abs) cmd =  max_abs;
     if (cmd < -max_abs) cmd = -max_abs;
-    // USB_CDC_Printf("GM6020 ID=%d | Target=%d | Current=%d | Cmd=%d\r\n",
-    //     c->id, (int)c->angle_target, (int)current_angle, (int)cmd);
+    if(id == YAW_ID){
+        USB_CDC_Printf("GM6020 ID=%d | Target=%d | Current=%d | Cmd=%d\r\n",
+         c->id, (int)c->angle_target, (int)current_angle, (int)cmd);
+    }
+    
+   
 
     
     return (int16_t)cmd;

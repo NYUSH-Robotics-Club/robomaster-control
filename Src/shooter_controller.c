@@ -12,7 +12,7 @@ extern CAN_HandleTypeDef hcan1;
 #define SPEED_PID_KP (5.0f)
 #define SPEED_PID_KI (0.5f)
 #define SPEED_PID_KD (0.1f)
-#define YAW_KP (11.1f)
+#define YAW_KP (20.0f)
 #define YAW_KI (0.01f)
 #define YAW_KD (1.0f)
 #define PITCH_KP (11.0f)
@@ -21,6 +21,7 @@ extern CAN_HandleTypeDef hcan1;
 #define INTIAL_PITCH_ANGLE (165.0f)
 #define SPEED_PID_OUTPUT_MAX (15000)
 #define SPEED_PID_INTEGRAL_MAX (7500)
+
 
 // Motor feedback timeout
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
