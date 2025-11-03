@@ -41,7 +41,11 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-
+typedef struct {
+    int ax, ay, az;
+    int gx, gy, gz;
+    int roll, pitch, yaw;
+} SensorData;
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/

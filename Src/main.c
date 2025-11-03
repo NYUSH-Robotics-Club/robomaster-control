@@ -259,7 +259,7 @@ int main(void)
 
 	// Update controllers
 	ChassisController_Update(&chassis_controller, rc_data, current_tick, sensor_data);
-	ShooterController_Update(&shooter_controller, rc_data, current_tick);
+	ShooterController_Update(&shooter_controller, rc_data, current_tick, sensor_data);
 	
 	// Update buzzer music playback
 	Buzzer_Update();
@@ -477,7 +477,7 @@ void WT61C_OnNewData(const WT61C_Data *d)
   //                (int)roll_i, (int)pitch_i, (int)yaw_i,
   //                (int)temp_i);
 
-  USB_CDC_Printf("\"gz\":%d", (int)gz_i, "\n");
+  //USB_CDC_Printf("\"gz\":%d", (int)gz_i, "\n");
 
 
 }

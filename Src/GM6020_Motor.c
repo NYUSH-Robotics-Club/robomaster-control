@@ -14,6 +14,7 @@
 #define GM6020_ANGLE_HOLD_KP_RPM_PER_DEG   (100.0f)
 #define GM6020_ANGLE_HOLD_MIN_RPM          (120.0f)
 #define PITCH_ID 7
+#define YAW_ID 6
 typedef struct {
   uint8_t   id;
   uint16_t  angle_raw;         // current encoder ticks (0–8191)
@@ -82,10 +83,13 @@ void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   
 }
 
-void Target_Angle_Correction(gm6020_ctx_t *c);//A function to keep the yaw stable
+void Target_Angle_Correction(SensorData sensor_data)//A function to keep the yaw stable
 {
-  &c->w_chasis_raw=BMI088_read(gyro[3])
-  &c->angle_correction=c->w_chasis_raw/900/(2*pi)*c->angle_max//900 is the weird unit for chasis gyro
+  gm6020_ctx_t *c = &g_ctx[YAW_ID-1];
+  c->w_chasis_raw = sensor_data.gz;
+
+  c->angle_correction = c->w_chasis_raw / 900 / (2 * M_PI) * c->angle_max; //900 is the weird unit for chasis gyro
+  USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d\r\n", (int)c->w_chasis_raw, (int)c->angle_correction);
 }
 
 /**
@@ -94,7 +98,7 @@ void Target_Angle_Correction(gm6020_ctx_t *c);//A function to keep the yaw stabl
  * @param joystick_ch1 Joystick raw value.
  * @return Current command for GM6020 (int16).
  */
-int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
+int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_data)
 {
     if (id < 1 || id > 7) return 0;
     gm6020_ctx_t *c = &g_ctx[id-1];
@@ -111,21 +115,30 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1)
     if (raw > GM6020_JOYSTICK_DEADZONE || raw < -GM6020_JOYSTICK_DEADZONE)
     {
         // Move target proportionally to joystick input
-        c->angle_target += c->pitch_direction * sensitivity * ((float)raw / GM6020_JOYSTICK_FULL_SCALE)+c->angle_correction
+       
+        c->angle_target += c->pitch_direction * sensitivity * ((float)raw / GM6020_JOYSTICK_FULL_SCALE);
     }
+    
 
     // --- Wrap Around Encoder Range (0..8192) ---
     if(id == PITCH_ID){
+      
         if (c->angle_target > c->angle_max)
         c->angle_target = c->angle_max;
         if (c->angle_target < c->angle_min)
         c->angle_target = c->angle_min;
     
     } else {
+      
         if (c->angle_target >= c->angle_max)
             c->angle_target = c->angle_min;
         else if (c->angle_target < c->angle_min)
             c->angle_target = c->angle_max;
+    }
+
+    if(id == YAW_ID){
+        Target_Angle_Correction(sensor_data);
+         c->angle_target += c->angle_correction;
     }
     
 

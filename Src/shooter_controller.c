@@ -108,7 +108,7 @@ void ShooterController_Init(ShooterController *controller)
  * @param rc_data Remote control data pointer (can be NULL).
  * @param current_tick Current timestamp (ms).
  */
-void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick)
+void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data)
 {
     if (controller == NULL) return;
     
@@ -129,7 +129,7 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     
     left_switch_up = switch_is_up(rc_data->rc.s[1]);
     if (left_switch_up) {
-        controller->gimbal_yaw_current = Joystick_control(6, 660);
+        controller->gimbal_yaw_current = Joystick_control(6, 660, sensor_data);
     }
     
     
@@ -151,8 +151,8 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     controller->gimbal_enabled = (rc_data != NULL);
     if (controller->gimbal_enabled)
     {
-        controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[1]);
-        controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0]);
+        controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[1], sensor_data);
+        controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0], sensor_data);
 
     }
     else

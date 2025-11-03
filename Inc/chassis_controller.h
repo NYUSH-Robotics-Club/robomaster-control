@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "pid.h"
+#include "main.h"
 #include "remote_control.h"
 #include "motor_feedback.h"
 
@@ -31,11 +32,7 @@ typedef struct {
     int16_t output_currents[CHASSIS_MOTOR_COUNT];
 } ChassisController;
 
-typedef struct {
-    int ax, ay, az;
-    int gx, gy, gz;
-    int roll, pitch, yaw;
-} SensorData;
+
 
 /**
  * @brief Initialize chassis controller
