@@ -45,6 +45,7 @@ typedef struct {
     int ax, ay, az;
     int gx, gy, gz;
     int roll, pitch, yaw;
+    float gimbal_gx, gimbal_gy, gimbal_gz;
 } SensorData;
 /* USER CODE END EC */
 

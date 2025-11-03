@@ -89,6 +89,7 @@ void Target_Angle_Correction(SensorData sensor_data)//A function to keep the yaw
   c->w_chasis_raw = sensor_data.gz;
 
   c->angle_correction = c->w_chasis_raw / 900 / (2 * M_PI) * c->angle_max; //900 is the weird unit for chasis gyro
+  
   USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d\r\n", (int)c->w_chasis_raw, (int)c->angle_correction);
 }
 
@@ -119,7 +120,11 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
         c->angle_target += c->pitch_direction * sensitivity * ((float)raw / GM6020_JOYSTICK_FULL_SCALE);
     }
     
-
+    if(id == YAW_ID){
+        Target_Angle_Correction(sensor_data);
+         c->angle_target += c->angle_correction;
+    }
+    
     // --- Wrap Around Encoder Range (0..8192) ---
     if(id == PITCH_ID){
       
@@ -136,10 +141,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
             c->angle_target = c->angle_max;
     }
 
-    if(id == YAW_ID){
-        Target_Angle_Correction(sensor_data);
-         c->angle_target += c->angle_correction;
-    }
+    
     
 
     // --- Run Position PID ---

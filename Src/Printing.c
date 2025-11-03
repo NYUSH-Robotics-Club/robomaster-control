@@ -20,14 +20,23 @@ Formatted print over USB CDC (non-blocking best-effort)
 */
  void USB_CDC_Printf(const char *fmt, ...)
 {
-  char buf[128];
-  va_list ap;
-  va_start(ap, fmt);
-  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
-  va_end(ap);
-  if (n < 0) return;
-  if (n > (int)sizeof(buf)) n = sizeof(buf);
-  CDC_Transmit_FS((uint8_t*)buf, (uint16_t)n);
+  static uint32_t last_output_time = 0;
+  static uint32_t frame_count = 0;
+  uint32_t now = HAL_GetTick();
+
+  frame_count++;
+  if(now - last_output_time >100) {
+    last_output_time = now;
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    if (n > (int)sizeof(buf)) n = sizeof(buf);
+    CDC_Transmit_FS((uint8_t*)buf, (uint16_t)n);
+  }
+  
 }
 
 

@@ -227,9 +227,13 @@ int main(void)
 
   // Output data only every 100ms to avoid overflow
   if (now - last_output_time > 100) {
-      USB_CDC_Printf("GYRO: %d, %d, %d\r\n", (int)gyro[0], (int)gyro[1], (int)gyro[2]);
+      USB_CDC_Printf("GYRO: %f, %f, %f\r\n", (float)gyro[0], (float)gyro[1], (float)gyro[2]);
       last_output_time = now;
   }
+  sensor_data.gimbal_gx = gyro[0];
+  sensor_data.gimbal_gy = gyro[1];
+  sensor_data.gimbal_gz = gyro[2];
+  
 
 	if (fc_now != last_rc_fc)
 	{
