@@ -109,7 +109,7 @@ void ShooterController_Init(ShooterController *controller)
  * @param rc_data Remote control data pointer (can be NULL).
  * @param current_tick Current timestamp (ms).
  */
-void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data)
+void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData* sensor_data)
 {
     if (controller == NULL) return;
     

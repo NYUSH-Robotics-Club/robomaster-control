@@ -55,6 +55,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Src/chassis_controller.c
     Src/pid.c
     Src/gm6020_motor.c
+    Src/gyro_data.c
     Src/remote_control.c
     Src/shooter_controller.c
     Src/printing.c

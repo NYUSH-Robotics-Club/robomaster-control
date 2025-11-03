@@ -20,7 +20,6 @@ Formatted print over USB CDC (non-blocking best-effort)
 */
  void USB_CDC_Printf(const char *fmt, ...)
 {
- 
     char buf[128];
     va_list ap;
     va_start(ap, fmt);
@@ -29,7 +28,6 @@ Formatted print over USB CDC (non-blocking best-effort)
     if (n < 0) return;
     if (n > (int)sizeof(buf)) n = sizeof(buf);
     CDC_Transmit_FS((uint8_t*)buf, (uint16_t)n);
-  
   
 }
 

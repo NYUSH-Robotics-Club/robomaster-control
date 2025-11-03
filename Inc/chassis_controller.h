@@ -7,6 +7,7 @@
 #include "main.h"
 #include "remote_control.h"
 #include "motor_feedback.h"
+#include "gyro_data.h"
 
 // Chassis motor count
 #define CHASSIS_MOTOR_COUNT 4
@@ -46,7 +47,7 @@ void ChassisController_Init(ChassisController *controller);
  * @param rc_data Remote control data pointer
  * @param current_tick Current timestamp
  */
-void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data);
+void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData* sensor_data);
 
 /**
  * @brief Compute chassis motor currents
