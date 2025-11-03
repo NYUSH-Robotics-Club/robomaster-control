@@ -4,7 +4,7 @@
 #include "can_manager.h"
 #include <math.h>
 #include "printing.h"
-#include "chasis_controller.c"
+
 #include "chassis_controller.h"
 
 
@@ -91,9 +91,8 @@ void Target_Angle_Correction(SensorData sensor_data)//A function to keep the yaw
 {
   gm6020_ctx_t *c = &g_ctx[YAW_ID-1];
   c->w_chasis_raw = sensor_data.gz;
-  c->angle_correction =c->w_chasis_raw / 520 / (2 * M_PI) * c->angle_max; //the weird unit for chasis gyro
-  static float RampTowards(c->angle_correction_ramp,c->angle_correction, YAW_RAMP_STEP)
-{
+  c->angle_correction =c->w_chasis_raw / 900 / (2 * M_PI) * c->angle_max / 120; //the weird unit for chasis gyro
+
   USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data.gimbal_gz);
 }
 
@@ -126,7 +125,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
     
     if(id == YAW_ID){
         Target_Angle_Correction(sensor_data);
-         c->angle_target -= c->angle_correction_ramp;
+        c->angle_target -= c->angle_correction;
         
     }
     
@@ -159,7 +158,7 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
     else if (error < -c->max_encoder / 2.0f)
         error += c->max_encoder;
 
-    float cmd = PID_Calculate(&c->angle_pid, 0.0f, -error);
+    float cmd = PID_Calculate(&c->angle_pid, error, 0.0f);
 
     if(id == PITCH_ID){
         float ang01 = current_angle / c->max_encoder; // 0..1 fraction of revolution

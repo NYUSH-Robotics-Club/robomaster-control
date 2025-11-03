@@ -466,7 +466,7 @@ void WT61C_OnNewData(const WT61C_Data *d)
   int az_i = sensor_data.az = (int)(d->az * 1000);
   int gx_i = sensor_data.gx = (int)(d->gx * 10);    // deg/s * 10
   int gy_i = sensor_data.gy = (int)(d->gy * 10);
-  int gz_i = sensor_data.gz = (int)(d->gz * 10);
+  int gz_i = sensor_data.gz = (int)(d->gz);
   int roll_i = sensor_data.roll = (int)(d->roll * 10);
   int pitch_i = sensor_data.pitch = (int)(d->pitch * 10);
   int yaw_i = sensor_data.yaw = (int)(d->yaw * 10);
