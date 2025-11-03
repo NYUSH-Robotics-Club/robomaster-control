@@ -7,7 +7,7 @@
 #include "remote_control.h"
 #include "gm6020_motor.h"
 #include "motor_feedback.h"
-
+#include "gyro_data.h"
 // Shooter system motor count
 #define SHOOTER_MOTOR_COUNT 4
 
@@ -70,7 +70,7 @@ void ShooterController_Init(ShooterController *controller);
  * @param rc_data Remote control data pointer
  * @param current_tick Current timestamp
  */
-void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data);
+void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData *sensor_data);
 
 /**
  * @brief Compute shooter system motor currents

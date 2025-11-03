@@ -42,6 +42,7 @@
 #include <stdarg.h>
 #include "printing.h"
 #include "wt61c.h"
+#include "gyro_data.h"
 
 /* USER CODE END Includes */
 
@@ -217,22 +218,7 @@ int main(void)
 	// RC health gating based on frame count activity
 	uint32_t fc_now = RC_GetFrameCount();
 
-  //read the IMU data from the C board
-  BMI088_read(gyro, accel, &temp);
-  static uint32_t last_output_time = 0;
-  static uint32_t frame_count = 0;
-  uint32_t now = HAL_GetTick();
-
-  frame_count++;
-
-  // Output data only every 100ms to avoid overflow
-  if (now - last_output_time > 100) {
-      USB_CDC_Printf("GYRO: %f, %f, %f\r\n", (float)gyro[0], (float)gyro[1], (float)gyro[2]);
-      last_output_time = now;
-  }
-  sensor_data.gimbal_gx = gyro[0];
-  sensor_data.gimbal_gy = gyro[1];
-  sensor_data.gimbal_gz = gyro[2];
+  
   
 
 	if (fc_now != last_rc_fc)
@@ -261,9 +247,12 @@ int main(void)
 		rc_data = &rc_sanitized;
 	}
 
+  // Update sensor data
+  gyro_data_update(&sensor_data);
+
 	// Update controllers
-	ChassisController_Update(&chassis_controller, rc_data, current_tick, sensor_data);
-	ShooterController_Update(&shooter_controller, rc_data, current_tick, sensor_data);
+	ChassisController_Update(&chassis_controller, rc_data, current_tick, &sensor_data);
+	ShooterController_Update(&shooter_controller, rc_data, current_tick, &sensor_data);
 	
 	// Update buzzer music playback
 	Buzzer_Update();
@@ -442,49 +431,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
   }
 }
 
-/*
-WT61C new data callback - sends JSON formatted data via USB CDC
-*/
-void WT61C_OnNewData(const WT61C_Data *d)
-{
-  // Throttle output heavily to avoid USB buffer overflow
-  static uint32_t last_output_time = 0;
-  static uint32_t frame_count = 0;
-  uint32_t now = HAL_GetTick();
 
-  frame_count++;
-
-  // Output data only every 100ms to avoid overflow
-  if (now - last_output_time < 100) {
-    return; // Skip this update
-  }
-  last_output_time = now;
-
-  // Convert floats to integers for printf (workaround for missing float support)
-  int ax_i = sensor_data.ax = (int)(d->ax * 1000);  // m/s^2 * 1000
-  int ay_i = sensor_data.ay = (int)(d->ay * 1000);
-  int az_i = sensor_data.az = (int)(d->az * 1000);
-  int gx_i = sensor_data.gx = (int)(d->gx * 10);    // deg/s * 10
-  int gy_i = sensor_data.gy = (int)(d->gy * 10);
-  int gz_i = sensor_data.gz = (int)(d->gz * 10);
-  int roll_i = sensor_data.roll = (int)(d->roll * 10);
-  int pitch_i = sensor_data.pitch = (int)(d->pitch * 10);
-  int yaw_i = sensor_data.yaw = (int)(d->yaw * 10);
-  int temp_i = (int)(d->temperature * 10);
-
-  // USB_CDC_Printf("{\"ax\":%d,\"ay\":%d,\"az\":%d,"
-  //                "\"gx\":%d,\"gy\":%d,\"gz\":%d,"
-  //                "\"roll\":%d,\"pitch\":%d,\"yaw\":%d,"
-  //                "\"T\":%d}\r\n",
-  //                (int)ax_i, (int)ay_i, (int)az_i,
-  //                (int)gx_i, (int)gy_i, (int)gz_i,
-  //                (int)roll_i, (int)pitch_i, (int)yaw_i,
-  //                (int)temp_i);
-
-  //USB_CDC_Printf("\"gz\":%d", (int)gz_i, "\n");
-
-
-}
 
 /* USER CODE END 4 */
 

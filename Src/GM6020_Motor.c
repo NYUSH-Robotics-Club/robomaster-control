@@ -83,10 +83,10 @@ void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   
 }
 
-void Target_Angle_Correction(SensorData sensor_data)//A function to keep the yaw stable
+void Target_Angle_Correction(SensorData* sensor_data)//A function to keep the yaw stable
 {
   gm6020_ctx_t *c = &g_ctx[YAW_ID-1];
-  c->w_chasis_raw = sensor_data.gz;
+  c->w_chasis_raw = sensor_data->g_gz;
 
   c->angle_correction = c->w_chasis_raw / 900 / (2 * M_PI) * c->angle_max; //900 is the weird unit for chasis gyro
   
@@ -99,7 +99,7 @@ void Target_Angle_Correction(SensorData sensor_data)//A function to keep the yaw
  * @param joystick_ch1 Joystick raw value.
  * @return Current command for GM6020 (int16).
  */
-int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_data)
+int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData* sensor_data)
 {
     if (id < 1 || id > 7) return 0;
     gm6020_ctx_t *c = &g_ctx[id-1];
@@ -141,7 +141,6 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData sensor_dat
             c->angle_target = c->angle_max;
     }
 
-    
     
 
     // --- Run Position PID ---

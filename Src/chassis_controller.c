@@ -133,7 +133,7 @@ void ChassisController_Init(ChassisController *controller)
  * @param rc_data Remote control data pointer (can be NULL).
  * @param current_tick Current timestamp (ms).
  */
-void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData sensor_data)
+void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData* sensor_data)
 {
     if (controller == NULL) return;
     
@@ -166,7 +166,7 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 
     Pair _speed = (Pair){-(float)vx_raw * scale / 3.0f,
         -(float)vy_raw * scale / 3.0f};
-    Pair speed = to_real_speed(_speed, sensor_data.yaw, omega);
+    Pair speed = to_real_speed(_speed, sensor_data->c_yaw, omega);
     float vx = speed.x, vy = speed.y;
 
     // Mecanum kinematics with rotation
