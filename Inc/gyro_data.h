@@ -8,7 +8,11 @@
 #include "bmi088driver.h"
 
 
-
+/**
+ * @brief Sensor data structure for gyroscope and accelerometer readings
+ * a is accelerometer, g is gyroscope
+ * c_ means chassis sensor, g_ means gimbal sensor
+ */
 typedef struct {
     int c_ax, c_ay, c_az;
     int c_gx, c_gy, c_gz;

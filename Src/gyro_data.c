@@ -29,9 +29,9 @@ void gyro_data_update(SensorData *sensor_data)
     sensor_data->c_ax = (int)(d->ax * 1000);  // m/s^2 * 1000
     sensor_data->c_ay = (int)(d->ay * 1000);
     sensor_data->c_az = (int)(d->az * 1000);
-    sensor_data->c_gx = (int)(d->gx * 10);    // deg/s * 10
-    sensor_data->c_gy = (int)(d->gy * 10);
-    sensor_data->c_gz = (int)(d->gz * 10);
+    sensor_data->c_gx = (int)(d->gx );    // deg/s * 10
+    sensor_data->c_gy = (int)(d->gy );
+    sensor_data->c_gz = (int)(d->gz );
     sensor_data->c_roll = (int)(d->roll * 10);
     sensor_data->c_pitch = (int)(d->pitch * 10);
     sensor_data->c_yaw = (int)(d->yaw * 10);

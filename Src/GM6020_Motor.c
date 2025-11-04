@@ -64,6 +64,7 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
   c->speed_rpm = 0;
   c->angle_target = initial_angle/360.0f * 8192.0f; // convert degrees to encoder ticks
   c->angle_inited = 0;
+  
   if(id == PITCH_ID){
     c->angle_min = 1000.0f;
     c->angle_max = 4000.0f;
@@ -72,8 +73,9 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
     c->angle_min = 0.0f;
     c->angle_max = 8192.0f;
   }
-  PID_Init(&c->speed_pid, KP, KI, KD, 30000.0f, 25000.0f);
+  PID_Init(&c->speed_pid, 5.0, KI, KD, 30000.0f, 25000.0f);
   PID_Init(&c->angle_pid, KP, KI, KD, 30000.0f, 25000.0f);
+  
 
 }
 
@@ -84,16 +86,22 @@ void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
   c->angle_raw = angle_raw;
   c->target_angle_rad = (float)c->angle_raw / c->max_encoder * 2.0f * M_PI;
   c->speed_rpm = speed_rpm;
+  if (!c->angle_inited) {
+        c->angle_target = (float)c->angle_raw;
+        PID_Reset(&c->angle_pid);
+        PID_Reset(&c->speed_pid);
+        c->angle_inited = 1;
+    }
   
 }
 
 void Target_Angle_Correction(SensorData* sensor_data)//A function to keep the yaw stable
 {
   gm6020_ctx_t *c = &g_ctx[YAW_ID-1];
-  c->w_chasis_raw = sensor_data.gz;
+  c->w_chasis_raw = sensor_data->c_gz;
   c->angle_correction =c->w_chasis_raw / 900 / (2 * M_PI) * c->angle_max / 120; //the weird unit for chasis gyro
 
-  USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data.gimbal_gz);
+  USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data->g_gz);
 }
 
 /**
@@ -104,9 +112,13 @@ void Target_Angle_Correction(SensorData* sensor_data)//A function to keep the ya
  */
 int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData* sensor_data)
 {
+
     if (id < 1 || id > 7) return 0;
     gm6020_ctx_t *c = &g_ctx[id-1];
-
+    if (!c->angle_inited){
+        return 0;
+    }
+        
     int16_t raw = joystick_ch1;
     c->max_encoder = 8192.0f;     // GM6020 encoder ticks per revolution
     c->pitch_direction = -1.0f;    // +1 = normal, -1 = inverted
@@ -123,11 +135,11 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData* sensor_da
         c->angle_target += c->pitch_direction * sensitivity * ((float)raw / GM6020_JOYSTICK_FULL_SCALE);
     }
     
-    if(id == YAW_ID){
-        Target_Angle_Correction(sensor_data);
-        c->angle_target -= c->angle_correction;
+    // if(id == YAW_ID){
+    //     Target_Angle_Correction(sensor_data);
+    //     c->angle_target -= c->angle_correction;
         
-    }
+    // }
     
     // --- Wrap Around Encoder Range (0..8192) ---
     if(id == PITCH_ID){
@@ -177,6 +189,75 @@ int16_t Joystick_control(uint8_t id, int16_t joystick_ch1, SensorData* sensor_da
    
 
     
+    return (int16_t)cmd;
+}
+
+/**
+ * @brief PID-based yaw control that counterbalances chassis rotation using gimbal gyro feedback.
+ * @param joystick_yaw Joystick input for manual yaw (from remote)
+ * @param sensor_data IMU sensor data (contains chassis c_gz and gimbal g_gz)
+ * @return GM6020 current command for yaw motor
+ */
+int16_t Yaw_Control_With_Compensation(int16_t joystick_yaw, SensorData* sensor_data)
+{
+    gm6020_ctx_t *yaw = &g_ctx[YAW_ID - 1];
+    if (!yaw->angle_inited) return 0;
+
+    // --- constants ---
+    const float dt = 0.005f;                                      // 200 Hz loop
+    const float ENC_MAX = 8192.0f;
+    const float TICKS_PER_RAD = ENC_MAX / (2.0f * (float)M_PI);   // ≈1303.8 ticks/rad
+    const float alpha = 0.3f;                                     // faster LPF
+    const float COUNTER_GAIN = 1.35f;                             // chassis→gimbal ratio
+    const float RATE_FEEDBACK = 0.8f;                             // residual gimbal rate fix
+
+    // === joystick control ===
+    if (fabsf(joystick_yaw) > GM6020_JOYSTICK_DEADZONE)
+        yaw->angle_target += 15.0f * ((float)joystick_yaw / GM6020_JOYSTICK_FULL_SCALE);
+
+    // --- wrap target into [0, ENC_MAX) ---
+    if (yaw->angle_target >= ENC_MAX)
+        yaw->angle_target -= ENC_MAX;
+    else if (yaw->angle_target < 0)
+        yaw->angle_target += ENC_MAX;
+
+    // === gyro filtering ===
+    static float g_gz_filt = 0.0f;
+    float g_gz = sensor_data->g_gz;                        // gimbal yaw rate (rad/s)
+    float c_gz = sensor_data->c_gz * (float)M_PI / 180.0f; // chassis yaw rate (deg/s→rad/s)
+
+    g_gz_filt = alpha * g_gz + (1.0f - alpha) * g_gz_filt;
+
+    // === counter-rotation compensation ===
+    // Oppose chassis spin and cancel any residual gimbal spin
+    float dYaw_ticks = (-COUNTER_GAIN * c_gz - RATE_FEEDBACK * g_gz_filt) 
+                       * TICKS_PER_RAD * dt;
+    yaw->angle_target += dYaw_ticks;
+
+    // --- wrap target again ---
+    if (yaw->angle_target >= ENC_MAX)
+        yaw->angle_target -= ENC_MAX;
+    else if (yaw->angle_target < 0)
+        yaw->angle_target += ENC_MAX;
+
+    // === wrap-safe position error ===
+    float current = (float)yaw->angle_raw;
+    float raw_err = yaw->angle_target - current;
+    if (raw_err > ENC_MAX / 2.0f) raw_err -= ENC_MAX;
+    else if (raw_err < -ENC_MAX / 2.0f) raw_err += ENC_MAX;
+
+    // --- PID control ---
+    float cmd = PID_Calculate(&yaw->angle_pid, raw_err, 0.0f);
+
+    // --- clamp output ---
+    if (cmd >  25000) cmd =  25000;
+    if (cmd < -25000) cmd = -25000;
+
+    USB_CDC_Printf(
+        "Yaw | Tar=%.1f Cur=%.1f Err=%.1f Cmd=%.1f | cWz=%.3f gWz=%.3f filt=%.3f dYaw=%.1f\r\n",
+        yaw->angle_target, current, raw_err, cmd,
+        c_gz, g_gz, g_gz_filt, dYaw_ticks);
+
     return (int16_t)cmd;
 }
 

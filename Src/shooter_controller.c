@@ -12,8 +12,8 @@ extern CAN_HandleTypeDef hcan1;
 #define SPEED_PID_KP (5.0f)
 #define SPEED_PID_KI (0.5f)
 #define SPEED_PID_KD (0.1f)
-#define YAW_KP (20.0f)
-#define YAW_KI (0.01f)
+#define YAW_KP (15.0f)
+#define YAW_KI (0.05f)
 #define YAW_KD (1.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
@@ -153,7 +153,7 @@ void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc
     if (controller->gimbal_enabled)
     {
         controller->gimbal_current = Joystick_control(7, rc_data->rc.ch[1], sensor_data);
-        controller->gimbal_yaw_current = Joystick_control(6, rc_data->rc.ch[0], sensor_data);
+        controller->gimbal_yaw_current = Yaw_Control_With_Compensation(rc_data->rc.ch[0], sensor_data);
 
     }
     else

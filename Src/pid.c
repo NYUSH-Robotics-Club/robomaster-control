@@ -1,5 +1,5 @@
 #include "pid.h"
-
+#include <stddef.h>
 /**
  * @brief Initialize PID controller with specified parameters
  * @param pid Pointer to PID controller structure
@@ -64,4 +64,10 @@ float PID_Calculate(PID_Controller *pid, float target, float actual)
   return pid->output;
 }
 
-
+void PID_Reset(PID_Controller *pid)
+{
+    if (pid == NULL) return;
+    pid->integral = 0.0f;
+    pid->last_error = 0.0f;
+    pid->output = 0.0f;
+}
