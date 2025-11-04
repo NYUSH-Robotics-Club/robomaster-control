@@ -12,13 +12,14 @@ extern CAN_HandleTypeDef hcan1;
 #define SPEED_PID_KP (5.0f)
 #define SPEED_PID_KI (0.5f)
 #define SPEED_PID_KD (0.1f)
-#define YAW_KP (15.0f)
+#define YAW_KP (10.0f)
 #define YAW_KI (0.05f)
-#define YAW_KD (1.0f)
+#define YAW_KD (0.1f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
 #define PITCH_KD (0.1f)
-#define INTIAL_PITCH_ANGLE (165.0f)
+#define INTIAL_PITCH_ANGLE (2500.0f)
+#define INTIAL_YAW_ANGLE (0.0f)
 #define SPEED_PID_OUTPUT_MAX (15000)
 #define SPEED_PID_INTEGRAL_MAX (7500)
 
@@ -99,7 +100,7 @@ void ShooterController_Init(ShooterController *controller)
     
     // Initialize gimbal pitch
 
-    Motor_Init(6, YAW_KP, YAW_KI, YAW_KD, -1.0f); // yaw
+    Motor_Init(6, YAW_KP, YAW_KI, YAW_KD, 6300.0f); // yaw
     Motor_Init(7, PITCH_KP, PITCH_KI, PITCH_KD, INTIAL_PITCH_ANGLE); // pitch
 }
 
