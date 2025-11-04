@@ -56,6 +56,22 @@ void WT61C_OnNewData(const WT61C_Data *d)
   }
   last_output_time = now;
 
+
+/// Calculate gimbal absolute angle in degrees
+void gimbal_absolute_angle(SensorData* sensor_data){
+    float ticks_integral;
+    float angle;
+    float time_accumulated 0.0f;
+    time_accumulated+=delta_t;
+    if (time_accumulated==10.0f){
+      ticks_integral=0.0f;
+      time_accumulated=0.0f;
+    }
+    ticks_integral=(sensor_data->g_gz*delta_t-Initial_Tick)% Max_Tick;
+    angle= ticks_integral / Max_Tick * 360.0f;
+    &sensor_data->absolute_angle=angle;
+    return;    
+}
   // Convert floats to integers for printf (workaround for missing float support)
   
   
