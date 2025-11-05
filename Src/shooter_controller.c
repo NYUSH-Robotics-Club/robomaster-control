@@ -18,7 +18,7 @@ extern CAN_HandleTypeDef hcan1;
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
 #define PITCH_KD (0.1f)
-#define INTIAL_PITCH_ANGLE (2500.0f)
+#define INTIAL_PITCH_ANGLE (-1.0f)
 #define INTIAL_YAW_ANGLE (0.0f)
 #define SPEED_PID_OUTPUT_MAX (15000)
 #define SPEED_PID_INTEGRAL_MAX (7500)
