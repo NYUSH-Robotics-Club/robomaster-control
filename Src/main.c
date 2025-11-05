@@ -88,10 +88,6 @@ static uint32_t last_frame_count = 0;
 // RC health tracking
 static uint32_t last_rc_tick = 0;
 static uint32_t last_rc_fc = 0;
-// RC baseline and sanitized view
-static int16_t rc_baseline[5] = {0};
-static uint8_t rc_baseline_set = 0;
-static RC_ctrl_t rc_sanitized;
 
 float gyro[3], accel[3], temp;
 
@@ -217,34 +213,18 @@ int main(void)
 	const RC_ctrl_t *raw_rc = get_remote_control_point();
 	// RC health gating based on frame count activity
 	uint32_t fc_now = RC_GetFrameCount();
-
-  
-  
-
 	if (fc_now != last_rc_fc)
 	{
 		last_rc_fc = fc_now;
 		last_rc_tick = current_tick;
 	}
+	// RC link health gate: if no new frames arrive within RC_LOSS_TIMEOUT_MS,
+	// treat RC as unavailable so downstream controllers fall back to safe zeros
 	bool rc_healthy = (current_tick - last_rc_tick) <= RC_LOSS_TIMEOUT_MS;
 	const RC_ctrl_t *rc_data = NULL;
 	if (rc_healthy && raw_rc)
 	{
-		if (!rc_baseline_set)
-		{
-			for (int i = 0; i < 5; ++i) rc_baseline[i] = raw_rc->rc.ch[i];
-			rc_baseline_set = 1;
-		}
-		// Build sanitized view by subtracting baseline
-		rc_sanitized = *raw_rc;
-		for (int i = 0; i < 5; ++i)
-		{
-			int32_t v = (int32_t)raw_rc->rc.ch[i] - (int32_t)rc_baseline[i];
-			// optional clamp to reasonable range
-			if (v > 660) v = 660; else if (v < -660) v = -660;
-			rc_sanitized.rc.ch[i] = (int16_t)v;
-		}
-		rc_data = &rc_sanitized;
+		rc_data = raw_rc;
 	}
 
   // Update sensor data
