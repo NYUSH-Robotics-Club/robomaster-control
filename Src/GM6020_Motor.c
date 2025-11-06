@@ -265,11 +265,11 @@ int16_t Yaw_Control_With_Compensation(int16_t joystick_yaw, SensorData *sensor_d
 
 
     // --- Debug Output ---
-    USB_CDC_Printf(
-        "Yaw | Tar=%.1f Cur=%.1f Err=%.1f Cmd=%.1f | Joy=%.3f gGz=%.3f cGz=%.3f Filt=%.3f\r\n",
-        yaw->angle_target, current, raw_err, cmd,
-        joy_smoothed, g_gz, c_gz, g_gz_filt
-    );
+    // USB_CDC_Printf(
+    //     "Yaw | Tar=%.1f Cur=%.1f Err=%.1f Cmd=%.1f | Joy=%.3f gGz=%.3f cGz=%.3f Filt=%.3f\r\n",
+    //     yaw->angle_target, current, raw_err, cmd,
+    //     joy_smoothed, g_gz, c_gz, g_gz_filt
+    // );
 
     return (int16_t)cmd;
 }

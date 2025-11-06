@@ -154,6 +154,8 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
             uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
             int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
             GM6020_Motor_Feedback(gid, angle_raw, speed_rpm);
+            // Optionally update gimbal yaw angle in chassis controller
+            manager->chassis_controller->gimbal_yaw_angle = (angle_raw - 6400.0f) * (360.0f / 8192.0f);
         }
     }
     // Motor feedback (both CAN1 and CAN2)

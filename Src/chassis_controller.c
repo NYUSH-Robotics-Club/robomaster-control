@@ -3,6 +3,7 @@
 #include "can_manager.h"
 #include <string.h>
 #include <math.h>
+#include "printing.h"
 
 extern CAN_HandleTypeDef hcan1;
 
@@ -26,12 +27,15 @@ typedef struct {
 
 Pair to_real_speed(Pair speed, float angle, float w) {
     const float k = 0.01;
-    angle += k * w;
-    angle = 0;
+    // angle += k * w;
+    USB_CDC_Printf("Angle: %.2f\r\n", angle);
+    angle = - angle * (M_PI / 180.0f); // to rad
 
     Pair result;
     result.x = speed.x * cos(angle) - speed.y * sin(angle);
     result.y = speed.x * sin(angle) + speed.y * cos(angle);
+    // USB_CDC_Printf("chassis angle: %.2f\r\n", angle * (180.0f / M_PI));
+    // USB_CDC_Printf("chassis speed x: %.2f, y: %.2f\r\n", result.x, result.y);
     return result;
 }
 
@@ -166,7 +170,7 @@ void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc
 
     Pair _speed = (Pair){-(float)vx_raw * scale / 3.0f,
         -(float)vy_raw * scale / 3.0f};
-    Pair speed = to_real_speed(_speed, sensor_data->c_yaw, omega);
+    Pair speed = to_real_speed(_speed, controller->gimbal_yaw_angle, omega);
     float vx = speed.x, vy = speed.y;
 
     // Mecanum kinematics with rotation
@@ -305,3 +309,4 @@ void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_
     controller->motor_feedbacks[motor_id].temp = temp;
     controller->motor_feedbacks[motor_id].last_update_time = current_tick;
 }
+
