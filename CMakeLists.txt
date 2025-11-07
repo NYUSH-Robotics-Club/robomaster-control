@@ -36,6 +36,7 @@ add_executable(${CMAKE_PROJECT_NAME})
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
     -Wl,-u,_printf_float
 )
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -mthumb)
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
@@ -47,30 +48,34 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    Src/bsp_rc.c
     Src/buzzer.c
-    Src/bmi088driver.c
-    Src/bmi088middleware.c
-    Src/can_manager.c
-    Src/chassis_controller.c
-    Src/pid.c
-    Src/gm6020_motor.c
-    Src/gyro_data.c
-    Src/remote_control.c
-    Src/shooter_controller.c
-    Src/printing.c
-    Src/wt61c.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    Inc
+    modules
+    modules/message_center
+    modules/can_comm
+    modules/debug_print
+    modules/algorithm
+    modules/motor
+    modules/remote
+    modules/imu
+    application
+    application/chassis
+    application/shoot
+    Drivers/CMSIS/Include
+    Drivers/CMSIS/Device/ST/STM32F4xx/Include
+    Drivers/STM32F4xx_HAL_Driver/Inc
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 )
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE -mthumb)
 
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
@@ -80,4 +85,69 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
 
     # Add user defined libraries
+    modules
+    application
+    m
 )
+
+# Create layered static libraries (placeholders for initial structure)
+add_library(modules STATIC
+    modules/message_center/message_center.c
+    modules/algorithm/pid.c
+    modules/motor/GM6020_Motor.c
+    modules/remote/bsp_rc.c
+    modules/remote/remote_control.c
+    modules/imu/bmi088driver.c
+    modules/imu/bmi088middleware.c
+    modules/imu/gyro_data.c
+    modules/imu/wt61c.c
+    modules/can_comm/can_manager.c
+    modules/debug_print/printing.c
+)
+
+target_include_directories(modules PUBLIC
+    modules
+    modules/message_center
+    modules/can_comm
+    modules/debug_print
+    modules/algorithm
+    modules/motor
+    modules/remote
+    modules/imu
+    Inc
+    Drivers/CMSIS/Include
+    Drivers/CMSIS/Device/ST/STM32F4xx/Include
+    Drivers/STM32F4xx_HAL_Driver/Inc
+)
+
+# Inherit STM32CubeMX interface includes and compile definitions (e.g., USE_HAL_DRIVER, STM32F407xx)
+target_link_libraries(modules PUBLIC stm32cubemx)
+target_compile_options(modules PUBLIC -mthumb)
+
+add_library(application STATIC
+    application/chassis/chassis_controller.c
+    application/shoot/shooter_controller.c
+    application/gimbal/gimbal_controller.c
+)
+
+target_include_directories(application PUBLIC
+    application
+    application/chassis
+    application/shoot
+    application/gimbal
+    modules
+    modules/message_center
+    modules/can_comm
+    modules/algorithm
+    modules/motor
+    modules/remote
+    modules/imu
+    Inc
+    Drivers/CMSIS/Include
+    Drivers/CMSIS/Device/ST/STM32F4xx/Include
+    Drivers/STM32F4xx_HAL_Driver/Inc
+)
+
+# Inherit STM32CubeMX interface includes and compile definitions (e.g., USE_HAL_DRIVER, STM32F407xx)
+target_link_libraries(application PUBLIC stm32cubemx modules)
+target_compile_options(application PUBLIC -mthumb)
