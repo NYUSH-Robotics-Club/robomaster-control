@@ -45,16 +45,6 @@ typedef struct {
     
     // Output currents
     int16_t output_currents[SHOOTER_MOTOR_COUNT];
-    
-    // GM6020 gimbal control
-    bool gimbal_enabled;
-    int16_t gimbal_current;
-    float target_rpm;
-    float current_rpm;
-    float target_angle_rad;
-
-    //GM6020 yaw control
-    int16_t gimbal_yaw_current;
 } ShooterController;
 
 /**

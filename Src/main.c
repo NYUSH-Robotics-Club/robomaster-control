@@ -38,6 +38,7 @@
 #include "remote_control.h"
 #include "chassis_controller.h"
 #include "shooter_controller.h"
+#include "gimbal_controller.h"
 #include "can_manager.h"
 #include <stdarg.h>
 #include "printing.h"
@@ -170,6 +171,7 @@ int main(void)
   // Initialize application controllers
   ChassisApp_Init();
   ShooterApp_Init();
+  GimbalApp_Init();
   
   // Initialize remote control
   remote_control_init();

@@ -17,6 +17,7 @@ typedef enum {
     TOPIC_GM6020_FEEDBACK,
     TOPIC_CHASSIS_CMD,
     TOPIC_SHOOT_CMD,
+    TOPIC_GIMBAL_CMD,
     TOPIC_NUM_TOPICS
 } MsgTopic;
 

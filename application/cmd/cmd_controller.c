@@ -12,6 +12,7 @@ static bool s_initialized = false;
 // Command messages to publish
 static ChassisCmd s_chassis_cmd;
 static ShootCmd s_shoot_cmd;
+static GimbalCmd s_gimbal_cmd;
 
 // Deadband for joystick input
 #define JOYSTICK_DEADBAND 10
@@ -72,9 +73,6 @@ static void process_shooter_command(const RC_ctrl_t *rc) {
         // RC disconnected, disable shooter
         s_shoot_cmd.friction_enabled = false;
         s_shoot_cmd.feed_enabled = false;
-        s_shoot_cmd.gimbal_enabled = false;
-        s_shoot_cmd.gimbal_pitch_input = 0;
-        s_shoot_cmd.gimbal_yaw_input = 0;
         return;
     }
 
@@ -87,14 +85,29 @@ static void process_shooter_command(const RC_ctrl_t *rc) {
     
     s_shoot_cmd.friction_enabled = (right_switch_up || right_switch_mid);
     s_shoot_cmd.feed_enabled = right_switch_up;
+}
+
+// Process gimbal control commands
+static void process_gimbal_command(const RC_ctrl_t *rc) {
+    if (rc == NULL) {
+        // RC disconnected, disable gimbal
+        s_gimbal_cmd.enabled = false;
+        s_gimbal_cmd.pitch_rate = 0.0f;
+        s_gimbal_cmd.yaw_rate = 0.0f;
+        return;
+    }
     
-    // Right switch controls gimbal mode
-    bool left_switch_up = switch_is_up(rc->rc.s[1]);
-    s_shoot_cmd.gimbal_enabled = true;
+    // Gimbal always enabled
+    s_gimbal_cmd.enabled = true;
     
-    // Gimbal joystick inputs (right stick controls gimbal)
-    s_shoot_cmd.gimbal_yaw_input = rc->rc.ch[0];
-    s_shoot_cmd.gimbal_pitch_input = rc->rc.ch[1];
+    // Right stick controls gimbal (ch0=yaw, ch1=pitch)
+    // Apply deadband and normalize to -1.0 to 1.0
+    int16_t yaw_raw = apply_deadband((int16_t)(rc->rc.ch[0]), JOYSTICK_DEADBAND);
+    int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
+    
+    const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
+    s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
+    s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
 }
 
 void CmdController_Init(void) {
@@ -106,6 +119,7 @@ void CmdController_Init(void) {
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
     memset(&s_chassis_cmd, 0, sizeof(s_chassis_cmd));
     memset(&s_shoot_cmd, 0, sizeof(s_shoot_cmd));
+    memset(&s_gimbal_cmd, 0, sizeof(s_gimbal_cmd));
 
     (void)MsgCenter_Subscribe(TOPIC_RC_UPDATE, on_rc_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
@@ -123,9 +137,11 @@ void CmdController_Task(uint32_t current_tick) {
     // Process control input
     process_chassis_command(&s_last_rc);
     process_shooter_command(&s_last_rc);
+    process_gimbal_command(&s_last_rc);
 
     // Publish commands to message center
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));
     (void)MsgCenter_Publish(TOPIC_SHOOT_CMD, &s_shoot_cmd, sizeof(s_shoot_cmd));
+    (void)MsgCenter_Publish(TOPIC_GIMBAL_CMD, &s_gimbal_cmd, sizeof(s_gimbal_cmd));
 }
 

@@ -5,9 +5,20 @@
 #include <stdbool.h>
 #include "gyro_data.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Gimbal motor IDs
 #define GIMBAL_PITCH_ID 7
 #define GIMBAL_YAW_ID   6
+
+// Gimbal command structure
+typedef struct {
+    bool enabled;              // Gimbal control enabled
+    float pitch_rate;          // Pitch angular rate command (-1.0 to 1.0, normalized)
+    float yaw_rate;            // Yaw angular rate command (-1.0 to 1.0, normalized)
+} GimbalCmd;
 
 /**
  * @brief Initialize gimbal controller
@@ -24,27 +35,36 @@ void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_i
                            float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle);
 
 /**
- * @brief Joystick control for gimbal motor
- * @param id Motor ID (6=Yaw, 7=Pitch)
- * @param joystick_ch1 Joystick channel 1 value
+ * @brief Pitch control with normalized rate command
+ * @param id Motor ID (7=Pitch)
+ * @param rate_normalized Normalized pitch rate (-1.0 to 1.0)
  * @param sensor_data Sensor data pointer
  * @return Motor current command
  */
-int16_t GimbalController_JoystickControl(uint8_t id, int16_t joystick_ch1, SensorData* sensor_data);
+int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data);
 
 /**
  * @brief Yaw control with compensation (chassis rotation + gyro feedback)
- * @param joystick_yaw Joystick yaw input
+ * @param rate_normalized Normalized yaw rate (-1.0 to 1.0)
  * @param sensor_data Sensor data pointer
  * @return Motor current command
  */
-int16_t GimbalController_YawControlWithCompensation(int16_t joystick_yaw, SensorData* sensor_data);
+int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data);
 
 /**
  * @brief Target angle correction for yaw (chassis compensation)
  * @param sensor_data Sensor data pointer
  */
 void GimbalController_TargetAngleCorrection(SensorData* sensor_data);
+
+/**
+ * @brief Initialize gimbal application (message subscriptions and control)
+ */
+void GimbalApp_Init(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // GIMBAL_CONTROLLER_H
 

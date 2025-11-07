@@ -6,28 +6,17 @@
 #include "remote_control.h"
 #include "gyro_data.h"
 #include "can_comm.h"
-#include "gimbal_controller.h"
 #include "cmd_controller.h"
 
 extern CAN_HandleTypeDef hcan2;
-extern CAN_HandleTypeDef hcan1;
 
 #define SPEED_PID_KP (5.0f)
 #define SPEED_PID_KI (0.5f)
 #define SPEED_PID_KD (0.1f)
-#define YAW_KP (10.0f)
-#define YAW_KI (0.05f)
-#define YAW_KD (0.1f)
-#define PITCH_KP (11.0f)
-#define PITCH_KI (0.0f)
-#define PITCH_KD (0.1f)
-#define INTIAL_PITCH_ANGLE (-1.0f)
-#define INTIAL_YAW_ANGLE (0.0f)
 #define SPEED_PID_OUTPUT_MAX (15000)
 #define SPEED_PID_INTEGRAL_MAX (7500)
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
 #define MOTOR_STDID_1_4 (0x1FFU)
-#define MOTOR_STDID_5_8 (0x2FFU)
 
 // Static variables for app wrapper
 static ShootCmd s_last_cmd;
@@ -55,13 +44,12 @@ void ShooterController_Init(ShooterController *controller)
     PID_Init(&controller->turntable_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     PID_Init(&controller->shooter1_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     PID_Init(&controller->shooter2_pid, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
-    GimbalController_Init(YAW_KP, YAW_KI, YAW_KD, 6300.0f,
-                          PITCH_KP, PITCH_KI, PITCH_KD, INTIAL_PITCH_ANGLE);
 }
 
 void ShooterController_Update(ShooterController *controller, SensorData* sensor_data)
 {
     if (controller == NULL) return;
+    (void)sensor_data;  // Not needed anymore
     
     // Use standardized command from cmd_controller
     controller->enabled = s_last_cmd.friction_enabled;
@@ -77,16 +65,6 @@ void ShooterController_Update(ShooterController *controller, SensorData* sensor_
     controller->ramped_turntable = RampTowards(controller->ramped_turntable, turntable_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
-    
-    // Gimbal control
-    controller->gimbal_enabled = s_last_cmd.gimbal_enabled;
-    if (controller->gimbal_enabled) {
-        controller->gimbal_current = GimbalController_JoystickControl(7, s_last_cmd.gimbal_pitch_input, sensor_data);
-        controller->gimbal_yaw_current = GimbalController_YawControlWithCompensation(s_last_cmd.gimbal_yaw_input, sensor_data);
-    } else {
-        controller->gimbal_current = 0;
-        controller->gimbal_yaw_current = 0;
-    }
 }
 
 void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t current_tick)
@@ -94,12 +72,12 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
     if (controller == NULL) return;
     controller->output_currents[0] = ComputeSingleMotorCurrent(&controller->turntable_pid, controller->ramped_turntable, &controller->turntable_feedback, current_tick);
     controller->output_currents[1] = ComputeSingleMotorCurrent(&controller->shooter1_pid, controller->ramped_shooter1, &controller->shooter1_feedback, current_tick);
-    controller->output_currents[2] = controller->gimbal_current;
+    controller->output_currents[2] = 0;  // Not used
     controller->output_currents[3] = ComputeSingleMotorCurrent(&controller->shooter2_pid, controller->ramped_shooter2, &controller->shooter2_feedback, current_tick);
+    
+    // Send CAN commands for shooter motors only
     CAN_Manager_SendMotorCurrents4(&hcan2, MOTOR_STDID_1_4,
         controller->output_currents[0], controller->output_currents[1], 0, controller->output_currents[3]);
-    CAN_Manager_SendGM6020Current(&hcan2, 7, controller->gimbal_current);
-    CAN_Manager_SendGM6020Current(&hcan1, 6, controller->gimbal_yaw_current);
 }
 
 void ShooterController_SetTurntableSpeed(ShooterController *controller, float speed)
@@ -115,8 +93,6 @@ void ShooterController_Stop(ShooterController *controller)
     controller->turntable_target = 0.0f;
     controller->shooter1_target = 0.0f;
     controller->shooter2_target = 0.0f;
-    controller->gimbal_current = 0;
-    controller->gimbal_yaw_current = 0;
     controller->turntable_pid.integral = 0.0f;
     controller->shooter1_pid.integral = 0.0f;
     controller->shooter2_pid.integral = 0.0f;
@@ -131,9 +107,7 @@ bool ShooterController_IsRunning(const ShooterController *controller)
     return controller->enabled || 
            controller->ramped_turntable != 0 || 
            controller->ramped_shooter1 != 0 || 
-           controller->ramped_shooter2 != 0 ||
-           controller->gimbal_current != 0 ||
-           controller->gimbal_yaw_current != 0;
+           controller->ramped_shooter2 != 0;
 }
 
 void ShooterController_UpdateMotorFeedback(ShooterController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick)

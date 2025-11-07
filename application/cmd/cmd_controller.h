@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "gimbal_controller.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,9 +21,6 @@ typedef struct {
 typedef struct {
     bool friction_enabled;      // Friction wheel enabled
     bool feed_enabled;          // Feed mechanism enabled
-    bool gimbal_enabled;        // Gimbal control enabled
-    int16_t gimbal_pitch_input; // Gimbal pitch joystick input
-    int16_t gimbal_yaw_input;   // Gimbal yaw joystick input
 } ShootCmd;
 
 /**
