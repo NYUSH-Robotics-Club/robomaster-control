@@ -161,6 +161,9 @@ static void on_shoot_cmd(const MsgEvent *ev, void *user) {
     (void)user;
     if (ev->size == sizeof(ShootCmd)) {
         memcpy(&s_last_cmd, ev->data, sizeof(ShootCmd));
+        // Update controller and compute currents when command arrives
+        ShooterController_Update(&s_ctrl, &s_last_sensor);
+        ShooterController_ComputeCurrents(&s_ctrl, HAL_GetTick());
     }
 }
 
@@ -188,11 +191,6 @@ void ShooterApp_Init(void) {
     (void)MsgCenter_Subscribe(TOPIC_SHOOT_CMD, on_shoot_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_MOTOR_FEEDBACK, on_motor_feedback, NULL);
-}
-
-void ShooterApp_Tick(uint32_t tick_ms) {
-    ShooterController_Update(&s_ctrl, &s_last_sensor);
-    ShooterController_ComputeCurrents(&s_ctrl, tick_ms);
 }
 
 ShooterController* ShooterApp_GetController(void) {

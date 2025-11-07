@@ -206,13 +206,8 @@ int main(void)
     // Process command controller
     CmdController_Task(current_tick);
     
-    // Dispatch message center events and run app ticks
+    // Dispatch message center events
     MsgCenter_Dispatch();
-    
-    // Re-fetch tick after dispatch to ensure monotonic timestamps
-    current_tick = HAL_GetTick();
-    ChassisApp_Tick(current_tick);
-    ShooterApp_Tick(current_tick);
 
     // Update buzzer music playback (feature for fun :D)
     Buzzer_Update();

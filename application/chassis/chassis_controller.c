@@ -156,6 +156,9 @@ static void on_chassis_cmd(const MsgEvent *ev, void *user) {
     (void)user;
     if (ev->size == sizeof(ChassisCmd)) {
         memcpy(&s_last_cmd, ev->data, sizeof(ChassisCmd));
+        // Update controller and compute currents when command arrives
+        ChassisController_Update(&s_ctrl, &s_last_sensor);
+        ChassisController_ComputeCurrents(&s_ctrl, HAL_GetTick());
     }
 }
 
@@ -184,11 +187,6 @@ void ChassisApp_Init(void) {
     (void)MsgCenter_Subscribe(TOPIC_CHASSIS_CMD, on_chassis_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_MOTOR_FEEDBACK, on_motor_feedback, NULL);
-}
-
-void ChassisApp_Tick(uint32_t tick_ms) {
-    ChassisController_Update(&s_ctrl, &s_last_sensor);
-    ChassisController_ComputeCurrents(&s_ctrl, tick_ms);
 }
 
 ChassisController* ChassisApp_GetController(void) {
