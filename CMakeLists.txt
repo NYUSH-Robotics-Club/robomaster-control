@@ -125,6 +125,7 @@ target_link_libraries(modules PUBLIC stm32cubemx)
 target_compile_options(modules PUBLIC -mthumb)
 
 add_library(application STATIC
+    application/cmd/cmd_controller.c
     application/chassis/chassis_controller.c
     application/shoot/shooter_controller.c
     application/gimbal/gimbal_controller.c
@@ -132,6 +133,7 @@ add_library(application STATIC
 
 target_include_directories(application PUBLIC
     application
+    application/cmd
     application/chassis
     application/shoot
     application/gimbal

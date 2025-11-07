@@ -45,6 +45,7 @@
 #include "gyro_data.h"
 #include "message_center.h"
 #include "app_subscriptions.h"
+#include "cmd_controller.h"
 
 /* USER CODE END Includes */
 
@@ -162,8 +163,15 @@ int main(void)
   /* USER CODE BEGIN 2 */
   BMI088_init();
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
+  
+  // Initialize command controller first (central control)
+  CmdController_Init();
+  
+  // Initialize application controllers
   ChassisApp_Init();
   ShooterApp_Init();
+  
+  // Initialize remote control
   remote_control_init();
 
   // Initialize CAN managers (they will publish TOPIC_CAN_RX and TOPIC_MOTOR_FEEDBACK)
@@ -195,6 +203,9 @@ int main(void)
     // Update sensor data and publishes IMU topic
     gyro_data_update(&sensor_data);
 
+    // Process command controller
+    CmdController_Task(current_tick);
+    
     // Dispatch message center events and run app ticks
     MsgCenter_Dispatch();
     

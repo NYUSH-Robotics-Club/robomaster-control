@@ -8,6 +8,7 @@
 #include "gyro_data.h"
 #include "can_comm.h"
 #include "printing.h"
+#include "cmd_controller.h"
 
 extern CAN_HandleTypeDef hcan1;
 
@@ -20,6 +21,11 @@ extern CAN_HandleTypeDef hcan1;
 #define MOTOR_STDID_1_4 (0x200U)
 
 typedef struct { float x; float y; } Pair;
+
+// Static variables for app wrapper
+static ChassisCmd s_last_cmd;
+static SensorData s_last_sensor;
+static ChassisController s_ctrl;
 
 static Pair to_real_speed(Pair speed, float angle, float w) {
     const float k = 0.01f;
@@ -66,30 +72,27 @@ void ChassisController_Init(ChassisController *controller)
     }
 }
 
-void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData* sensor_data)
+void ChassisController_Update(ChassisController *controller, SensorData* sensor_data)
 {
     if (controller == NULL) return;
-    int16_t vx_raw = 0, vy_raw = 0, wz_raw = 0;
-    if (rc_data != NULL) {
-        vx_raw = (int16_t)(rc_data->rc.ch[3]);
-        vy_raw = (int16_t)(rc_data->rc.ch[2]);
-        wz_raw = (int16_t)(-rc_data->rc.ch[4]);
-        
-        const int16_t deadband = 10;
-        if (vx_raw > -deadband && vx_raw < deadband) vx_raw = 0;
-        if (vy_raw > -deadband && vy_raw < deadband) vy_raw = 0;
-        if (wz_raw > -deadband && wz_raw < deadband) wz_raw = 0;
-    }
-    const float scale = (float)CHASSIS_DEMO_TARGET_SPEED / (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
-    float omega = (-(float)wz_raw * scale) / 3.0f;
-    Pair _speed = (Pair){-(float)vx_raw * scale / 3.0f, -(float)vy_raw * scale / 3.0f};
+    
+    float vx_norm = s_last_cmd.vx;
+    float vy_norm = s_last_cmd.vy;
+    float wz_norm = s_last_cmd.wz;
+    
+    float scale = (float)CHASSIS_DEMO_TARGET_SPEED / 2.0f;
+    float omega = wz_norm * scale;
+    Pair _speed = (Pair){vx_norm * scale, vy_norm * scale};
     Pair speed = to_real_speed(_speed, sensor_data->c_yaw, omega);
     float vx = speed.x, vy = speed.y;
+
     controller->target_speeds[0] = MOTOR_DIR[0] * (vx - vy + omega);
     controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy - omega);
     controller->target_speeds[2] = MOTOR_DIR[2] * (vx - vy - omega);
     controller->target_speeds[3] = MOTOR_DIR[3] * (vx + vy + omega);
-    controller->running = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
+    
+    controller->running = s_last_cmd.enabled;
+    
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
         controller->ramped_targets[i] = RampTowards(controller->ramped_targets[i], controller->target_speeds[i], CHASSIS_RAMP_STEP);
     }
@@ -148,14 +151,11 @@ void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_
     controller->motor_feedbacks[motor_id].last_update_time = current_tick;
 }
 
-static RC_ctrl_t s_last_rc;
-static SensorData s_last_sensor;
-static ChassisController s_ctrl;
-
-static void on_rc_update(const MsgEvent *ev, void *user) {
+// Subscription callbacks
+static void on_chassis_cmd(const MsgEvent *ev, void *user) {
     (void)user;
-    if (ev->size == sizeof(RC_ctrl_t)) {
-        memcpy(&s_last_rc, ev->data, sizeof(RC_ctrl_t));
+    if (ev->size == sizeof(ChassisCmd)) {
+        memcpy(&s_last_cmd, ev->data, sizeof(ChassisCmd));
     }
 }
 
@@ -178,16 +178,16 @@ static void on_motor_feedback(const MsgEvent *ev, void *user) {
 }
 
 void ChassisApp_Init(void) {
-    memset(&s_last_rc, 0, sizeof(s_last_rc));
+    memset(&s_last_cmd, 0, sizeof(s_last_cmd));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
     ChassisController_Init(&s_ctrl);
-    (void)MsgCenter_Subscribe(TOPIC_RC_UPDATE, on_rc_update, NULL);
+    (void)MsgCenter_Subscribe(TOPIC_CHASSIS_CMD, on_chassis_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_MOTOR_FEEDBACK, on_motor_feedback, NULL);
 }
 
 void ChassisApp_Tick(uint32_t tick_ms) {
-    ChassisController_Update(&s_ctrl, &s_last_rc, tick_ms, &s_last_sensor);
+    ChassisController_Update(&s_ctrl, &s_last_sensor);
     ChassisController_ComputeCurrents(&s_ctrl, tick_ms);
 }
 

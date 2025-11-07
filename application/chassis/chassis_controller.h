@@ -44,10 +44,9 @@ void ChassisController_Init(ChassisController *controller);
 /**
  * @brief Update chassis control logic
  * @param controller Chassis controller pointer
- * @param rc_data Remote control data pointer
- * @param current_tick Current timestamp
+ * @param sensor_data Sensor data pointer
  */
-void ChassisController_Update(ChassisController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData* sensor_data);
+void ChassisController_Update(ChassisController *controller, SensorData* sensor_data);
 
 /**
  * @brief Compute chassis motor currents

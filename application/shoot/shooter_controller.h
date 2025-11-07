@@ -66,10 +66,9 @@ void ShooterController_Init(ShooterController *controller);
 /**
  * @brief Update shooter control logic
  * @param controller Shooter controller pointer
- * @param rc_data Remote control data pointer
- * @param current_tick Current timestamp
+ * @param sensor_data Sensor data pointer
  */
-void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData *sensor_data);
+void ShooterController_Update(ShooterController *controller, SensorData *sensor_data);
 
 /**
  * @brief Compute shooter system motor currents

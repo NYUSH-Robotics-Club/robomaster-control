@@ -7,6 +7,7 @@
 #include "gyro_data.h"
 #include "can_comm.h"
 #include "gimbal_controller.h"
+#include "cmd_controller.h"
 
 extern CAN_HandleTypeDef hcan2;
 extern CAN_HandleTypeDef hcan1;
@@ -27,6 +28,11 @@ extern CAN_HandleTypeDef hcan1;
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
 #define MOTOR_STDID_1_4 (0x1FFU)
 #define MOTOR_STDID_5_8 (0x2FFU)
+
+// Static variables for app wrapper
+static ShootCmd s_last_cmd;
+static SensorData s_last_sensor;
+static ShooterController s_ctrl;
 
 static float RampTowards(float current, float target, float step)
 {
@@ -53,36 +59,30 @@ void ShooterController_Init(ShooterController *controller)
                           PITCH_KP, PITCH_KI, PITCH_KD, INTIAL_PITCH_ANGLE);
 }
 
-void ShooterController_Update(ShooterController *controller, const RC_ctrl_t *rc_data, uint32_t current_tick, SensorData* sensor_data)
+void ShooterController_Update(ShooterController *controller, SensorData* sensor_data)
 {
     if (controller == NULL) return;
-    bool right_switch_up = false;
-    bool right_switch_mid = false;
-    bool right_switch_down = false;
-    bool left_switch_up = false;
-    int16_t yaw = 0; (void)yaw;
-    if (rc_data != NULL)
-    {
-        right_switch_up = switch_is_up(rc_data->rc.s[0]);
-        right_switch_mid = switch_is_mid(rc_data->rc.s[0]);
-        right_switch_down = switch_is_down(rc_data->rc.s[0]);
-    }
-    left_switch_up = switch_is_up(rc_data->rc.s[1]);
-    if (left_switch_up) {
-        controller->gimbal_yaw_current = GimbalController_JoystickControl(6, 660, sensor_data);
-    }
-    controller->enabled = (right_switch_up || right_switch_mid);
-    float turntable_target = right_switch_up ? MOTOR5_CONST_SPEED : 0.0f;
-    float shooter1_target = (right_switch_up || right_switch_mid) ? -SHOOTER_CONST_SPEED : 0.0f;
-    float shooter2_target = (right_switch_up || right_switch_mid) ?  SHOOTER_CONST_SPEED : 0.0f;
+    
+    // Use standardized command from cmd_controller
+    controller->enabled = s_last_cmd.friction_enabled;
+    
+    // Set turntable target (only feed when feed_enabled)
+    float turntable_target = s_last_cmd.feed_enabled ? MOTOR5_CONST_SPEED : 0.0f;
+    
+    // Set shooter wheel targets
+    float shooter1_target = s_last_cmd.friction_enabled ? -SHOOTER_CONST_SPEED : 0.0f;
+    float shooter2_target = s_last_cmd.friction_enabled ?  SHOOTER_CONST_SPEED : 0.0f;
+    
+    // Apply ramping
     controller->ramped_turntable = RampTowards(controller->ramped_turntable, turntable_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter1 = RampTowards(controller->ramped_shooter1, shooter1_target, SHOOTER_RAMP_STEP);
     controller->ramped_shooter2 = RampTowards(controller->ramped_shooter2, shooter2_target, SHOOTER_RAMP_STEP);
-    controller->gimbal_enabled = (rc_data != NULL);
+    
+    // Gimbal control
+    controller->gimbal_enabled = s_last_cmd.gimbal_enabled;
     if (controller->gimbal_enabled) {
-        // TODO trash
-        controller->gimbal_current = GimbalController_JoystickControl(7, rc_data->rc.ch[1], sensor_data);
-        controller->gimbal_yaw_current = GimbalController_YawControlWithCompensation(rc_data->rc.ch[0], sensor_data);
+        controller->gimbal_current = GimbalController_JoystickControl(7, s_last_cmd.gimbal_pitch_input, sensor_data);
+        controller->gimbal_yaw_current = GimbalController_YawControlWithCompensation(s_last_cmd.gimbal_yaw_input, sensor_data);
     } else {
         controller->gimbal_current = 0;
         controller->gimbal_yaw_current = 0;
@@ -156,15 +156,11 @@ void ShooterController_UpdateMotorFeedback(ShooterController *controller, uint8_
     }
 }
 
-// Subscription-driven wrapper
-static RC_ctrl_t s_last_rc;
-static SensorData s_last_sensor;
-static ShooterController s_ctrl;
-
-static void on_rc_update(const MsgEvent *ev, void *user) {
+// Subscription callbacks
+static void on_shoot_cmd(const MsgEvent *ev, void *user) {
     (void)user;
-    if (ev->size == sizeof(RC_ctrl_t)) {
-        memcpy(&s_last_rc, ev->data, sizeof(RC_ctrl_t));
+    if (ev->size == sizeof(ShootCmd)) {
+        memcpy(&s_last_cmd, ev->data, sizeof(ShootCmd));
     }
 }
 
@@ -186,16 +182,16 @@ static void on_motor_feedback(const MsgEvent *ev, void *user) {
 }
 
 void ShooterApp_Init(void) {
-    memset(&s_last_rc, 0, sizeof(s_last_rc));
+    memset(&s_last_cmd, 0, sizeof(s_last_cmd));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
     ShooterController_Init(&s_ctrl);
-    (void)MsgCenter_Subscribe(TOPIC_RC_UPDATE, on_rc_update, NULL);
+    (void)MsgCenter_Subscribe(TOPIC_SHOOT_CMD, on_shoot_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_MOTOR_FEEDBACK, on_motor_feedback, NULL);
 }
 
 void ShooterApp_Tick(uint32_t tick_ms) {
-    ShooterController_Update(&s_ctrl, &s_last_rc, tick_ms, &s_last_sensor);
+    ShooterController_Update(&s_ctrl, &s_last_sensor);
     ShooterController_ComputeCurrents(&s_ctrl, tick_ms);
 }
 
