@@ -67,7 +67,7 @@ static void process_chassis_command(const RC_ctrl_t *rc) {
     // Extract joystick values with deadband
     int16_t vx_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
     int16_t vy_raw = apply_deadband((int16_t)(rc->rc.ch[2]), JOYSTICK_DEADBAND);
-    int16_t wz_raw = apply_deadband((int16_t)(-rc->rc.ch[4]), JOYSTICK_DEADBAND);
+    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[4]), JOYSTICK_DEADBAND);
 
     // Convert to normalized values (-1.0 to 1.0)
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
@@ -114,7 +114,7 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     
     // Right stick controls gimbal (ch0=yaw, ch1=pitch)
     // Apply deadband and normalize to -1.0 to 1.0
-    int16_t yaw_raw = apply_deadband((int16_t)(rc->rc.ch[0]), JOYSTICK_DEADBAND);
+    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
     
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
