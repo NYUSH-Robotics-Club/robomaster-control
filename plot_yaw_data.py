@@ -8,15 +8,13 @@ Example: python plot_yaw_data.py COM3 115200
 """
 
 import serial
-import re
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from collections import deque
 import sys
-import time
 
 # Default serial port settings
-DEFAULT_PORT = 'COM3'
+DEFAULT_PORT = 'COM10'
 DEFAULT_BAUD = 115200
 
 # Data buffer size (number of points to keep)
