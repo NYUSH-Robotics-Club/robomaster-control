@@ -41,3 +41,5 @@ Release/
 Thumbs.db
 
 .claude/
+
+.venv

@@ -96,7 +96,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 add_library(modules STATIC
     modules/message_center/message_center.c
     modules/algorithm/pid.c
-    modules/motor/GM6020_Motor.c
+    modules/motor/gm6020_motor.c
     modules/remote/bsp_rc.c
     modules/remote/remote_control.c
     modules/imu/bmi088driver.c

@@ -177,10 +177,10 @@ int main(void)
   remote_control_init();
 
   // Initialize CAN managers (they will publish TOPIC_CAN_RX and TOPIC_MOTOR_FEEDBACK)
-  HAL_StatusTypeDef can1_init = CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
-  HAL_StatusTypeDef can2_init = CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
-  HAL_StatusTypeDef can1_start = CAN_Manager_Start(&can1_manager);
-  HAL_StatusTypeDef can2_start = CAN_Manager_Start(&can2_manager);
+  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
+  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
+  CAN_Manager_Start(&can1_manager);
+  CAN_Manager_Start(&can2_manager);
   
   HAL_Delay(WAIT_ESC_BOOT_MS);
 

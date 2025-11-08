@@ -7,6 +7,7 @@
 #include <math.h>
 #include <string.h>
 #include "printing.h"
+#include "stm32f4xx_hal.h"
 
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
@@ -93,10 +94,6 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
     float max_abs = 25000.0f;
     if (cmd >  max_abs) cmd =  max_abs;
     if (cmd < -max_abs) cmd = -max_abs;
-    if(id == YAW_ID){
-        USB_CDC_Printf("GM6020 ID=%d | Target=%d | Current=%d | Cmd=%d\r\n",
-         c->id, (int)c->angle_target, (int)current_angle, (int)cmd);
-    }
     return (int16_t)cmd;
 }
 
@@ -136,6 +133,20 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     if (cmd >  25000.0f) cmd =  25000.0f;
     if (cmd < -25000.0f) cmd = -25000.0f;
+
+    // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
+    uint32_t timestamp = HAL_GetTick();
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+                   timestamp,
+                   yaw->angle_target,
+                   current,
+                   yaw->speed_rpm,
+                   cmd,
+                   rate_normalized,
+                   joy_smoothed,
+                   raw_err,
+                   g_gz,
+                   c_gz);
 
     return (int16_t)cmd;
 }
