@@ -80,10 +80,6 @@
 CAN_Manager_t can1_manager;
 CAN_Manager_t can2_manager;
 
-// USB CDC variables
-static uint32_t last_debug_time = 0;
-static uint32_t last_frame_count = 0;
-
 float gyro[3], accel[3], temp;
 
 // WT61C-TTL IMU sensor on USART1
