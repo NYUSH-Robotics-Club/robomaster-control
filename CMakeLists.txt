@@ -105,6 +105,10 @@ add_library(modules STATIC
     modules/imu/wt61c.c
     modules/can_comm/can_manager.c
     modules/debug_print/printing.c
+    modules/vision_comm/crc8.c
+    modules/vision_comm/crc16.c
+    modules/vision_comm/seasky_protocol.c
+    modules/vision_comm/vision_comm.c
 )
 
 target_include_directories(modules PUBLIC
@@ -116,6 +120,7 @@ target_include_directories(modules PUBLIC
     modules/motor
     modules/remote
     modules/imu
+    modules/vision_comm
     Inc
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F4xx/Include
@@ -146,6 +151,7 @@ target_include_directories(application PUBLIC
     modules/motor
     modules/remote
     modules/imu
+    modules/vision_comm
     Inc
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F4xx/Include
