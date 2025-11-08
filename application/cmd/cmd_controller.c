@@ -2,11 +2,15 @@
 #include "message_center.h"
 #include "remote_control.h"
 #include "gyro_data.h"
+#include "vision_comm.h"
+#include "printing.h"
+#include "stm32f4xx_hal.h"
 #include <string.h>
 
 // Local state storage
 static RC_ctrl_t s_last_rc;
 static SensorData s_last_sensor;
+static Vision_Recv_s s_last_vision;
 static bool s_initialized = false;
 
 // Command messages to publish
@@ -33,6 +37,14 @@ static void on_imu_update(const MsgEvent *ev, void *user_data) {
     }
 }
 
+// Callback for vision data update
+static void on_vision_update(const MsgEvent *ev, void *user_data) {
+    (void)user_data;
+    if (ev->size == sizeof(Vision_Recv_s)) {
+        memcpy(&s_last_vision, ev->data, sizeof(Vision_Recv_s));
+    }
+}
+
 // Apply deadband to joystick input
 static int16_t apply_deadband(int16_t value, int16_t deadband) {
     if (value > -deadband && value < deadband) {
@@ -55,7 +67,7 @@ static void process_chassis_command(const RC_ctrl_t *rc) {
     // Extract joystick values with deadband
     int16_t vx_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
     int16_t vy_raw = apply_deadband((int16_t)(rc->rc.ch[2]), JOYSTICK_DEADBAND);
-    int16_t wz_raw = apply_deadband((int16_t)(-rc->rc.ch[4]), JOYSTICK_DEADBAND);
+    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[4]), JOYSTICK_DEADBAND);
 
     // Convert to normalized values (-1.0 to 1.0)
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
@@ -102,12 +114,27 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     
     // Right stick controls gimbal (ch0=yaw, ch1=pitch)
     // Apply deadband and normalize to -1.0 to 1.0
-    int16_t yaw_raw = apply_deadband((int16_t)(rc->rc.ch[0]), JOYSTICK_DEADBAND);
+    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
     
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
     s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
+    
+    if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
+        const float vision_gain = 5.0f;
+        
+        float yaw_addition = s_last_vision.yaw * vision_gain;
+        float pitch_addition = s_last_vision.pitch * vision_gain;
+        
+        s_gimbal_cmd.yaw_rate += yaw_addition;
+        s_gimbal_cmd.pitch_rate += pitch_addition;
+        
+        if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
+        if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
+        if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
+        if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
+    }
 }
 
 void CmdController_Init(void) {
@@ -117,12 +144,14 @@ void CmdController_Init(void) {
 
     memset(&s_last_rc, 0, sizeof(s_last_rc));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
+    memset(&s_last_vision, 0, sizeof(s_last_vision));
     memset(&s_chassis_cmd, 0, sizeof(s_chassis_cmd));
     memset(&s_shoot_cmd, 0, sizeof(s_shoot_cmd));
     memset(&s_gimbal_cmd, 0, sizeof(s_gimbal_cmd));
 
     (void)MsgCenter_Subscribe(TOPIC_RC_UPDATE, on_rc_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
+    (void)MsgCenter_Subscribe(TOPIC_VISION_DATA, on_vision_update, NULL);
 
     s_initialized = true;
 }

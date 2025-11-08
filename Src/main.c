@@ -47,6 +47,7 @@
 #include "message_center.h"
 #include "app_subscriptions.h"
 #include "cmd_controller.h"
+#include "vision_comm.h"
 
 /* USER CODE END Includes */
 
@@ -177,6 +178,9 @@ int main(void)
   CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
   CAN_Manager_Start(&can1_manager);
   CAN_Manager_Start(&can2_manager);
+  
+  // Initialize Vision Communication
+  VisionComm_Init();
   
   HAL_Delay(WAIT_ESC_BOOT_MS);
 

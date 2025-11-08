@@ -18,6 +18,7 @@ typedef enum {
     TOPIC_CHASSIS_CMD,
     TOPIC_SHOOT_CMD,
     TOPIC_GIMBAL_CMD,
+    TOPIC_VISION_DATA,     // Vision data from upper computer
     TOPIC_NUM_TOPICS
 } MsgTopic;
 
