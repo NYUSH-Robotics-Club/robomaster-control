@@ -38,11 +38,15 @@
 #include "remote_control.h"
 #include "chassis_controller.h"
 #include "shooter_controller.h"
+#include "gimbal_controller.h"
 #include "can_manager.h"
 #include <stdarg.h>
 #include "printing.h"
 #include "wt61c.h"
 #include "gyro_data.h"
+#include "message_center.h"
+#include "app_subscriptions.h"
+#include "cmd_controller.h"
 
 /* USER CODE END Includes */
 
@@ -58,8 +62,6 @@
 #define WAIT_ESC_BOOT_MS                (500U)
 // Main loop refresh interval
 #define CMD_REFRESH_INTERVAL_MS         (5U)
-// Debug info interval
-#define USB_DEBUG_INTERVAL_MS           (1000U)
 // RC loss timeout for health gating
 #define RC_LOSS_TIMEOUT_MS              (200U)
 
@@ -74,10 +76,6 @@
 
 /* USER CODE BEGIN PV */
 
-// Controller instances
-ChassisController chassis_controller;
-ShooterController shooter_controller;
-
 // CAN managers
 CAN_Manager_t can1_manager;
 CAN_Manager_t can2_manager;
@@ -85,9 +83,6 @@ CAN_Manager_t can2_manager;
 // USB CDC variables
 static uint32_t last_debug_time = 0;
 static uint32_t last_frame_count = 0;
-// RC health tracking
-static uint32_t last_rc_tick = 0;
-static uint32_t last_rc_fc = 0;
 
 float gyro[3], accel[3], temp;
 
@@ -95,6 +90,10 @@ float gyro[3], accel[3], temp;
 #define WT61C_UART_HANDLE  huart1
 #define RX_DMA_BUF_SZ 256
 static uint8_t wt61c_rxbuf[RX_DMA_BUF_SZ];
+
+// Message center buffer
+#define MSG_CENTER_QUEUE_LEN 128
+static MsgEvent g_msg_queue[MSG_CENTER_QUEUE_LEN];
 
 /* USER CODE END PV */
 
@@ -161,31 +160,32 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
   MX_TIM4_Init();
+
   /* USER CODE BEGIN 2 */
   BMI088_init();
-  // Initialize DT7/DBUS receiver on USART3 + DMA double buffer
-  // Used for remote control
+  MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
+  
+  // Initialize command controller first (central control)
+  CmdController_Init();
+  
+  // Initialize application controllers
+  ChassisApp_Init();
+  ShooterApp_Init();
+  GimbalApp_Init();
+  
+  // Initialize remote control
   remote_control_init();
 
-  // Initialize CAN
-  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1, &chassis_controller, &shooter_controller);
-  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2, &chassis_controller, &shooter_controller);
-
-  // Start CAN communication
+  // Initialize CAN managers (they will publish TOPIC_CAN_RX and TOPIC_MOTOR_FEEDBACK)
+  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
+  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
   CAN_Manager_Start(&can1_manager);
   CAN_Manager_Start(&can2_manager);
-
+  
   HAL_Delay(WAIT_ESC_BOOT_MS);
-
-  // Initialize motor controllers
-  ChassisController_Init(&chassis_controller);
-  ShooterController_Init(&shooter_controller);
 
   // Play boot beep sound
   Buzzer_PlayBeep();
-
-  // Ensure system is ready after boot song
-  HAL_Delay(100);
 
   // Initialize WT61C-TTL IMU sensor on USART1
   WT61C_Init(&WT61C_UART_HANDLE);
@@ -194,149 +194,33 @@ int main(void)
   // Disable half-transfer interrupt to reduce callback overhead
   __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
 
-  // Optional: Configure WT61C for 100Hz output rate
-  // HAL_Delay(50);
-  // WT61C_Unlock(&WT61C_UART_HANDLE);
-  // HAL_Delay(10);
-  // WT61C_SetReturnRate(&WT61C_UART_HANDLE, 0x09); // 100Hz
-  // HAL_Delay(10);
-  // WT61C_Save(&WT61C_UART_HANDLE);
-  // HAL_Delay(10);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	uint32_t current_tick = HAL_GetTick();
-	const RC_ctrl_t *raw_rc = get_remote_control_point();
-	// RC health gating based on frame count activity
-	uint32_t fc_now = RC_GetFrameCount();
-	if (fc_now != last_rc_fc)
-	{
-		last_rc_fc = fc_now;
-		last_rc_tick = current_tick;
-	}
-	// RC link health gate: if no new frames arrive within RC_LOSS_TIMEOUT_MS,
-	// treat RC as unavailable so downstream controllers fall back to safe zeros
-	bool rc_healthy = (current_tick - last_rc_tick) <= RC_LOSS_TIMEOUT_MS;
-	const RC_ctrl_t *rc_data = NULL;
-	if (rc_healthy && raw_rc)
-	{
-		rc_data = raw_rc;
-	}
+    uint32_t current_tick = HAL_GetTick();
 
-  // Update sensor data
-  gyro_data_update(&sensor_data);
+    // Update sensor data and publishes IMU topic
+    gyro_data_update(&sensor_data);
 
-	// Update controllers
-	ChassisController_Update(&chassis_controller, rc_data, current_tick, &sensor_data);
-	ShooterController_Update(&shooter_controller, rc_data, current_tick, &sensor_data);
-	
-	// Update buzzer music playback
-	Buzzer_Update();
+    // Process command controller
+    CmdController_Task(current_tick);
+    
+    // Dispatch message center events
+    MsgCenter_Dispatch();
 
-	// Compute and send motor currents
-	ChassisController_ComputeCurrents(&chassis_controller, current_tick);
-	ShooterController_ComputeCurrents(&shooter_controller, current_tick);
+    // Update buzzer music playback (feature for fun :D)
+    Buzzer_Update();
 
-	// LED status indication
-	bool chassis_running = ChassisController_IsRunning(&chassis_controller);
-	bool shooter_running = ShooterController_IsRunning(&shooter_controller);
-	if (chassis_running || shooter_running)
-	{
-		LED_SetRGB(0, 1, 0); // Green when running
-	}
-	else
-	{
-		LED_SetRGB(1, 0, 1); // Red when stopped
-	}
+    LED_SetRGB(0, 1, 0);
 
-  // Periodic debug output
-  if (current_tick - last_debug_time >= USB_DEBUG_INTERVAL_MS)
-  {
-    last_debug_time = current_tick;
-  uint32_t fc = RC_GetFrameCount();
-  (void)last_frame_count; // suppress unused if RC debug disabled
-
-    // Debug_PrintCANStatus(current_tick);  // disabled while focusing on RC
-    // Debug_PrintCANDiag();                // disabled while focusing on RC
-
-    // RC and control path quick diagnostics
-    {
-      // Print sanitized channels (after baseline removal)
-      // int16_t ch0 = 0, ch2 = 0, ch3 = 0, ch4 = 0; uint8_t swl = 0;
-      // if (rc_data) { ch0 = rc_data->rc.ch[0]; ch2 = rc_data->rc.ch[2]; ch3 = rc_data->rc.ch[3]; ch4 = rc_data->rc.ch[4]; swl = (uint8_t)rc_data->rc.s[0]; }
-      // USB_CDC_Printf("RC fc=%lu ch0=%d ch2=%d ch3=%d ch4=%d swL=%u\r\n",
-      //   (unsigned long)fc, (int)ch0, (int)ch2, (int)ch3, (int)ch4, (unsigned int)swl);
-      // if (rc_baseline_set)
-      // {
-      //   USB_CDC_Printf("RC baseline=[%d,%d,%d,%d,%d]\r\n",
-      //     (int)rc_baseline[0], (int)rc_baseline[1], (int)rc_baseline[2], (int)rc_baseline[3], (int)rc_baseline[4]);
-      // }
-
-      // Centering and deadband check for chassis channels
-      // const int16_t deadband = 10;
-      // bool c0 = (ch0 > -deadband && ch0 < deadband);
-      // bool c2 = (ch2 > -deadband && ch2 < deadband);
-      // bool c3 = (ch3 > -deadband && ch3 < deadband);
-      // USB_CDC_Printf("RC centered: ch0=%d ch2=%d ch3=%d\r\n", c0?1:0, c2?1:0, c3?1:0);
-
-      // Dump last SBUS frame bytes for mapping investigation
-      // uint8_t sbus_dump[RC_FRAME_LENGTH];
-      // memset(sbus_dump, 0, sizeof(sbus_dump));
-      // RC_GetLastFrame(sbus_dump);
-
-      // USB_CDC_Printf("SBUS:");
-      // for (int i = 0; i < (int)RC_FRAME_LENGTH; ++i) {
-      //   USB_CDC_Printf(" %02X", (unsigned int)sbus_dump[i]);
-      // }
-      // USB_CDC_Printf("\r\n");
-
-      // bool ch_run = ChassisController_IsRunning(&chassis_controller);
-      // bool sh_run = ShooterController_IsRunning(&shooter_controller);
-      
-      // USB_CDC_Printf("RUN ch=%d sh=%d\r\n", ch_run?1:0, sh_run?1:0);
-
-      // DISABLED: BMI088 data conflicts with WT61C output
-      // USB_CDC_Printf("GYRO [%.2f, %.2f, %.2f] ACCEL [%.2f, %.2f, %.2f] TEMP %.2f\r\n",
-      //   gyro[0], gyro[1], gyro[2],
-      //   accel[0], accel[1], accel[2],
-      //   temp);
-
-      
-
-      // Chassis targets and outputs
-      // USB_CDC_Printf("CH tgt=[%d,%d,%d,%d] out=[%d,%d,%d,%d]\r\n",
-      //   (int)chassis_controller.ramped_targets[0],
-      //   (int)chassis_controller.ramped_targets[1],
-      //   (int)chassis_controller.ramped_targets[2],
-      //   (int)chassis_controller.ramped_targets[3],
-      //   (int)chassis_controller.output_currents[0],
-      //   (int)chassis_controller.output_currents[1],
-      //   (int)chassis_controller.output_currents[2],
-      //   (int)chassis_controller.output_currents[3]);
-
-      // // Shooter outputs and gimbal current
-      // // const int16_t *sh_out = ShooterController_GetOutputCurrents(&shooter_controller);
-      // // int16_t sh0 = 0, sh1 = 0, sh2 = 0, sh3 = 0;
-      // // if (sh_out) { sh0 = sh_out[0]; sh1 = sh_out[1]; sh2 = sh_out[2]; sh3 = sh_out[3]; }
-      // // USB_CDC_Printf("SH out=[%d,%d,%d,%d]\r\n", (int)sh0, (int)sh1, (int)sh2, (int)sh3);
-   
-
-      
-
-    }
-    last_frame_count = fc; // kept to avoid large delta when re-enabled
-  }
-
-	HAL_Delay(CMD_REFRESH_INTERVAL_MS);
+	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
     /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
   }
+  /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
 }
 
