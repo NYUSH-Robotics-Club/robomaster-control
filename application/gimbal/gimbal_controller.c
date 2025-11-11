@@ -158,8 +158,8 @@ void GimbalController_TargetAngleCorrection(SensorData* sensor_data)
     
     c->w_chasis_raw = sensor_data->c_gz;
     c->angle_correction = c->w_chasis_raw / 900.0f / (2.0f * (float)M_PI) * c->angle_max / 120.0f;
-    USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", 
-                   (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data->g_gz);
+    // USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", 
+    //                (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data->g_gz);
 }
 
 // Application layer: Message subscription callbacks

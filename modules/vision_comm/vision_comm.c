@@ -142,7 +142,7 @@ void VisionComm_Send(void)
                           &tx_len);
     
     // Send via USB
-    CDC_Transmit_FS(send_buff, tx_len);
+    // CDC_Transmit_FS(send_buff, tx_len);
 }
 
 /**
