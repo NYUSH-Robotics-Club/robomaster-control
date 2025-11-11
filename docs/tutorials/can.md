@@ -6,7 +6,7 @@ CAN bus(Controller Area Network System) that connectes all our electrical compon
 
 A CAN wire is composed of two wires, CAN low and CAN high
 
-![can-wire.png](assets/can-wire.png)
+![can-wire.png](../assets/can-wire.png)
 
 <p align="center"><sub><strong>Figure 1</strong>: can wire</sub></p>
 
@@ -18,7 +18,7 @@ Since the can wire is just two wires and have to ensure that all electrical comp
 
 Below is a picture of what it is composed of.
 
-![can-wire.png](assets/can-frame.png)
+![can-wire.png](../assets/can-frame.png)
 
 <p align="center"><sub><strong>Figure 2</strong>: can frame</sub></p>
 

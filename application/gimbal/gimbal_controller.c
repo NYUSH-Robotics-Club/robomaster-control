@@ -113,6 +113,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     const float c_gz = sensor_data->c_gz * (float)M_PI / 180.0f;
 
     g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * g_gz + (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * g_gz_filt;
+    if(fabsf(g_gz) < 0.1f){
+        g_gz_filt = 0.0f;
+    }
 
     float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz - YAW_CONTROL_RATE_FEEDBACK * g_gz_filt)
                        * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
@@ -125,6 +128,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     const float current = (float)yaw->angle_raw;
     float raw_err = yaw->angle_target - current;
+    if(-50 < raw_err && raw_err < 50){
+        raw_err = 0.0f;
+    }
 
     if (raw_err >  YAW_CONTROL_ENC_MAX / 2.0f) raw_err -= YAW_CONTROL_ENC_MAX;
     if (raw_err < -YAW_CONTROL_ENC_MAX / 2.0f) raw_err += YAW_CONTROL_ENC_MAX;
@@ -135,18 +141,20 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (cmd < -25000.0f) cmd = -25000.0f;
 
     // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
-    // uint32_t timestamp = HAL_GetTick();
-    // USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
-    //                timestamp,
-    //                yaw->angle_target,
-    //                current,
-    //                yaw->speed_rpm,
-    //                cmd,
-    //                rate_normalized,
-    //                joy_smoothed,
-    //                raw_err,
-    //                g_gz,
-    //                c_gz);
+    uint32_t timestamp = HAL_GetTick();
+    
+    
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+                   timestamp,
+                   yaw->angle_target,
+                   current,
+                   yaw->speed_rpm,
+                   cmd,
+                   rate_normalized,
+                   joy_smoothed,
+                   raw_err,
+                   g_gz_filt,
+                   c_gz);
 
     return (int16_t)cmd;
 }
