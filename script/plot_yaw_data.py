@@ -14,7 +14,7 @@ from collections import deque
 import sys
 
 # Default serial port settings
-DEFAULT_PORT = 'COM10'
+DEFAULT_PORT = '/dev/tty.usbmodem3064356030341'
 DEFAULT_BAUD = 115200
 
 # Data buffer size (number of points to keep)
@@ -154,26 +154,24 @@ class YawDataPlotter:
         except (ValueError, IndexError) as e:
             return None
     
-    def read_serial_data(self):
-        """Read and parse data from serial port"""
+    def read_serial_data(self, max_lines=10):
+        """Read and parse up to N lines per frame to prevent lag buildup."""
         if self.ser is None or not self.ser.is_open:
             return
         
         try:
-            # Read available data
-            while self.ser.in_waiting > 0:
+            lines_read = 0
+            while self.ser.in_waiting > 0 and lines_read < max_lines:
                 line = self.ser.readline().decode('utf-8', errors='ignore')
                 data = self.parse_csv_line(line)
+                lines_read += 1
                 
                 if data is not None:
-                    # Initialize start time
                     if self.start_time is None:
                         self.start_time = data['timestamp']
                     
-                    # Calculate relative time in seconds
                     rel_time = (data['timestamp'] - self.start_time) / 1000.0
-                    
-                    # Add to buffers
+
                     self.time_data.append(rel_time)
                     self.target_angle.append(data['target_angle'])
                     self.current_angle.append(data['current_angle'])
@@ -186,7 +184,7 @@ class YawDataPlotter:
                     self.c_gz.append(data['c_gz'])
         except Exception as e:
             print(f"Error reading serial data: {e}")
-    
+
     def update_plot(self, frame):
         """Update plot with new data"""
         # Read new data from serial
