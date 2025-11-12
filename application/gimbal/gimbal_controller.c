@@ -26,10 +26,16 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_CONTROL_JOY_SENSITIVITY (20.0f)
 #define YAW_CONTROL_JOY_RAMP_ALPHA  (0.10f)
 
+
 // PID parameters
 #define YAW_KP (10.0f)
 #define YAW_KI (0.05f)
 #define YAW_KD (0.1f)
+#define YAW_SPEED_KP (10.0f)
+#define YAW_SPEED_KI (0.05f)
+#define YAW_SPEED_KD (0.1f)
+#define SPEED_LIMIT (25000.0f)
+#define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
 #define PITCH_KD (0.1f)
@@ -135,40 +141,36 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (raw_err >  YAW_CONTROL_ENC_MAX / 2.0f) raw_err -= YAW_CONTROL_ENC_MAX;
     if (raw_err < -YAW_CONTROL_ENC_MAX / 2.0f) raw_err += YAW_CONTROL_ENC_MAX;
 
-    float cmd = PID_Calculate(&yaw->angle_pid, raw_err, 0.0f);
+    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, raw_err);
 
-    if (cmd >  25000.0f) cmd =  25000.0f;
-    if (cmd < -25000.0f) cmd = -25000.0f;
+    if (cmd_angle_to_speed > SPEED_LIMIT) cmd_angle_to_speed = SPEED_LIMIT;
+    if (cmd_angle_to_speed < -SPEED_LIMIT) cmd_angle_to_speed= -SPEED_LIMIT;
+
+    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, (float)yaw->speed_rpm, cmd_angle_to_speed);
+    if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
+    if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
 
     // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
     uint32_t timestamp = HAL_GetTick();
     
     
-    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
                    timestamp,
                    yaw->angle_target,
                    current,
                    yaw->speed_rpm,
-                   cmd,
+                   cmd_speed_to_current,
+                   cmd_angle_to_speed,
                    rate_normalized,
                    joy_smoothed,
                    raw_err,
                    g_gz_filt,
                    c_gz);
 
-    return (int16_t)cmd;
+    return (int16_t)cmd_speed_to_current;
 }
 
-void GimbalController_TargetAngleCorrection(SensorData* sensor_data)
-{
-    GM6020_MotorContext *c = GM6020_GetContext(GIMBAL_YAW_ID);
-    if (!c) return;
-    
-    c->w_chasis_raw = sensor_data->c_gz;
-    c->angle_correction = c->w_chasis_raw / 900.0f / (2.0f * (float)M_PI) * c->angle_max / 120.0f;
-    // USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", 
-    //                (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data->g_gz);
-}
+
 
 // Application layer: Message subscription callbacks
 static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
