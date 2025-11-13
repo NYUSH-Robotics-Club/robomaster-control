@@ -34,7 +34,6 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_SPEED_KP (10.0f)
 #define YAW_SPEED_KI (0.05f)
 #define YAW_SPEED_KD (0.1f)
-#define SPEED_LIMIT (25000.0f)
 #define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
@@ -141,10 +140,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (raw_err >  YAW_CONTROL_ENC_MAX / 2.0f) raw_err -= YAW_CONTROL_ENC_MAX;
     if (raw_err < -YAW_CONTROL_ENC_MAX / 2.0f) raw_err += YAW_CONTROL_ENC_MAX;
 
-    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, raw_err);
+    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, raw_err, 0.0f);
 
-    if (cmd_angle_to_speed > SPEED_LIMIT) cmd_angle_to_speed = SPEED_LIMIT;
-    if (cmd_angle_to_speed < -SPEED_LIMIT) cmd_angle_to_speed= -SPEED_LIMIT;
 
     float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, (float)yaw->speed_rpm, cmd_angle_to_speed);
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
@@ -221,6 +218,8 @@ void GimbalApp_Init(void) {
         YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE,
         PITCH_KP, PITCH_KI, PITCH_KD, INITIAL_PITCH_ANGLE
     );
+
+    Speed_PID_Init(GIMBAL_YAW_ID, YAW_SPEED_KP, YAW_SPEED_KI, YAW_SPEED_KD);
     
     // Subscribe to messages
     (void)MsgCenter_Subscribe(TOPIC_GIMBAL_CMD, on_gimbal_cmd, NULL);

@@ -14,7 +14,8 @@ from collections import deque
 import sys
 
 # Default serial port settings
-DEFAULT_PORT = '/dev/tty.usbmodem3064356030341'
+# DEFAULT_PORT = '/dev/tty.usbmodem3064356030341'
+DEFAULT_PORT = 'COM6'
 DEFAULT_BAUD = 115200
 
 # Data buffer size (number of points to keep)
