@@ -28,12 +28,12 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP (10.0f)
+#define YAW_KP (5.0f)
 #define YAW_KI (0.05f)
-#define YAW_KD (0.1f)
-#define YAW_SPEED_KP (10.0f)
+#define YAW_KD (0.00f)
+#define YAW_SPEED_KP (3.0f)
 #define YAW_SPEED_KI (0.05f)
-#define YAW_SPEED_KD (0.1f)
+#define YAW_SPEED_KD (0.2f)
 #define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
@@ -108,10 +108,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (!yaw || !yaw->angle_inited) return 0;
 
     // Apply low-pass filter to smooth joystick input (already normalized -1.0 to 1.0)
-    static float joy_smoothed = 0.0f;
-    joy_smoothed = YAW_CONTROL_JOY_RAMP_ALPHA * rate_normalized + (1.0f - YAW_CONTROL_JOY_RAMP_ALPHA) * joy_smoothed;
+    
 
-    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * joy_smoothed;
+    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
 
     static float g_gz_filt = 0.0f;
     const float g_gz = sensor_data->g_gz;
@@ -142,8 +141,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, raw_err, 0.0f);
 
-
-    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, (float)yaw->speed_rpm, cmd_angle_to_speed);
+    float rpm_to_current = (24.0f - 0.741f * (2.0f * 3.1416f / 60.0f) * yaw->speed_rpm) / 1.8f;
+    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, (float)rpm_to_current, cmd_angle_to_speed );
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
     if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
 
@@ -159,7 +158,6 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
                    cmd_speed_to_current,
                    cmd_angle_to_speed,
                    rate_normalized,
-                   joy_smoothed,
                    raw_err,
                    g_gz_filt,
                    c_gz);
