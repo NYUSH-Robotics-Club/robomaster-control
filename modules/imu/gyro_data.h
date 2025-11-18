@@ -29,7 +29,7 @@ typedef struct {
 
 void gyro_data_init(void);
 void gyro_data_update(SensorData *sensor_data);
-float gimbal_absolute_angle(SensorData* sensor_data,);
+float gimbal_absolute_angle(SensorData* sensor_data);
 
 #endif
 

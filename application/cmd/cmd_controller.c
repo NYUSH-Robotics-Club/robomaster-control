@@ -121,8 +121,7 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
     
-   
-    // if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
+     // if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
     //     const float vision_gain = 5.0f;
         
     //     float yaw_addition = s_last_vision.yaw * vision_gain;
@@ -183,7 +182,5 @@ void CmdController_Task(uint32_t current_tick) {
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));
     (void)MsgCenter_Publish(TOPIC_SHOOT_CMD, &s_shoot_cmd, sizeof(s_shoot_cmd));
     (void)MsgCenter_Publish(TOPIC_GIMBAL_CMD, &s_gimbal_cmd, sizeof(s_gimbal_cmd));
-
-    
 }
 
