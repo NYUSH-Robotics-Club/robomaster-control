@@ -206,32 +206,32 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    uint32_t current_tick = HAL_GetTick();
+    while (1)
+    {
+      uint32_t current_tick = HAL_GetTick();
 
-    // Update sensor data and publishes IMU topic
-    gyro_data_update(&sensor_data);
+      // Update sensor data and publishes IMU topic
+      gyro_data_update(&sensor_data);
 
-    // Process command controller
-    CmdController_Task(current_tick);
-    
-    // Dispatch message center events
-    MsgCenter_Dispatch();
+      // Process command controller
+      CmdController_Task(current_tick);
+      
+      // Dispatch message center events
+      MsgCenter_Dispatch();
 
-    // Update buzzer music playback (feature for fun :D)
-    Buzzer_Update();
+      // Update buzzer music playback (feature for fun :D)
+      Buzzer_Update();
 
-    LED_SetRGB(0, 1, 0);
+      LED_SetRGB(0, 1, 0);
 
-	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
+      HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
-    /* USER CODE END WHILE */
+      /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
-  /* USER CODE END 3 */
+      /* USER CODE BEGIN 3 */
+    /* USER CODE END 3 */
+  }
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None

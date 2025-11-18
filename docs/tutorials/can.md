@@ -43,7 +43,7 @@ For GM6020, the CAN ID for motor feedback starts at 0x205 up to 0x20B (x in this
 
 lets first talk about sending can
 
-![send-can-gm6020.png](assets/send-can-gm6020.png)
+![send-can-gm6020.png](../assets/send-can-gm6020.png)
 
 <p align="center"><sub><strong>Figure 3</strong>: sending can</sub></p>
 
@@ -101,7 +101,7 @@ HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t
 
 Next is receiving CAN
 
-![receive-can-gm6020.png](assets/receive-can-gm6020.png)
+![receive-can-gm6020.png](../assets/receive-can-gm6020.png)
 
 <p align="center"><sub><strong>Figure 4</strong>: receive can</sub></p>
 
