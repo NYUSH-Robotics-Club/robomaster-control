@@ -11,7 +11,8 @@ import matplotlib.animation as animation
 from collections import deque
 import sys
 
-DEFAULT_PORT = 'COM6'
+
+DEFAULT_PORT = '/dev/tty.usbmodem3064356030341'
 DEFAULT_BAUD = 115200
 BUFFER_SIZE = 1000
 
@@ -40,7 +41,7 @@ class YawSimplePlotter:
         self.ax_empty = self.axes[1, 1]
         self.ax_empty.axis('off')
 
-        # Plot lines
+        # Initial plot lines
         self.line_raw, = self.ax_raw.plot([], [], label='yaw_raw', linewidth=1.5)
         self.line_vision, = self.ax_vision.plot([], [], label='vision_yaw', linewidth=1.5)
         self.line_rate, = self.ax_rate.plot([], [], label='yaw_rate', linewidth=1.5)
@@ -59,7 +60,16 @@ class YawSimplePlotter:
             ax.grid(True)
             ax.legend()
 
+        # Static limits for clearer visualization
+        self.ax_raw.set_ylim(-200, 200)
+        self.ax_vision.set_ylim(-200, 200)
+        self.ax_rate.set_ylim(-400, 400)
+
         plt.tight_layout()
+
+    def wrap_angle(self, angle):
+        """ Convert raw encoder degrees or ticks to -180..180 """
+        return ((angle + 180) % 360) - 180
 
     def connect_serial(self):
         try:
@@ -99,8 +109,8 @@ class YawSimplePlotter:
         try:
             while self.ser.in_waiting > 0:
                 line = self.ser.readline().decode('utf-8', errors='ignore')
-
                 data = self.parse_csv_line(line)
+
                 if data:
                     if self.start_time is None:
                         self.start_time = data['timestamp']
@@ -108,8 +118,8 @@ class YawSimplePlotter:
                     time_s = (data['timestamp'] - self.start_time) / 1000.0
 
                     self.time_data.append(time_s)
-                    self.yaw_raw.append(data['yaw_raw'])
-                    self.vision_yaw.append(data['vision_yaw'])
+                    self.yaw_raw.append(self.wrap_angle(data['yaw_raw']))
+                    self.vision_yaw.append(self.wrap_angle(data['vision_yaw']))
                     self.yaw_rate.append(data['yaw_rate'])
 
         except Exception as e:
@@ -126,10 +136,10 @@ class YawSimplePlotter:
         self.line_vision.set_data(t, list(self.vision_yaw))
         self.line_rate.set_data(t, list(self.yaw_rate))
 
-        # Auto-scale
-        for ax in [self.ax_raw, self.ax_vision, self.ax_rate]:
-            ax.relim()
-            ax.autoscale_view()
+        # Keep x limits moving with buffer
+        self.ax_raw.set_xlim(min(t), max(t))
+        self.ax_vision.set_xlim(min(t), max(t))
+        self.ax_rate.set_xlim(min(t), max(t))
 
         return [self.line_raw, self.line_vision, self.line_rate]
 
@@ -137,7 +147,8 @@ class YawSimplePlotter:
         if not self.connect_serial():
             return
 
-        ani = animation.FuncAnimation(self.fig, self.update_plot, interval=50, blit=False)
+        ani = animation.FuncAnimation(self.fig, self.update_plot,
+                                      interval=50, blit=False)
         plt.show()
 
         if self.ser and self.ser.is_open:
