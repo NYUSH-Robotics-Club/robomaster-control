@@ -121,20 +121,31 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
     
-    if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
-        const float vision_gain = 5.0f;
+   
+    // if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
+    //     const float vision_gain = 5.0f;
         
-        float yaw_addition = s_last_vision.yaw * vision_gain;
-        float pitch_addition = s_last_vision.pitch * vision_gain;
+    //     float yaw_addition = s_last_vision.yaw * vision_gain;
+    //     float pitch_addition = s_last_vision.pitch * vision_gain;
         
-        s_gimbal_cmd.yaw_rate += yaw_addition;
-        s_gimbal_cmd.pitch_rate += pitch_addition;
+    //     s_gimbal_cmd.yaw_rate += yaw_addition;
+    //     s_gimbal_cmd.pitch_rate += pitch_addition;
         
-        if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
-        if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
-        if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
-        if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
-    }
+    //     if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
+    //     if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
+    //     if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
+    //     if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
+    
+    // }
+    
+    //plot
+    uint32_t timestamp = HAL_GetTick();
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%.2f,%.2f\r\n",
+                   timestamp,
+                   yaw_raw,
+                   s_last_vision.yaw,
+                   s_gimbal_cmd.yaw_rate
+                 );
 }
 
 void CmdController_Init(void) {
@@ -172,5 +183,7 @@ void CmdController_Task(uint32_t current_tick) {
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));
     (void)MsgCenter_Publish(TOPIC_SHOOT_CMD, &s_shoot_cmd, sizeof(s_shoot_cmd));
     (void)MsgCenter_Publish(TOPIC_GIMBAL_CMD, &s_gimbal_cmd, sizeof(s_gimbal_cmd));
+
+    
 }
 
