@@ -21,6 +21,6 @@ void Robot_Init(void) {
   CAN_Manager_Start(&can1_manager);
   CAN_Manager_Start(&can2_manager);
 
-VisionComm_Init();
+    VisionComm_Init();
 
 }
