@@ -28,16 +28,16 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP (5.0f)
+#define YAW_KP (8.0f)
 #define YAW_KI (0.05f)
-#define YAW_KD (0.00f)
-#define YAW_SPEED_KP (3.0f)
+#define YAW_KD (1.0f)
+#define YAW_SPEED_KP (2.0f)
 #define YAW_SPEED_KI (0.05f)
-#define YAW_SPEED_KD (0.2f)
+#define YAW_SPEED_KD (0.5f)
 #define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
-#define PITCH_KD (0.1f)
+#define PITCH_KD (0.5f)
 #define INITIAL_PITCH_ANGLE (-1.0f)
 #define INITIAL_YAW_ANGLE (0.0f)
 
