@@ -8,18 +8,23 @@
 #include "vision_comm.h"
 
 void Robot_Init(void) {
-    // Initialize application controllers
-  ChassisApp_Init();
-  ShooterApp_Init();
-  GimbalApp_Init();
-  
-  // Initialize remote control
-  remote_control_init();
+    BMI088_init();
+    MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
 
-  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
-  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
-  CAN_Manager_Start(&can1_manager);
-  CAN_Manager_Start(&can2_manager);
+    // Initialize command controller first (central control)
+    CmdController_Init();
+    // Initialize application controllers
+    ChassisApp_Init();
+    ShooterApp_Init();
+    GimbalApp_Init();
+
+    // Initialize remote control
+    remote_control_init();
+
+    CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
+    CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
+    CAN_Manager_Start(&can1_manager);
+    CAN_Manager_Start(&can2_manager);
 
     VisionComm_Init();
 

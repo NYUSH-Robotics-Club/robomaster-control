@@ -8,13 +8,15 @@ static float gyro[3];
 static float accel[3];
 static float temp;
 
+SensorData* sensor_data;
+
 void gyro_data_init(void)
 {
     BMI088_init();
     // Any calibration or startup routines
 }
 
-void gyro_data_update(SensorData *sensor_data)
+void gyro_data_update()
 {
     BMI088_read(gyro, accel, &temp);
 

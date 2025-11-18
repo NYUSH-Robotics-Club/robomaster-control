@@ -23,7 +23,7 @@ typedef struct {
 } SensorData;
 
 void gyro_data_init(void);
-void gyro_data_update(SensorData *sensor_data);
+void gyro_data_update();
 
 #endif
 
