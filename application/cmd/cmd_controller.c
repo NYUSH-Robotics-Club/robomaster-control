@@ -6,6 +6,24 @@
 #include "printing.h"
 #include "stm32f4xx_hal.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <math.h>
+#include <time.h>
+
+#define SAMPLE_COUNT 50
+#define REFRESH_HZ   200
+#define REFRESH_DT   (1.0 / REFRESH_HZ)
+
+static float x_buf[SAMPLE_COUNT];
+static float y_buf[SAMPLE_COUNT];
+static int index_linear= 0;
+static int filled = 0;
+
+static float new_y = 0.0f;  // 现在外部只输入 y
+static unsigned long tick = 0;
+static float yaw_raw= 0.0f; 
+static float yaw_corrected=0.0f; // 固定时间序号，用来生成 x
 
 // Local state storage
 static RC_ctrl_t s_last_rc;
@@ -114,27 +132,100 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     
     // Right stick controls gimbal (ch0=yaw, ch1=pitch)
     // Apply deadband and normalize to -1.0 to 1.0
-    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
+    int16_t yaw_raw_fluctuated = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
+
+    if (yaw_raw_fluctuated!=0){
+        //Work as a filter to remove zero
+        yaw_raw = yaw_raw_fluctuated;
+    }
     
+
+
+// 简单的线性拟合：y = a*x + b （保持不变）
+void linear_fit(float *x, float *y, int n, float *a, float *b)
+{
+    float sumx = 0, sumy = 0, sumxy = 0, sumxx = 0;
+    for (int i = 0; i < n; i++) {
+        sumx  += x[i];
+        sumy  += y[i];
+        sumxy += x[i] * y[i];
+        sumxx += x[i] * x[i];
+    }
+    float denom = n * sumxx - sumx * sumx;
+    if (denom != 0) {
+        *a = (n * sumxy - sumx * sumy) / denom;
+        *b = (sumy - (*a) * sumx) / n;
+    }
+}
+
+
+float linear_method_calculator( )
+{   float k=0.0f;
+    float c=0.0f;
+    float predicted_value=0.0f;
+    
+
+    while (1)
+    {   
+        new_y = yaw_raw;
+
+
+            // x 由固定时间序号 tick 决定
+        float new_x = tick * REFRESH_DT;  // Δt = 1/200 s
+        tick++;  // 时间序号 +1
+
+            // 写入循环缓冲区（不变）
+        x_buf[index_linear] = new_x;
+        y_buf[index_linear] = new_y;
+
+        index_linear = (index_linear + 1) % SAMPLE_COUNT;
+        if (filled < SAMPLE_COUNT) filled++;
+
+            // 拟合 50 点（不变）
+        if (filled == SAMPLE_COUNT) {
+            float a, b;
+            linear_fit(x_buf, y_buf, SAMPLE_COUNT, &a, &b);
+            //printf("Fit: y = %.3f*x + %.3f\n", a, b);
+            k=a;
+            c=b;
+
+          
+        }
+        predicted_value= k*50+c;
+    }
+    return predicted_value;
+}
+    yaw_corrected=linear_method_calculator( );
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
-    s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
+    s_gimbal_cmd.yaw_rate = (float)yaw_corrected / max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
     
+   
     if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
-        const float vision_gain = 5.0f;
+    const float vision_gain = 5.0f;
         
-        float yaw_addition = s_last_vision.yaw * vision_gain;
-        float pitch_addition = s_last_vision.pitch * vision_gain;
+    float yaw_addition = s_last_vision.yaw * vision_gain;
+    float pitch_addition = s_last_vision.pitch * vision_gain;
         
-        s_gimbal_cmd.yaw_rate += yaw_addition;
-        s_gimbal_cmd.pitch_rate += pitch_addition;
+    s_gimbal_cmd.yaw_rate += yaw_addition;
+    s_gimbal_cmd.pitch_rate += pitch_addition;
         
-        if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
-        if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
-        if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
-        if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
-    }
+    if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
+    if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
+    if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
+    if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
+    
+     }
+    
+    //plot
+    uint32_t timestamp = HAL_GetTick();
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%.2f,%.2f\r\n",
+                   timestamp,
+                   yaw_raw,
+                   s_last_vision.yaw,
+                   s_gimbal_cmd.yaw_rate
+                 );
 }
 
 void CmdController_Init(void) {
@@ -172,5 +263,7 @@ void CmdController_Task(uint32_t current_tick) {
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));
     (void)MsgCenter_Publish(TOPIC_SHOOT_CMD, &s_shoot_cmd, sizeof(s_shoot_cmd));
     (void)MsgCenter_Publish(TOPIC_GIMBAL_CMD, &s_gimbal_cmd, sizeof(s_gimbal_cmd));
+
+    
 }
 

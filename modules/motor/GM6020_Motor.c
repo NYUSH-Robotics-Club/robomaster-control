@@ -85,10 +85,10 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
     c->angle_max = 8192.0f;
     c->max_encoder = 8192.0f;
   }
-  PID_Init(&c->speed_pid, 5.0, KI, KD, 30000.0f, 25000.0f);
+  //PID_Init(&c->speed_pid, 5.0, KI, KD, 30000.0f, 25000.0f);
   PID_Init(&c->angle_pid, KP, KI, KD, 30000.0f, 25000.0f);
   PID_Reset(&c->angle_pid);
-  PID_Reset(&c->speed_pid);
+  //PID_Reset(&c->speed_pid);
 }
 
 void Speed_PID_Init(uint8_t id, float KP, float KI, float KD)
@@ -99,11 +99,12 @@ void Speed_PID_Init(uint8_t id, float KP, float KI, float KD)
   PID_Reset(&c->speed_pid);
 }
 
-void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm)
+void GM6020_Motor_Feedback(uint8_t id, uint16_t angle_raw, int16_t speed_rpm, int16_t current)
 {
   if (id < 1 || id > 7) return;
   GM6020_MotorContext *c = &g_ctx[id-1];
   c->angle_raw = angle_raw;
+  c->feedback_current = current;
   if (c->max_encoder > 0.0f) {
     c->target_angle_rad = (float)c->angle_raw / c->max_encoder * 2.0f * M_PI;
   }
@@ -120,7 +121,7 @@ static void on_gm6020_feedback(const MsgEvent *ev, void *user)
   if (ev->size == sizeof(GM6020FeedbackEvent)) {
     const GM6020FeedbackEvent *m = (const GM6020FeedbackEvent *)ev->data;
     if (m->id >= 1 && m->id <= 7) {
-      GM6020_Motor_Feedback(m->id, m->angle, m->speed);
+      GM6020_Motor_Feedback(m->id, m->angle, m->speed, m->current);
     }
   }
 }
