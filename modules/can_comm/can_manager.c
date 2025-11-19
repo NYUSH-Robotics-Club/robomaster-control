@@ -140,14 +140,7 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
     CAN_TxHeaderTypeDef tx = (CAN_TxHeaderTypeDef){0};
     uint8_t d[8];
     uint32_t mb;
-    tx.StdId = std_id;
-    tx.IDE   = CAN_ID_STD;
-    tx.RTR   = CAN_RTR_DATA;
-    tx.DLC   = 8;
-    d[0] = (uint8_t)(i1 >> 8); d[1] = (uint8_t)i1;
-    d[2] = (uint8_t)(i2 >> 8); d[3] = (uint8_t)i2;
-    d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
-    d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
+    BuildCANFrame(std_id, i1, i2, i3, i4, &tx, d); 
     HAL_StatusTypeDef st = HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
     CAN_Manager_t *m = NULL;
     if (hcan == can1_manager.hcan) m = &can1_manager; else if (hcan == can2_manager.hcan) m = &can2_manager;

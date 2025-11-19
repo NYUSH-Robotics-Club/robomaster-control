@@ -117,3 +117,15 @@ static void on_gm6020_feedback(const MsgEvent *ev, void *user)
   }
 }
 
+void BuildCANFrame(uint16_t std_id, int16_t i1, int16_t i2, int16_t i3, int16_t i4, 
+  CAN_TxHeaderTypeDef *tx, uint8_t d[8])
+{
+    tx.StdId = std_id;
+    tx.IDE   = CAN_ID_STD;
+    tx.RTR   = CAN_RTR_DATA;
+    tx.DLC   = 8;
+    d[0] = (uint8_t)(i1 >> 8); d[1] = (uint8_t)i1;
+    d[2] = (uint8_t)(i2 >> 8); d[3] = (uint8_t)i2;
+    d[4] = (uint8_t)(i3 >> 8); d[5] = (uint8_t)i3;
+    d[6] = (uint8_t)(i4 >> 8); d[7] = (uint8_t)i4;
+}

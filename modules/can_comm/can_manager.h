@@ -88,6 +88,18 @@ HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t
 void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan);
 
 /**
+ * @brief Builds CAN frame data for 4 motor currents
+ * @param std_id Standard ID (0x200 for motors 1-4 on CAN1, 0x1FF for 5-8 on CAN2)
+ * @param i1 Current for slot 1 (motor 1 or 5)
+ * @param i2 Current for slot 2 (motor 2 or 6)
+ * @param i3 Current for slot 3 (motor 3 or 7)
+ * @param i4 Current for slot 4 (motor 4 or 8)
+ * @param tx CAN transmit header (output)
+ * @param d CAN data array (output)
+ */
+void BuildCANFrame(uint16_t std_id, int16_t i1, int16_t i2, int16_t i3, int16_t i4, CAN_TxHeaderTypeDef *tx, uint8_t d[8])
+
+/**
  * @brief Global CAN callback function (to be called from HAL_CAN_RxFifo0MsgPendingCallback)
  * @param hcan CAN handle that triggered the callback
  */
