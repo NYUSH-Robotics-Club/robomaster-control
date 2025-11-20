@@ -68,7 +68,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     application/shoot
     application/gimbal
     application/cmd
-    application/robot_init
+
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F4xx/Include
     Drivers/STM32F4xx_HAL_Driver/Inc
@@ -137,6 +137,7 @@ add_library(application STATIC
     application/chassis/chassis_controller.c
     application/shoot/shooter_controller.c
     application/gimbal/gimbal_controller.c
+    application/robot.c
 )
 
 target_include_directories(application PUBLIC

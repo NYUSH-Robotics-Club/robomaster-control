@@ -10,6 +10,8 @@
 #endif
 
 #define MC_MAX_SUBS_PER_TOPIC 8
+#define MSG_CENTER_QUEUE_LEN 128
+static MsgEvent g_msg_queue[MSG_CENTER_QUEUE_LEN];
 
 typedef struct {
     MsgCallback cb;
@@ -34,9 +36,9 @@ static uint8_t mc_inited = 0;
 #define MC_CS_EXIT()  do {} while(0)
 #endif
 
-void MsgCenter_Init(MsgEvent *buffer, size_t length) {
-    mc_queue = buffer;
-    mc_len = (buffer && length) ? length : 0;
+void MsgCenter_Init(void) {
+    mc_queue = g_msg_queue;
+    mc_len = MSG_CENTER_QUEUE_LEN;
     mc_head = 0;
     mc_tail = 0;
     for (size_t t = 0; t < (size_t)TOPIC_NUM_TOPICS; ++t) {

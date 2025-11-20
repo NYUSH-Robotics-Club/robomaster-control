@@ -2,19 +2,21 @@
 #pragma once
 
 #include "FreeRTOS.h"
+#include "task.h"
 #include "main.h"
-#include
+#include "cmsis_os.h"
+#include "message_center/message_center.h"
 
-
+ 
 osThreadId IMUTaskHandle;
 osThreadId robotTaskHandle;
 osThreadId motorTaskHandle;
 osThreadId daemonTaskHandle;
-osThreadId uiTaskHandle;
 
 static inline float GetTime_ms(void) {
-    return (float)osKernelGetTickCount();
+    return (float)xTaskGetTickCount();
 }
+
 
 void StartIMUTASK(void const *argument);
 void StartMOTORTASK(void const *argument);
@@ -40,7 +42,6 @@ __attribute__((noreturn)) void StartIMUTASK(void const *argument)
     static float ins_start;
     static float ins_dt;
 
-    LOGINFO("[freeRTOS] INS Task Start");
     for (;;)
     {
         ins_start = GetTime_ms();
@@ -48,11 +49,41 @@ __attribute__((noreturn)) void StartIMUTASK(void const *argument)
         gyro_data_update();
 
         ins_dt = GetTime_ms() - ins_start;
-        if (ins_dt > 1.0f)
-            LOGERROR("[freeRTOS] INS Task is being DELAY! dt = [%f]", ins_dt);
 
         osDelay(1);  // 1ms task period
     }
 }
 
 
+__attribute__((noreturn)) void StartRobotCMD(void const *argument)
+{
+    static float ins_start;
+    static float ins_dt;
+
+    for (;;)
+    {
+        ins_start = GetTime_ms();
+        CmdController_Task((uint32_t)ins_start);
+        MsgCenter_Dispatch();
+
+        ins_dt = GetTime_ms() - ins_start;
+
+        osDelay(1);  // 1ms task period
+    }
+}
+
+__attribute__((noreturn)) void StartMOTORTASK(void const *argument)
+{
+    static float ins_start;
+    static float ins_dt;
+
+    for (;;)
+    {
+        ins_start = GetTime_ms();
+        ChassisController_ComputeCurrents();
+        ShooterController_ComputeCurrents();
+        ins_dt = GetTime_ms() - ins_start;
+
+        osDelay(1);  // 1ms task period
+    }
+}

@@ -5,4 +5,5 @@
 
 void Robot_Init(void);
 
+void Robot_task(void);
 #endif

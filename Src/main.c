@@ -102,8 +102,6 @@ void MX_FREERTOS_Init(void);
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 
-SensorData sensor_data;
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -159,16 +157,10 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-  BMI088_init();
-  MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
-  
-  // Initialize command controller first (central control)
-  CmdController_Init();
+ 
   
   // Initialize application controllers
-  ChassisApp_Init();
-  ShooterApp_Init();
-  GimbalApp_Init();
+  
   
   // Initialize remote control
   remote_control_init();
@@ -208,23 +200,23 @@ int main(void)
   /* USER CODE BEGIN WHILE */
     while (1)
     {
-      uint32_t current_tick = HAL_GetTick();
+      // uint32_t current_tick = HAL_GetTick();
 
-      // Update sensor data and publishes IMU topic
-      gyro_data_update(&sensor_data);
+      // // Update sensor data and publishes IMU topic
+      // gyro_data_update(&sensor_data);
 
-      // Process command controller
-      CmdController_Task(current_tick);
+      // // Process command controller
+      // CmdController_Task(current_tick);
       
-      // Dispatch message center events
-      MsgCenter_Dispatch();
+      // // Dispatch message center events
+      // MsgCenter_Dispatch();
 
-      // Update buzzer music playback (feature for fun :D)
-      Buzzer_Update();
+      // // Update buzzer music playback (feature for fun :D)
+      // Buzzer_Update();
 
-      LED_SetRGB(0, 1, 0);
+      // LED_SetRGB(0, 1, 0);
 
-      HAL_Delay(CMD_REFRESH_INTERVAL_MS);
+      // HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
       /* USER CODE END WHILE */
 

@@ -6,6 +6,7 @@
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 
+
 #define CAN1_FILTER_BANK    0
 #define CAN2_FILTER_BANK    14
 #define CAN_FILTER_MODE     CAN_FILTERMODE_IDMASK

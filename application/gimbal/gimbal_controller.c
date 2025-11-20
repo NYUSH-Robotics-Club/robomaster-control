@@ -38,20 +38,13 @@ extern CAN_HandleTypeDef hcan2;
 
 // Static state for application
 static GimbalCmd s_last_cmd;
-static SensorData s_last_sensor;
+static SensorData sensor_data;
 static bool s_initialized = false;
 
-void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
-                           float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle)
-{
-    // Motor_Init already initializes motor parameters in module layer
-    Motor_Init(GIMBAL_YAW_ID, yaw_kp, yaw_ki, yaw_kd, yaw_initial_angle);
-    Motor_Init(GIMBAL_PITCH_ID, pitch_kp, pitch_ki, pitch_kd, pitch_initial_angle);
-}
 
-int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data)
+
+int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized)
 {
-    (void)sensor_data;  // Not used for pitch
     if (id < 1 || id > 7) return 0;
     GM6020_MotorContext *c = GM6020_GetContext(id);
     if (!c || !c->angle_inited) {
@@ -97,7 +90,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
     return (int16_t)cmd;
 }
 
-int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data)
+int16_t GimbalController_YawControlWithCompensation(float rate_normalized)
 {
     GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
     if (!yaw || !yaw->angle_inited) return 0;
@@ -109,8 +102,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * joy_smoothed;
 
     static float g_gz_filt = 0.0f;
-    const float g_gz = sensor_data->g_gz;
-    const float c_gz = sensor_data->c_gz * (float)M_PI / 180.0f;
+    const float g_gz = sensor_data.g_gz;
+    const float c_gz = sensor_data.c_gz * (float)M_PI / 180.0f;
 
     g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * g_gz + (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * g_gz_filt;
     if(fabsf(g_gz) < 0.1f){
@@ -159,12 +152,12 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     return (int16_t)cmd;
 }
 
-void GimbalController_TargetAngleCorrection(SensorData* sensor_data)
+void GimbalController_TargetAngleCorrection(void)
 {
     GM6020_MotorContext *c = GM6020_GetContext(GIMBAL_YAW_ID);
     if (!c) return;
     
-    c->w_chasis_raw = sensor_data->c_gz;
+    c->w_chasis_raw = sensor_data.c_gz;
     c->angle_correction = c->w_chasis_raw / 900.0f / (2.0f * (float)M_PI) * c->angle_max / 120.0f;
     // USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", 
     //                (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data->g_gz);
@@ -180,12 +173,11 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
         if (s_last_cmd.enabled) {
             int16_t pitch_current = GimbalController_PitchControl(
                 GIMBAL_PITCH_ID, 
-                s_last_cmd.pitch_rate, 
-                &s_last_sensor
+                s_last_cmd.pitch_rate
             );
             int16_t yaw_current = GimbalController_YawControlWithCompensation(
-                s_last_cmd.yaw_rate, 
-                &s_last_sensor
+                s_last_cmd.yaw_rate
+                
             );
             
             // Send CAN commands
@@ -202,7 +194,7 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
 static void on_imu_update(const MsgEvent *ev, void *user) {
     (void)user;
     if (ev->size == sizeof(SensorData)) {
-        memcpy(&s_last_sensor, ev->data, sizeof(SensorData));
+        memcpy(&sensor_data, ev->data, sizeof(SensorData));
     }
 }
 
@@ -212,14 +204,12 @@ void GimbalApp_Init(void) {
     }
     
     memset(&s_last_cmd, 0, sizeof(s_last_cmd));
-    memset(&s_last_sensor, 0, sizeof(s_last_sensor));
+    memset(&sensor_data, 0, sizeof(sensor_data));
     
-    // Initialize gimbal controller
-    GimbalController_Init(
-        YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE,
-        PITCH_KP, PITCH_KI, PITCH_KD, INITIAL_PITCH_ANGLE
-    );
     
+    
+    Motor_Init(GIMBAL_YAW_ID, YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE);
+    Motor_Init(GIMBAL_PITCH_ID, PITCH_KP, PITCH_KI, PITCH_KD, INITIAL_PITCH_ANGLE);
     // Subscribe to messages
     (void)MsgCenter_Subscribe(TOPIC_GIMBAL_CMD, on_gimbal_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);

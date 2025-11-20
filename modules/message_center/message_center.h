@@ -35,7 +35,7 @@ typedef struct {
 typedef void (*MsgCallback)(const MsgEvent *ev, void *user_data);
 
 // Initialize message center with user-provided ring buffer
-void MsgCenter_Init(MsgEvent *buffer, size_t length);
+void MsgCenter_Init(void);
 
 // Publish event (ISR-safe). Returns 0 on success.
 int MsgCenter_Publish(MsgTopic topic, const void *data, size_t size);

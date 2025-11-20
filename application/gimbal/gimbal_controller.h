@@ -31,8 +31,6 @@ typedef struct {
  * @param pitch_kd Pitch PID Kd
  * @param pitch_initial_angle Pitch initial angle
  */
-void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
-                           float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle);
 
 /**
  * @brief Pitch control with normalized rate command
@@ -41,7 +39,7 @@ void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_i
  * @param sensor_data Sensor data pointer
  * @return Motor current command
  */
-int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data);
+int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized);
 
 /**
  * @brief Yaw control with compensation (chassis rotation + gyro feedback)
@@ -49,13 +47,13 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
  * @param sensor_data Sensor data pointer
  * @return Motor current command
  */
-int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data);
+int16_t GimbalController_YawControlWithCompensation(float rate_normalized);
 
 /**
  * @brief Target angle correction for yaw (chassis compensation)
  * @param sensor_data Sensor data pointer
  */
-void GimbalController_TargetAngleCorrection(SensorData* sensor_data);
+void GimbalController_TargetAngleCorrection();
 
 /**
  * @brief Initialize gimbal application (message subscriptions and control)
