@@ -202,8 +202,7 @@ static void on_shoot_cmd(const MsgEvent *ev, void *user)
     (void)user;
     if (ev->size == sizeof(ShootCmd)) {
         memcpy(&s_last_cmd, ev->data, sizeof(ShootCmd));
-        ShooterController_Update();
-        ShooterController_ComputeCurrents();
+
     }
 }
 

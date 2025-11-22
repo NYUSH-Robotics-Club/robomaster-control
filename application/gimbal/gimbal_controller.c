@@ -168,26 +168,27 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
     (void)user;
     if (ev->size == sizeof(GimbalCmd)) {
         memcpy(&s_last_cmd, ev->data, sizeof(GimbalCmd));
-        
-        // Execute gimbal control when command arrives
-        if (s_last_cmd.enabled) {
-            int16_t pitch_current = GimbalController_PitchControl(
-                GIMBAL_PITCH_ID, 
-                s_last_cmd.pitch_rate
-            );
-            int16_t yaw_current = GimbalController_YawControlWithCompensation(
-                s_last_cmd.yaw_rate
-                
-            );
-            
-            // Send CAN commands
-            CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, pitch_current);
-            CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, yaw_current);
-        } else {
-            // Gimbal disabled, send zero current
-            CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, 0);
-            CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, 0);
-        }
+    }
+}
+
+void GimbalComputeCurrent() {
+    // Execute gimbal control when command arrives
+    if (s_last_cmd.enabled) {
+        int16_t pitch_current = GimbalController_PitchControl(
+            GIMBAL_PITCH_ID, 
+            s_last_cmd.pitch_rate
+        );
+        int16_t yaw_current = GimbalController_YawControlWithCompensation(
+            s_last_cmd.yaw_rate
+        );
+
+        // Send CAN commands
+        CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, pitch_current);
+        CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, yaw_current);
+    } else {
+        // Gimbal disabled, send zero current
+        CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, 0);
+        CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, 0);
     }
 }
 

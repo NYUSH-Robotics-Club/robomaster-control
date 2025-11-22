@@ -3,7 +3,7 @@
 
 
 
-void Robot_Init(void);
+void RobotInit(void);
 
-void Robot_task(void);
+
 #endif

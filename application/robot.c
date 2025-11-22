@@ -20,11 +20,12 @@
 #include "remote_control.h"
 #include "vision_comm.h"
 #include "robot_task.h"
+#include "robot_task.h"
 CAN_Manager_t can1_manager;
 CAN_Manager_t can2_manager;
 
 
-void Robot_Init(void) {
+void RobotInit(void) {
     BMI088_init();
     MsgCenter_Init();
 
@@ -46,8 +47,7 @@ void Robot_Init(void) {
 
     VisionComm_Init();
 
+    OSTaskInit();
+
 }
 
-void Robot_task(void){
-    
-}

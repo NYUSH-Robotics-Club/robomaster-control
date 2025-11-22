@@ -160,10 +160,11 @@ static void on_chassis_cmd(const MsgEvent *ev, void *user) {
     if (ev->size == sizeof(ChassisCmd)) {
         memcpy(&s_last_cmd, ev->data, sizeof(ChassisCmd));
         // Update controller and compute currents when command arrives
-        ChassisController_Update();
-        ChassisController_ComputeCurrents();
+
     }
 }
+
+
 
 static void on_imu_update(const MsgEvent *ev, void *user) {
     (void)user;

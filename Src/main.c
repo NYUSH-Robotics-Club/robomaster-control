@@ -49,6 +49,7 @@
 #include "app_subscriptions.h"
 #include "cmd_controller.h"
 #include "vision_comm.h"
+#include "robot.h"
 
 /* USER CODE END Includes */
 
@@ -79,8 +80,7 @@
 /* USER CODE BEGIN PV */
 
 // CAN managers
-CAN_Manager_t can1_manager;
-CAN_Manager_t can2_manager;
+
 
 float gyro[3], accel[3], temp;
 
@@ -90,8 +90,6 @@ float gyro[3], accel[3], temp;
 static uint8_t wt61c_rxbuf[RX_DMA_BUF_SZ];
 
 // Message center buffer
-#define MSG_CENTER_QUEUE_LEN 128
-static MsgEvent g_msg_queue[MSG_CENTER_QUEUE_LEN];
 
 /* USER CODE END PV */
 
@@ -163,16 +161,10 @@ int main(void)
   
   
   // Initialize remote control
-  remote_control_init();
-
-  // Initialize CAN managers (they will publish TOPIC_CAN_RX and TOPIC_MOTOR_FEEDBACK)
-  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
-  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
-  CAN_Manager_Start(&can1_manager);
-  CAN_Manager_Start(&can2_manager);
+  
   
   // Initialize Vision Communication
-  VisionComm_Init();
+
   
   HAL_Delay(WAIT_ESC_BOOT_MS);
 
@@ -180,12 +172,13 @@ int main(void)
   Buzzer_PlayBeep();
 
   // Initialize WT61C-TTL IMU sensor on USART1
-  WT61C_Init(&WT61C_UART_HANDLE);
+
   // Start UART DMA reception with idle line detection
   HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
   // Disable half-transfer interrupt to reduce callback overhead
   __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
 
+  RobotInit();
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in cmsis_os2.c) */

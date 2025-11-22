@@ -60,6 +60,8 @@ void GimbalController_TargetAngleCorrection();
  */
 void GimbalApp_Init(void);
 
+void GimbalComputeCurrent();
+
 #ifdef __cplusplus
 }
 #endif
