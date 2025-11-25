@@ -188,6 +188,7 @@ int main(void)
   Buzzer_PlayBeep();
 
   // Initialize WT61C-TTL IMU sensor on USART1
+  
   WT61C_Init(&WT61C_UART_HANDLE);
   // Start UART DMA reception with idle line detection
   HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
@@ -206,6 +207,7 @@ int main(void)
     gyro_data_update(&sensor_data);
 
     // Process command controller
+    LED_SetRGB(1, 0, 0);
     CmdController_Task(current_tick);
     
     // Dispatch message center events

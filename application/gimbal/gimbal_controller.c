@@ -150,17 +150,17 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     uint32_t timestamp = HAL_GetTick();
     
     
-    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
-                   timestamp,
-                   yaw->angle_target,
-                   current,
-                   yaw->speed_rpm,
-                   cmd_speed_to_current,
-                   cmd_angle_to_speed,
-                   rate_normalized,
-                   raw_err,
-                   g_gz_filt,
-                   c_gz);
+    // USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+    //                timestamp,
+    //                yaw->angle_target,
+    //                current,
+    //                yaw->speed_rpm,
+    //                cmd_speed_to_current,
+    //                cmd_angle_to_speed,
+    //                rate_normalized,
+    //                raw_err,
+    //                g_gz_filt,
+    //                c_gz);
 
     return (int16_t)cmd_speed_to_current;
 }
