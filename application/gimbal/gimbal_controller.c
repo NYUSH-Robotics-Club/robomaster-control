@@ -20,20 +20,20 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_CONTROL_DT              (0.005f)
 #define YAW_CONTROL_ENC_MAX         (8192.0f)
 #define YAW_CONTROL_TICKS_PER_RAD  (YAW_CONTROL_ENC_MAX / (2.0f * (float)M_PI))
-#define YAW_CONTROL_COUNTER_GAIN   (1.4f)
-#define YAW_CONTROL_RATE_FEEDBACK  (0.8f)
+#define YAW_CONTROL_COUNTER_GAIN   (0.0f)
+#define YAW_CONTROL_RATE_FEEDBACK  (0.0f)
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
 #define YAW_CONTROL_JOY_SENSITIVITY (20.0f)
 #define YAW_CONTROL_JOY_RAMP_ALPHA  (0.10f)
 
 
 // PID parameters
-#define YAW_KP (8.0f)
-#define YAW_KI (0.05f)
-#define YAW_KD (1.0f)
-#define YAW_SPEED_KP (2.0f)
-#define YAW_SPEED_KI (0.05f)
-#define YAW_SPEED_KD (0.5f)
+#define YAW_KP (4.0f)
+#define YAW_KI (0.00f)
+#define YAW_KD (0.1f)
+#define YAW_SPEED_KP (4.0f)
+#define YAW_SPEED_KI (0.00f)
+#define YAW_SPEED_KD (0.1f)
 #define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
@@ -131,36 +131,39 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
         yaw->angle_target += YAW_CONTROL_ENC_MAX;
 
     const float current = (float)yaw->angle_raw;
-    float raw_err = yaw->angle_target - current;
-    if(-50 < raw_err && raw_err < 50){
-        raw_err = 0.0f;
+    float angle_error = yaw->angle_target - current;
+    if(-50 < angle_error && angle_error < 50){
+        angle_error = 0.0f;
     }
 
-    if (raw_err >  YAW_CONTROL_ENC_MAX / 2.0f) raw_err -= YAW_CONTROL_ENC_MAX;
-    if (raw_err < -YAW_CONTROL_ENC_MAX / 2.0f) raw_err += YAW_CONTROL_ENC_MAX;
+    if (angle_error >  YAW_CONTROL_ENC_MAX / 2.0f) angle_error -= YAW_CONTROL_ENC_MAX;
+    if (angle_error < -YAW_CONTROL_ENC_MAX / 2.0f) angle_error += YAW_CONTROL_ENC_MAX;
 
-    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, raw_err, 0.0f);
+    static float speed_ref = 0.0f;
 
-    float rpm_to_current = (24.0f - 0.741f * (2.0f * 3.1416f / 60.0f) * yaw->speed_rpm) / 1.8f;
-    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, (float)rpm_to_current, cmd_angle_to_speed );
+    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
+
+    
+    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, speed_ref, yaw->speed_rpm);
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
     if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
-
+    
+    
     // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
     uint32_t timestamp = HAL_GetTick();
     
     
-    // USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
-    //                timestamp,
-    //                yaw->angle_target,
-    //                current,
-    //                yaw->speed_rpm,
-    //                cmd_speed_to_current,
-    //                cmd_angle_to_speed,
-    //                rate_normalized,
-    //                raw_err,
-    //                g_gz_filt,
-    //                c_gz);
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+                   timestamp,
+                   yaw->angle_target,
+                   current,
+                   yaw->speed_rpm,
+                   cmd_speed_to_current,
+                   cmd_angle_to_speed,
+                   rate_normalized,
+                   angle_error,
+                   g_gz_filt,
+                   c_gz);
 
     return (int16_t)cmd_speed_to_current;
 }
