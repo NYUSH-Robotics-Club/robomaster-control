@@ -23,17 +23,17 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_CONTROL_COUNTER_GAIN   (0.0f)
 #define YAW_CONTROL_RATE_FEEDBACK  (0.0f)
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
-#define YAW_CONTROL_JOY_SENSITIVITY (20.0f)
+#define YAW_CONTROL_JOY_SENSITIVITY (80.0f)
 #define YAW_CONTROL_JOY_RAMP_ALPHA  (0.10f)
 
 
 // PID parameters
-#define YAW_KP (4.0f)
+#define YAW_KP (2.0f)
 #define YAW_KI (0.00f)
-#define YAW_KD (0.1f)
+#define YAW_KD (0.3f)
 #define YAW_SPEED_KP (4.0f)
 #define YAW_SPEED_KI (0.00f)
-#define YAW_SPEED_KD (0.1f)
+#define YAW_SPEED_KD (0.8f)
 #define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
@@ -109,21 +109,16 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     // Apply low-pass filter to smooth joystick input (already normalized -1.0 to 1.0)
     
-
+    float g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * sensor_data->g_gz +
+                       (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * yaw->w_chasis_raw;
     yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
 
-    static float g_gz_filt = 0.0f;
-    const float g_gz = sensor_data->g_gz;
-    const float c_gz = sensor_data->c_gz * (float)M_PI / 180.0f;
+    const float c_gz = sensor_data->c_gz;
 
-    g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * g_gz + (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * g_gz_filt;
-    if(fabsf(g_gz) < 0.1f){
-        g_gz_filt = 0.0f;
-    }
 
-    float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz - YAW_CONTROL_RATE_FEEDBACK * g_gz_filt)
-                       * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
-    yaw->angle_target += dYaw_ticks;
+    // float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz)
+    //                    * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
+    yaw->angle_target -= c_gz/4.6f; // Counteract drift
 
     if (yaw->angle_target >= YAW_CONTROL_ENC_MAX)
         yaw->angle_target -= YAW_CONTROL_ENC_MAX;
@@ -139,12 +134,12 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (angle_error >  YAW_CONTROL_ENC_MAX / 2.0f) angle_error -= YAW_CONTROL_ENC_MAX;
     if (angle_error < -YAW_CONTROL_ENC_MAX / 2.0f) angle_error += YAW_CONTROL_ENC_MAX;
 
-    static float speed_ref = 0.0f;
+   
 
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
 
     
-    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, speed_ref, yaw->speed_rpm);
+    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
     if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
     
