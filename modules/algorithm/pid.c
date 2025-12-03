@@ -50,7 +50,7 @@ float PID_Calculate(PID_Controller *pid, float target, float actual)
     pid->integral = -pid->integral_max;
   }
 
-  float derivative = - (pid->actual - pid->error[1]);
+  float derivative = (pid->error[0] - pid->error[1]);
   
   pid->output = pid->Kp * pid->error[0] + pid->Ki * pid->integral + pid->Kd * derivative;
 
