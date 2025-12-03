@@ -20,23 +20,21 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_CONTROL_DT              (0.005f)
 #define YAW_CONTROL_ENC_MAX         (8192.0f)
 #define YAW_CONTROL_TICKS_PER_RAD  (YAW_CONTROL_ENC_MAX / (2.0f * (float)M_PI))
-#define YAW_CONTROL_COUNTER_GAIN   (0.0f)
-#define YAW_CONTROL_RATE_FEEDBACK  (0.0f)
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
 #define YAW_CONTROL_JOY_SENSITIVITY (80.0f)
 #define YAW_CONTROL_JOY_RAMP_ALPHA  (0.10f)
 
 
 // PID parameters
-#define YAW_KP (5.0f)
-#define YAW_KI (0.00f)
-#define YAW_KD (2.0f)
-#define YAW_SPEED_KP (4.0f)
-#define YAW_SPEED_KI (0.05f)
-#define YAW_SPEED_KD (0.8f)
+#define YAW_KP (1.5f)
+#define YAW_KI (0.01f)
+#define YAW_KD (0.15f)
+#define YAW_SPEED_KP (2.0f)
+#define YAW_SPEED_KI (0.02f)
+#define YAW_SPEED_KD (1.0f)
 #define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (8.0f)
-#define PITCH_KI (0.5f)
+#define PITCH_KI (0.0f)
 #define PITCH_KD (2.0f)
 #define INITIAL_PITCH_ANGLE (-1.0f)
 #define INITIAL_YAW_ANGLE (0.0f)
@@ -70,7 +68,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
     }
 
     // Sensitivity: how much angle to add per control cycle for full stick deflection
-    float sensitivity = 15.0f;
+    float sensitivity = 40.0f;
 
     // Update target angle based on normalized rate command (-1.0 to 1.0)
     c->angle_target += c->pitch_direction * sensitivity * rate_normalized;
@@ -88,7 +86,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
     }
 
     float current_angle = (float)c->angle_raw;
-    float error = c->angle_target - current_angle;
+    float error = c->angle_target - current_angle;Z
     if (error > c->max_encoder / 2.0f)
         error -= c->max_encoder;
     else if (error < -c->max_encoder / 2.0f)
@@ -166,6 +164,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
 
+
+
+
     
     float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
@@ -176,7 +177,6 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     uint32_t timestamp = HAL_GetTick();
     last_data(rate_normalized, yaw->angle_target);
     USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
-                   timestamp,
                    timestamp,
                    yaw->angle_target,
                    current,
