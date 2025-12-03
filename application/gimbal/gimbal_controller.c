@@ -28,16 +28,16 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP (2.0f)
+#define YAW_KP (5.0f)
 #define YAW_KI (0.00f)
-#define YAW_KD (0.3f)
+#define YAW_KD (2.0f)
 #define YAW_SPEED_KP (4.0f)
-#define YAW_SPEED_KI (0.00f)
+#define YAW_SPEED_KI (0.05f)
 #define YAW_SPEED_KD (0.8f)
 #define CURRENT_LIMIT (25000.0f)
-#define PITCH_KP (11.0f)
-#define PITCH_KI (0.0f)
-#define PITCH_KD (0.5f)
+#define PITCH_KP (8.0f)
+#define PITCH_KI (0.5f)
+#define PITCH_KD (2.0f)
 #define INITIAL_PITCH_ANGLE (-1.0f)
 #define INITIAL_YAW_ANGLE (0.0f)
 
@@ -45,6 +45,12 @@ extern CAN_HandleTypeDef hcan2;
 static GimbalCmd s_last_cmd;
 static SensorData s_last_sensor;
 static bool s_initialized = false;
+
+void last_data(float last_yaw_rate, float last_yaw_target)
+{
+   s_last_cmd.yaw_rate_memo = last_yaw_rate;
+   s_last_cmd.yaw_target_memo = last_yaw_target;
+}
 
 void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
                            float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle)
@@ -107,18 +113,40 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
     if (!yaw || !yaw->angle_inited) return 0;
 
-    // Apply low-pass filter to smooth joystick input (already normalized -1.0 to 1.0)
     
+    // Apply low-pass filter to smooth joystick input (already normalized -1.0 to 1.0)
+   
     float g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * sensor_data->g_gz +
                        (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * yaw->w_chasis_raw;
-    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
+
+
+     yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
+    
+
 
     const float c_gz = sensor_data->c_gz;
 
 
     // float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz)
     //                    * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
-    yaw->angle_target -= c_gz/4.6f; // Counteract drift
+    yaw->angle_target -= c_gz/4.6f;
+
+   
+
+    if ((s_last_cmd.yaw_rate_memo!=0.0f)&&((rate_normalized <=0.5f)||(rate_normalized>=-0.5f))){
+     
+            if (s_last_cmd.yaw_rate_memo>0.0f){
+            yaw->angle_target -= 250.0f;
+            } 
+            else if (s_last_cmd.yaw_rate_memo<0.0f){
+            yaw->angle_target += 250.0f;
+
+           }
+       
+    }
+        
+     
+
 
     if (yaw->angle_target >= YAW_CONTROL_ENC_MAX)
         yaw->angle_target -= YAW_CONTROL_ENC_MAX;
@@ -146,9 +174,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     
     // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
     uint32_t timestamp = HAL_GetTick();
-    
-    
+    last_data(rate_normalized, yaw->angle_target);
     USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+                   timestamp,
                    timestamp,
                    yaw->angle_target,
                    current,
@@ -200,6 +228,7 @@ static void on_imu_update(const MsgEvent *ev, void *user) {
         memcpy(&s_last_sensor, ev->data, sizeof(SensorData));
     }
 }
+
 
 void GimbalApp_Init(void) {
     if (s_initialized) {
