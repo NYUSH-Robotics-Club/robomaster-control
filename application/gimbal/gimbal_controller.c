@@ -86,7 +86,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
     }
 
     float current_angle = (float)c->angle_raw;
-    float error = c->angle_target - current_angle;Z
+    float error = c->angle_target - current_angle;
     if (error > c->max_encoder / 2.0f)
         error -= c->max_encoder;
     else if (error < -c->max_encoder / 2.0f)
