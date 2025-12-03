@@ -111,7 +111,8 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
         if (gid >= 6 && gid <= 7) {
             uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
             int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
-            GM6020FeedbackEvent gev = { gid, angle_raw, speed_rpm, current_tick };
+            int16_t  current = (int16_t)((d[4]<<8) | d[5]);
+            GM6020FeedbackEvent gev = { gid, angle_raw, speed_rpm, current_tick, current };
             (void)MsgCenter_Publish(TOPIC_GM6020_FEEDBACK, &gev, sizeof(gev));
         }
     }

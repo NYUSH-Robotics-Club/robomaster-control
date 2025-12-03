@@ -26,7 +26,43 @@
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN Private defines */
-
+#define C3 131
+#define C3s 139
+#define D3 147
+#define D3s 156
+#define E3 165
+#define F3 175
+#define F3s 185
+#define G3 196
+#define G3s 208
+#define A3 220
+#define A3s 233
+#define B3 247
+#define C4 262
+#define C4s 277
+#define D4 294
+#define D4s 311
+#define E4 330
+#define F4 349
+#define F4s 370
+#define G4 392
+#define G4s 415
+#define A4 440
+#define A4s 466
+#define B4 494
+#define C5 523
+#define C5s 554
+#define D5 587
+#define D5s 622
+#define E5 659
+#define F5 698
+#define F5s 740
+#define G5 784
+#define G5s 831
+#define A5 880
+#define A5s 932
+#define B5 988
+#define C6 1047
 /* USER CODE END Private defines */
 
 /* USER CODE BEGIN Private variables */
@@ -82,6 +118,25 @@ static const MusicalNote twinkle_star_full_melody[] = {
     {NOTE_D5, DURATION_QUARTER}, {NOTE_D5, DURATION_QUARTER}, {NOTE_C5, DURATION_HALF}
 };
 
+// Approximate 8-bar right-hand melody for "哈基米哈基米"
+// Uses mostly eighth notes, with a longer note at the very end.
+// Make sure you have DURATION_EIGHTH defined in your code.
+
+static const MusicalNote hajimi_melody_8bars[] = {
+    // Bar 1
+    {NOTE_E5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER}, 
+        {NOTE_E5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER},     
+        {NOTE_E5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER}, 
+        {NOTE_E5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER}, 
+        {NOTE_E5, DURATION_QUARTER}, {NOTE_G5, DURATION_QUARTER}, {NOTE_A5, DURATION_QUARTER}, 
+    {NOTE_C5, DURATION_QUARTER}, {NOTE_D5, DURATION_QUARTER}, {NOTE_E5, DURATION_HALF}, 
+    {NOTE_D5, DURATION_QUARTER}, {NOTE_C5, DURATION_QUARTER}, {NOTE_A4, DURATION_QUARTER}, 
+    {NOTE_D5, DURATION_HALF},
+    
+
+};
+
+
 /**
  * @brief Calculate PWM parameters
  * @param frequency Target frequency
@@ -131,6 +186,8 @@ void Buzzer_Init(void)
         buzzer_initialized = true;
     }
 }
+
+
 
 /**
  * @brief Start buzzer
@@ -238,10 +295,10 @@ void Buzzer_Update(void)
     }
     
     uint32_t current_time = HAL_GetTick();
-    uint32_t melody_length = sizeof(twinkle_star_full_melody) / sizeof(MusicalNote);
+    uint32_t melody_length = sizeof(hajimi_melody_8bars) / sizeof(MusicalNote);
     
     // Check if current note duration has elapsed
-    if (current_time - music_note_start_time >= music_note_duration) {
+    if (music_playing && (current_time - music_note_start_time >= music_note_duration) ){
         // Stop current note
         Buzzer_Stop();
         
@@ -255,9 +312,9 @@ void Buzzer_Update(void)
         }
         
         // Start next note
-        Buzzer_Start(twinkle_star_full_melody[music_note_index].frequency);
+        Buzzer_Start(hajimi_melody_8bars[music_note_index].frequency);
         music_note_start_time = current_time;
-        music_note_duration = twinkle_star_full_melody[music_note_index].duration;
+        music_note_duration = hajimi_melody_8bars[music_note_index].duration;
     }
 }
 

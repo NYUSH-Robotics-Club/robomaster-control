@@ -20,19 +20,24 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_CONTROL_DT              (0.005f)
 #define YAW_CONTROL_ENC_MAX         (8192.0f)
 #define YAW_CONTROL_TICKS_PER_RAD  (YAW_CONTROL_ENC_MAX / (2.0f * (float)M_PI))
-#define YAW_CONTROL_COUNTER_GAIN   (1.4f)
-#define YAW_CONTROL_RATE_FEEDBACK  (0.8f)
+#define YAW_CONTROL_COUNTER_GAIN   (0.0f)
+#define YAW_CONTROL_RATE_FEEDBACK  (0.0f)
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
-#define YAW_CONTROL_JOY_SENSITIVITY (20.0f)
+#define YAW_CONTROL_JOY_SENSITIVITY (80.0f)
 #define YAW_CONTROL_JOY_RAMP_ALPHA  (0.10f)
 
+
 // PID parameters
-#define YAW_KP (10.0f)
-#define YAW_KI (0.05f)
-#define YAW_KD (0.1f)
+#define YAW_KP (2.0f)
+#define YAW_KI (0.00f)
+#define YAW_KD (0.3f)
+#define YAW_SPEED_KP (4.0f)
+#define YAW_SPEED_KI (0.00f)
+#define YAW_SPEED_KD (0.8f)
+#define CURRENT_LIMIT (25000.0f)
 #define PITCH_KP (11.0f)
 #define PITCH_KI (0.0f)
-#define PITCH_KD (0.1f)
+#define PITCH_KD (0.5f)
 #define INITIAL_PITCH_ANGLE (-1.0f)
 #define INITIAL_YAW_ANGLE (0.0f)
 
@@ -96,23 +101,17 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized)
     if (!yaw || !yaw->angle_inited) return 0;
 
     // Apply low-pass filter to smooth joystick input (already normalized -1.0 to 1.0)
-    static float joy_smoothed = 0.0f;
-    joy_smoothed = YAW_CONTROL_JOY_RAMP_ALPHA * rate_normalized + (1.0f - YAW_CONTROL_JOY_RAMP_ALPHA) * joy_smoothed;
+    
+    float g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * sensor_data->g_gz +
+                       (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * yaw->w_chasis_raw;
+    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
 
-    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * joy_smoothed;
+    const float c_gz = sensor_data->c_gz;
 
-    static float g_gz_filt = 0.0f;
-    const float g_gz = sensor_data.g_gz;
-    const float c_gz = sensor_data.c_gz * (float)M_PI / 180.0f;
 
-    g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * g_gz + (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * g_gz_filt;
-    if(fabsf(g_gz) < 0.1f){
-        g_gz_filt = 0.0f;
-    }
-
-    float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz - YAW_CONTROL_RATE_FEEDBACK * g_gz_filt)
-                       * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
-    yaw->angle_target += dYaw_ticks;
+    // float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz)
+    //                    * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
+    yaw->angle_target -= c_gz/4.6f; // Counteract drift
 
     if (yaw->angle_target >= YAW_CONTROL_ENC_MAX)
         yaw->angle_target -= YAW_CONTROL_ENC_MAX;
@@ -120,48 +119,44 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized)
         yaw->angle_target += YAW_CONTROL_ENC_MAX;
 
     const float current = (float)yaw->angle_raw;
-    float raw_err = yaw->angle_target - current;
-    if(-50 < raw_err && raw_err < 50){
-        raw_err = 0.0f;
+    float angle_error = yaw->angle_target - current;
+    if(-50 < angle_error && angle_error < 50){
+        angle_error = 0.0f;
     }
 
-    if (raw_err >  YAW_CONTROL_ENC_MAX / 2.0f) raw_err -= YAW_CONTROL_ENC_MAX;
-    if (raw_err < -YAW_CONTROL_ENC_MAX / 2.0f) raw_err += YAW_CONTROL_ENC_MAX;
+    if (angle_error >  YAW_CONTROL_ENC_MAX / 2.0f) angle_error -= YAW_CONTROL_ENC_MAX;
+    if (angle_error < -YAW_CONTROL_ENC_MAX / 2.0f) angle_error += YAW_CONTROL_ENC_MAX;
 
-    float cmd = PID_Calculate(&yaw->angle_pid, raw_err, 0.0f);
+   
 
-    if (cmd >  25000.0f) cmd =  25000.0f;
-    if (cmd < -25000.0f) cmd = -25000.0f;
+    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
 
+    
+    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
+    if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
+    if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
+    
+    
     // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
     uint32_t timestamp = HAL_GetTick();
     
     
-    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
                    timestamp,
                    yaw->angle_target,
                    current,
                    yaw->speed_rpm,
-                   cmd,
+                   cmd_speed_to_current,
+                   cmd_angle_to_speed,
                    rate_normalized,
-                   joy_smoothed,
-                   raw_err,
+                   angle_error,
                    g_gz_filt,
                    c_gz);
 
-    return (int16_t)cmd;
+    return (int16_t)cmd_speed_to_current;
 }
 
-void GimbalController_TargetAngleCorrection(void)
-{
-    GM6020_MotorContext *c = GM6020_GetContext(GIMBAL_YAW_ID);
-    if (!c) return;
-    
-    c->w_chasis_raw = sensor_data.c_gz;
-    c->angle_correction = c->w_chasis_raw / 900.0f / (2.0f * (float)M_PI) * c->angle_max / 120.0f;
-    // USB_CDC_Printf("Chasis Wz: %d | Angle Corr: %d|Head Wz: %f\r\n", 
-    //                (int)c->w_chasis_raw, (int)c->angle_correction, (float)sensor_data->g_gz);
-}
+
 
 // Application layer: Message subscription callbacks
 static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
@@ -208,6 +203,13 @@ void GimbalApp_Init(void) {
     memset(&sensor_data, 0, sizeof(sensor_data));
     
     
+    // Initialize gimbal controller
+    GimbalController_Init(
+        YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE,
+        PITCH_KP, PITCH_KI, PITCH_KD, INITIAL_PITCH_ANGLE
+    );
+
+    Speed_PID_Init(GIMBAL_YAW_ID, YAW_SPEED_KP, YAW_SPEED_KI, YAW_SPEED_KD);
     
     Motor_Init(GIMBAL_YAW_ID, YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE);
     Motor_Init(GIMBAL_PITCH_ID, PITCH_KP, PITCH_KI, PITCH_KD, INITIAL_PITCH_ANGLE);
