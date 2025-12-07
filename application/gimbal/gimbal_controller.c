@@ -23,6 +23,7 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
 #define YAW_CONTROL_JOY_SENSITIVITY (80.0f)
 #define YAW_CONTROL_JOY_RAMP_ALPHA  (0.10f)
+#define YAW_RPM_MAX (300.0f)
 
 
 // PID parameters
@@ -38,6 +39,10 @@ extern CAN_HandleTypeDef hcan2;
 #define PITCH_KD (2.0f)
 #define INITIAL_PITCH_ANGLE (-1.0f)
 #define INITIAL_YAW_ANGLE (0.0f)
+
+#define YAW_SETTLING_THRESHOLD (200.0f)  // Error threshold for "near target"
+#define YAW_SETTLING_SPEED_LIMIT (10.0f) // Max speed when near target
+#define YAW_VELOCITY_DAMPING_GAIN (0.5f) // Derivative on velocity, not error
 
 // Static state for application
 static GimbalCmd s_last_cmd;
@@ -94,6 +99,8 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
 
     float cmd = PID_Calculate(&c->angle_pid, error, 0.0f);
 
+
+    
     if(id == PITCH_ID){
         float ang01 = current_angle / c->max_encoder;
         float ang_rad = ang01 * (2.0f * (float)M_PI);
@@ -111,71 +118,64 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
     if (!yaw || !yaw->angle_inited) return 0;
 
-    
-    // Apply low-pass filter to smooth joystick input (already normalized -1.0 to 1.0)
-   
+    // Filter gyro
     float g_gz_filt = YAW_CONTROL_GYRO_LPF_ALPHA * sensor_data->g_gz +
-                       (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * yaw->w_chasis_raw;
+                      (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA) * yaw->w_chasis_raw;
 
+    // Joystick → target angle
+    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
 
-     yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
-    
+    // Counter-rotation compensation
+    yaw->angle_target -= sensor_data->c_gz / 4.75f;
 
-
-    const float c_gz = sensor_data->c_gz;
-
-
-    // float dYaw_ticks = (-YAW_CONTROL_COUNTER_GAIN * c_gz)
-    //                    * YAW_CONTROL_TICKS_PER_RAD * YAW_CONTROL_DT;
-    yaw->angle_target -= c_gz/4.6f;
-
-   
-
-    if ((s_last_cmd.yaw_rate_memo!=0.0f)&&((rate_normalized <=0.5f)||(rate_normalized>=-0.5f))){
-     
-            if (s_last_cmd.yaw_rate_memo>0.0f){
-            yaw->angle_target -= 250.0f;
-            } 
-            else if (s_last_cmd.yaw_rate_memo<0.0f){
-            yaw->angle_target += 250.0f;
-
-           }
-       
-    }
-        
-     
-
-
+    // Wrap target into encoder range
     if (yaw->angle_target >= YAW_CONTROL_ENC_MAX)
         yaw->angle_target -= YAW_CONTROL_ENC_MAX;
     else if (yaw->angle_target < 0)
         yaw->angle_target += YAW_CONTROL_ENC_MAX;
 
-    const float current = (float)yaw->angle_raw;
+    float current = yaw->angle_raw;
     float angle_error = yaw->angle_target - current;
-    if(-50 < angle_error && angle_error < 50){
-        angle_error = 0.0f;
-    }
 
+    // small deadband
+    if (fabsf(angle_error) < 10.0f)
+        angle_error = 0.0f;
+
+    // wrap error into [-ENC_MAX/2, ENC_MAX/2]
     if (angle_error >  YAW_CONTROL_ENC_MAX / 2.0f) angle_error -= YAW_CONTROL_ENC_MAX;
     if (angle_error < -YAW_CONTROL_ENC_MAX / 2.0f) angle_error += YAW_CONTROL_ENC_MAX;
 
-   
+    // ==========================
+    // OUTER LOOP: angle → speed
+    // ==========================
+    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, angle_error, 0.0f);
 
-    float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
+    // Limit speed when near target to avoid hunting
+    if (fabsf(angle_error) < YAW_SETTLING_THRESHOLD)
+    {
+        float L = YAW_SETTLING_SPEED_LIMIT;
+        if (cmd_angle_to_speed >  L) cmd_angle_to_speed =  L;
+        if (cmd_angle_to_speed < -L) cmd_angle_to_speed = -L;
+    }
 
+    // Clamp commanded RPM
+    if (cmd_angle_to_speed >  YAW_RPM_MAX) cmd_angle_to_speed =  YAW_RPM_MAX;
+    if (cmd_angle_to_speed < -YAW_RPM_MAX) cmd_angle_to_speed = -YAW_RPM_MAX;
 
+    // ==========================
+    // INNER LOOP: speed → current
+    // ==========================
+    float cmd_speed_to_current =
+        PID_RPM_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
 
-
-    
-    float cmd_speed_to_current = PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
+    // Clamp current
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
     if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
-    
-    
-    // Print CSV data for debugging: timestamp, target_angle, current_angle, speed_rpm, cmd, rate_input, joy_smoothed, error, g_gz, c_gz
+
+    // LOGGING (unchanged format)
     uint32_t timestamp = HAL_GetTick();
     last_data(rate_normalized, yaw->angle_target);
+
     USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
                    timestamp,
                    yaw->angle_target,
@@ -183,14 +183,13 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
                    yaw->speed_rpm,
                    cmd_speed_to_current,
                    cmd_angle_to_speed,
-                   rate_normalized,
+                   rate_normalized * 300,
                    angle_error,
                    g_gz_filt,
-                   c_gz);
+                   sensor_data->c_gz);
 
     return (int16_t)cmd_speed_to_current;
 }
-
 
 
 // Application layer: Message subscription callbacks

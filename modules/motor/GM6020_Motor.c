@@ -86,7 +86,7 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
     c->max_encoder = 8192.0f;
   }
   //PID_Init(&c->speed_pid, 5.0, KI, KD, 30000.0f, 25000.0f);
-  PID_Init(&c->angle_pid, KP, KI, KD, 30000.0f, 25000.0f);
+  PID_Init(&c->angle_pid, KP, KI, KD, 300.0f, 100.0f);
   PID_Reset(&c->angle_pid);
   //PID_Reset(&c->speed_pid);
 }
@@ -95,7 +95,7 @@ void Speed_PID_Init(uint8_t id, float KP, float KI, float KD)
 {
   if (id < 1 || id > 7) return;
   GM6020_MotorContext *c = &g_ctx[id-1];
-  PID_Init(&c->speed_pid, KP, KI, KD, 30000.0f, 25000.0f);
+  PID_Init(&c->speed_pid, KP, KI, KD, 20000.0f, 3000.0f);
   PID_Reset(&c->speed_pid);
 }
 
