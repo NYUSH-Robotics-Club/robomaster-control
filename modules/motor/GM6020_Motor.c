@@ -37,12 +37,6 @@ typedef struct {
     float initial_angle;
 } GM6020_Init_Config_s;
 
-void* GM6020_Register(const GM6020_Init_Config_s *conf)
-{
-    if (!conf) return NULL;
-    Motor_Init(conf->id, conf->kp, conf->ki, conf->kd, conf->initial_angle);
-    return (void*)&g_ctx[conf->id - 1];
-}
 
 GM6020_MotorContext* GM6020_GetContext(uint8_t id)
 {
@@ -56,7 +50,7 @@ bool GM6020_IsInitialized(uint8_t id)
     return g_ctx[id-1].angle_inited != 0;
 }
 
-void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
+void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle, float output_max, float integral_max)
 {
   if (!g_subscribed) {
     (void)MsgCenter_Subscribe(TOPIC_GM6020_FEEDBACK, on_gm6020_feedback, NULL);
@@ -85,17 +79,16 @@ void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle)
     c->angle_max = 8192.0f;
     c->max_encoder = 8192.0f;
   }
-  //PID_Init(&c->speed_pid, 5.0, KI, KD, 30000.0f, 25000.0f);
-  PID_Init(&c->angle_pid, KP, KI, KD, 300.0f, 100.0f);
+  PID_Init(&c->angle_pid, KP, KI, KD, output_max, integral_max);
   PID_Reset(&c->angle_pid);
   //PID_Reset(&c->speed_pid);
 }
 
-void Speed_PID_Init(uint8_t id, float KP, float KI, float KD)
+void Yaw_Speed_PID_Init(uint8_t id, float KP, float KI, float KD)
 {
   if (id < 1 || id > 7) return;
   GM6020_MotorContext *c = &g_ctx[id-1];
-  PID_Init(&c->speed_pid, KP, KI, KD, 20000.0f, 3000.0f);
+  PID_Init(&c->speed_pid, KP, KI, KD, 30000.0f, 25000.0f);
   PID_Reset(&c->speed_pid);
 }
 

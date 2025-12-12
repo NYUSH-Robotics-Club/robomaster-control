@@ -67,6 +67,7 @@ void GimbalController_TargetAngleCorrection(SensorData* sensor_data);
  */
 void GimbalApp_Init(void);
 
+
 #ifdef __cplusplus
 }
 #endif
