@@ -11,12 +11,9 @@ typedef struct {
   float Ki;
   float Kd;
 
-  float target;
   float actual;
-  float last_actual;
-
-  float error;
-  float last_error;
+  float target;
+  float error[3];
   float integral;
 
   float output;
@@ -27,5 +24,6 @@ typedef struct {
 void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float output_max, float integral_max);
 float PID_Calculate(PID_Controller *pid, float target, float actual);
 void PID_Reset(PID_Controller *pid);
+float PID_RPM_Calculate(PID_Controller *pid, float target_rpm, float actual_rpm);
 #endif // PID_H
 

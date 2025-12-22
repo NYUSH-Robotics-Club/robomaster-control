@@ -6,6 +6,20 @@
 #include "printing.h"
 #include "stm32f4xx_hal.h"
 #include <string.h>
+#include <math.h>
+#include <stdlib.h>
+
+#define SAMPLE_COUNT 10
+#define REFRESH_HZ   200
+#define REFRESH_DT   (1.0 / REFRESH_HZ)
+#define VISION_CMD_TIMEOUT_MS 80u
+
+
+
+
+
+static float yaw_storage=0.0f;
+static uint32_t s_last_yaw_print_tick = 0; // added: rate limiter for CSV prints
 
 // Local state storage
 static RC_ctrl_t s_last_rc;
@@ -106,6 +120,10 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
         s_gimbal_cmd.enabled = false;
         s_gimbal_cmd.pitch_rate = 0.0f;
         s_gimbal_cmd.yaw_rate = 0.0f;
+        s_gimbal_cmd.vision_valid = false;
+        s_gimbal_cmd.vision_yaw_err_rad = 0.0f;
+        s_gimbal_cmd.vision_pitch_err_rad = 0.0f;
+        s_gimbal_cmd.vision_ts_ms = 0;
         return;
     }
     
@@ -116,25 +134,47 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     // Apply deadband and normalize to -1.0 to 1.0
     int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
-    
+
+    if (abs(yaw_storage-yaw_raw)>1000){
+        yaw_raw=yaw_storage;
+    }
+
+          
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
-    s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
+    s_gimbal_cmd.yaw_rate = yaw_raw/ max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
     
-    if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
-        const float vision_gain = 5.0f;
-        
-        float yaw_addition = s_last_vision.yaw * vision_gain;
-        float pitch_addition = s_last_vision.pitch * vision_gain;
-        
-        s_gimbal_cmd.yaw_rate += yaw_addition;
-        s_gimbal_cmd.pitch_rate += pitch_addition;
-        
-        if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
-        if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
-        if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
-        if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
+    if (s_last_vision.updated) {
+        s_last_vision.updated = 0;
+        s_gimbal_cmd.vision_ts_ms = HAL_GetTick();
+        if (s_last_vision.target_state != NO_TARGET) {
+            s_gimbal_cmd.vision_valid = true;
+            s_gimbal_cmd.vision_yaw_err_rad = s_last_vision.yaw;
+            s_gimbal_cmd.vision_pitch_err_rad = s_last_vision.pitch;
+        } else {
+            s_gimbal_cmd.vision_valid = false;
+            s_gimbal_cmd.vision_yaw_err_rad = 0.0f;
+            s_gimbal_cmd.vision_pitch_err_rad = 0.0f;
+        }
+    } else {
+        uint32_t now = HAL_GetTick();
+        if (s_gimbal_cmd.vision_valid && (now - s_gimbal_cmd.vision_ts_ms > VISION_CMD_TIMEOUT_MS)) {
+            s_gimbal_cmd.vision_valid = false;
+        }
     }
+    yaw_storage=yaw_raw; 
+    //plot
+    uint32_t timestamp = HAL_GetTick();
+    if(timestamp - s_last_yaw_print_tick >= 100) { // Print at 20 Hz
+        s_last_yaw_print_tick = timestamp;
+        USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%.2f\r\n",
+                   timestamp,
+                   yaw_raw,
+                   s_last_vision.yaw,
+                   s_gimbal_cmd.yaw_rate
+                 );
+    }
+    
 }
 
 void CmdController_Init(void) {
@@ -172,5 +212,7 @@ void CmdController_Task(uint32_t current_tick) {
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));
     (void)MsgCenter_Publish(TOPIC_SHOOT_CMD, &s_shoot_cmd, sizeof(s_shoot_cmd));
     (void)MsgCenter_Publish(TOPIC_GIMBAL_CMD, &s_gimbal_cmd, sizeof(s_gimbal_cmd));
+
+    
 }
 

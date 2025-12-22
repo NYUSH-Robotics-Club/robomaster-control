@@ -17,7 +17,13 @@ extern "C" {
 typedef struct {
     bool enabled;              // Gimbal control enabled
     float pitch_rate;          // Pitch angular rate command (-1.0 to 1.0, normalized)
-    float yaw_rate;            // Yaw angular rate command (-1.0 to 1.0, normalized)
+    float yaw_rate; 
+    float yaw_rate_memo;
+    float yaw_target_memo;           // Yaw angular rate command (-1.0 to 1.0, normalized)
+    bool vision_valid;
+    float vision_yaw_err_rad;
+    float vision_pitch_err_rad;
+    uint32_t vision_ts_ms;
 } GimbalCmd;
 
 /**
@@ -34,6 +40,8 @@ typedef struct {
 void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
                            float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle);
 
+void last_data(float last_yaw_rate, float last_yaw_target);
+
 /**
  * @brief Pitch control with normalized rate command
  * @param id Motor ID (7=Pitch)
@@ -41,6 +49,7 @@ void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_i
  * @param sensor_data Sensor data pointer
  * @return Motor current command
  */
+
 int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data);
 
 /**
@@ -61,6 +70,7 @@ void GimbalController_TargetAngleCorrection(SensorData* sensor_data);
  * @brief Initialize gimbal application (message subscriptions and control)
  */
 void GimbalApp_Init(void);
+
 
 #ifdef __cplusplus
 }

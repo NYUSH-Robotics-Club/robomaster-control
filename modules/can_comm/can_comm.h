@@ -25,6 +25,7 @@ typedef struct {
     uint16_t angle;
     int16_t  speed;
     uint32_t tick_ms;
+    int16_t   current; 
 } GM6020FeedbackEvent;
 
 #endif // CAN_COMM_H
