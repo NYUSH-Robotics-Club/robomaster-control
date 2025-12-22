@@ -33,7 +33,7 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_SPEED_KP  (30.0f)
 #define YAW_SPEED_KI  (0.10f)
 #define YAW_SPEED_KD  (3.0f)
-#define CURRENT_LIMIT (25000.0f)
+#define CURRENT_LIMIT (25000.0f) * 2.0f
 #define PITCH_KP (20.0f)
 #define PITCH_KI (0.0f)
 #define PITCH_KD (2.0f)
@@ -46,9 +46,9 @@ extern CAN_HandleTypeDef hcan2;
 #define YAW_SETTLING_SPEED_LIMIT (10.0f) // Max speed when near target
 
 
-#define YAW_RPM_MAX               (220.0f)    
-#define YAW_RPM_MIN               (25.0f)    
-#define YAW_ERROR_FOR_FULL_SPEED  (1200.0f) 
+#define YAW_RPM_MAX               (220.0f) * 2.0f
+#define YAW_RPM_MIN               (25.0f) * 2.0f
+#define YAW_ERROR_FOR_FULL_SPEED  (1200.0f) * 2.0f
 // Static state for application
 static GimbalCmd s_last_cmd;
 static SensorData s_last_sensor;
@@ -128,7 +128,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
 
     return (int16_t)cmd;
 }
-
+int16_t x = 0, y = 0;
 int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data)
 {
     GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
@@ -138,7 +138,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     
 
     // Joystick → target angle
-    yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
+    if(x++ % 200 == 0){ y += 8192 / 8; if(y >= 8192) y = 0; }
+    // yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
+    yaw->angle_target = (float)y;
 
     // Counter-rotation compensation
     //yaw->angle_target -= sensor_data->c_gz / 4.75f;
@@ -172,8 +174,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
         ff_scale = abs_err / YAW_ERROR_FOR_FULL_SPEED;  // 0..1
     }
 
-    float speed_ff = rate_normalized * YAW_FF_JOY_RPM_GAIN * ff_scale;
-    cmd_angle_to_speed += speed_ff;
+    // float speed_ff = rate_normalized * YAW_FF_JOY_RPM_GAIN * ff_scale;
+    // cmd_angle_to_speed += speed_ff;
 
     // ---- error-based max rpm (far → fast, near → slow) ----
     float rpm_limit;
@@ -203,7 +205,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     // LOGGING (unchanged format)
     uint32_t timestamp = HAL_GetTick();
-    last_data(rate_normalized, yaw->angle_target);
+    // last_data(rate_normalized, yaw->angle_target);
 
     float g_gz_filt = sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
                       s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA);
