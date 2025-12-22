@@ -12,12 +12,12 @@
 #define SAMPLE_COUNT 10
 #define REFRESH_HZ   200
 #define REFRESH_DT   (1.0 / REFRESH_HZ)
+#define VISION_CMD_TIMEOUT_MS 80u
 
 
 
 
 
-static float yaw_raw= 0.0f; 
 static float yaw_storage=0.0f;
 static uint32_t s_last_yaw_print_tick = 0; // added: rate limiter for CSV prints
 
@@ -120,6 +120,10 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
         s_gimbal_cmd.enabled = false;
         s_gimbal_cmd.pitch_rate = 0.0f;
         s_gimbal_cmd.yaw_rate = 0.0f;
+        s_gimbal_cmd.vision_valid = false;
+        s_gimbal_cmd.vision_yaw_err_rad = 0.0f;
+        s_gimbal_cmd.vision_pitch_err_rad = 0.0f;
+        s_gimbal_cmd.vision_ts_ms = 0;
         return;
     }
     
@@ -140,22 +144,24 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     s_gimbal_cmd.yaw_rate = yaw_raw/ max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
     
-   
-    if (s_last_vision.updated && s_last_vision.target_state != NO_TARGET) {
-    const float vision_gain = 5.0f;
-        
-    float yaw_addition = s_last_vision.yaw * vision_gain;
-    float pitch_addition = s_last_vision.pitch * vision_gain;
-        
-    s_gimbal_cmd.yaw_rate += yaw_addition;
-    s_gimbal_cmd.pitch_rate += pitch_addition;
-        
-    if (s_gimbal_cmd.yaw_rate > 1.0f) s_gimbal_cmd.yaw_rate = 1.0f;
-    if (s_gimbal_cmd.yaw_rate < -1.0f) s_gimbal_cmd.yaw_rate = -1.0f;
-    if (s_gimbal_cmd.pitch_rate > 1.0f) s_gimbal_cmd.pitch_rate = 1.0f;
-    if (s_gimbal_cmd.pitch_rate < -1.0f) s_gimbal_cmd.pitch_rate = -1.0f;
-    
-     }
+    if (s_last_vision.updated) {
+        s_last_vision.updated = 0;
+        s_gimbal_cmd.vision_ts_ms = HAL_GetTick();
+        if (s_last_vision.target_state != NO_TARGET) {
+            s_gimbal_cmd.vision_valid = true;
+            s_gimbal_cmd.vision_yaw_err_rad = s_last_vision.yaw;
+            s_gimbal_cmd.vision_pitch_err_rad = s_last_vision.pitch;
+        } else {
+            s_gimbal_cmd.vision_valid = false;
+            s_gimbal_cmd.vision_yaw_err_rad = 0.0f;
+            s_gimbal_cmd.vision_pitch_err_rad = 0.0f;
+        }
+    } else {
+        uint32_t now = HAL_GetTick();
+        if (s_gimbal_cmd.vision_valid && (now - s_gimbal_cmd.vision_ts_ms > VISION_CMD_TIMEOUT_MS)) {
+            s_gimbal_cmd.vision_valid = false;
+        }
+    }
     yaw_storage=yaw_raw; 
     //plot
     uint32_t timestamp = HAL_GetTick();

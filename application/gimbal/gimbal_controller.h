@@ -20,6 +20,10 @@ typedef struct {
     float yaw_rate; 
     float yaw_rate_memo;
     float yaw_target_memo;           // Yaw angular rate command (-1.0 to 1.0, normalized)
+    bool vision_valid;
+    float vision_yaw_err_rad;
+    float vision_pitch_err_rad;
+    uint32_t vision_ts_ms;
 } GimbalCmd;
 
 /**

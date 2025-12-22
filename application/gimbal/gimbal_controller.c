@@ -153,7 +153,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     float angle_error = yaw->angle_target - current;
 
     // small deadband
-    if (fabsf(angle_error) < 10.0f)
+    if (fabsf(angle_error) < 1.0f)
         angle_error = 0.0f;
 
     // wrap error into [-ENC_MAX/2, ENC_MAX/2]
@@ -231,13 +231,41 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
         
         // Execute gimbal control when command arrives
         if (s_last_cmd.enabled) {
+            static bool s_yaw_vision_active = false;
+            bool use_vision_target = s_last_cmd.vision_valid;
+
+            // Continuous angle control: update target angle every cycle when vision is valid
+            if (use_vision_target) {
+                GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
+                GM6020_MotorContext *pitch = GM6020_GetContext(GIMBAL_PITCH_ID);
+
+                if (yaw && yaw->angle_inited && yaw->max_encoder > 0.0f) {
+                    const float ticks_per_rad = yaw->max_encoder / (2.0f * (float)M_PI);
+                    float err_ticks = s_last_cmd.vision_yaw_err_rad * ticks_per_rad;
+                    // Update target angle continuously based on current angle + vision error
+                    yaw->angle_target = (float)yaw->angle_raw + err_ticks;
+                    while (yaw->angle_target >= yaw->max_encoder) yaw->angle_target -= yaw->max_encoder;
+                    while (yaw->angle_target < 0.0f) yaw->angle_target += yaw->max_encoder;
+                    
+                    if (!s_yaw_vision_active) {
+                        PID_Reset(&yaw->angle_pid);
+                        PID_Reset(&yaw->speed_pid);
+                    }
+                    s_yaw_vision_active = true;
+                }
+
+                (void)pitch;
+            } else {
+                s_yaw_vision_active = false;
+            }
+
             int16_t pitch_current = GimbalController_PitchControl(
                 GIMBAL_PITCH_ID, 
-                s_last_cmd.pitch_rate, 
+                use_vision_target ? 0.0f : s_last_cmd.pitch_rate, 
                 &s_last_sensor
             );
             int16_t yaw_current = GimbalController_YawControlWithCompensation(
-                s_last_cmd.yaw_rate, 
+                use_vision_target ? 0.0f : s_last_cmd.yaw_rate, 
                 &s_last_sensor
             );
             
