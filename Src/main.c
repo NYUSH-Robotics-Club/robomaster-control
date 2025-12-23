@@ -157,7 +157,7 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
   MX_TIM4_Init();
-
+  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
   BMI088_init();
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
@@ -221,8 +221,8 @@ int main(void)
 	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
     /* USER CODE END WHILE */
-  }
-  /* USER CODE BEGIN 3 */
+
+    /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
 }
 
