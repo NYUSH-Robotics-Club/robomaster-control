@@ -27,8 +27,8 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP        (0.25f)      // was 0.5f
-#define YAW_KI        (0.0008f)   // was 0.002f (x ~13 smaller)
+#define YAW_KP        (0.45f)
+#define YAW_KI        (0.0025f)
 #define YAW_KD        (0.04f)
 #define YAW_SPEED_KP  (30.0f)
 #define YAW_SPEED_KI  (0.10f)
@@ -47,8 +47,8 @@ extern CAN_HandleTypeDef hcan2;
 
 
 #define YAW_RPM_MAX               (220.0f) * 2.0f
-#define YAW_RPM_MIN               (25.0f) * 2.0f
-#define YAW_ERROR_FOR_FULL_SPEED  (1200.0f) * 2.0f
+#define YAW_RPM_MIN               (80.0f) * 2.0f
+#define YAW_ERROR_FOR_FULL_SPEED  (1200.0f)
 // Static state for application
 static GimbalCmd s_last_cmd;
 static SensorData s_last_sensor;
@@ -138,8 +138,9 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     
 
     // Joystick → target angle
-    if(x++ % 200 == 0){ y += 8192 / 8; if(y >= 8192) y = 0; }
+    if(x++ % 200 == 0){ y += 8192 / 36; if(y >= 8192) y = 0; }
     // yaw->angle_target += YAW_CONTROL_JOY_SENSITIVITY * rate_normalized;
+
     yaw->angle_target = (float)y;
 
     // Counter-rotation compensation
@@ -166,13 +167,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     // OUTER LOOP: angle → speed
     // ==========================
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
-    float ff_scale;
     float abs_err = fabsf(angle_error);
-    if (abs_err >= YAW_ERROR_FOR_FULL_SPEED) {
-        ff_scale = 1.0f;                      // far away: full FF
-    } else {
-        ff_scale = abs_err / YAW_ERROR_FOR_FULL_SPEED;  // 0..1
-    }
 
     // float speed_ff = rate_normalized * YAW_FF_JOY_RPM_GAIN * ff_scale;
     // cmd_angle_to_speed += speed_ff;
@@ -187,10 +182,10 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     }
 
     // Soft stop zone: when very close, fade speed to zero
-    const float SOFT_STOP_ERR = 300.0f; // ticks
+    const float SOFT_STOP_ERR = 150.0f;
     if (abs_err < SOFT_STOP_ERR) {
         float soft = abs_err / SOFT_STOP_ERR;   // 0..1
-        cmd_angle_to_speed *= soft;            // shrink command as we approach
+        cmd_angle_to_speed *= soft;
     }
 
     // Apply signed clamp
@@ -300,8 +295,8 @@ void GimbalApp_Init(void) {
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
     
     // Initialize gimbal controller
-   
-    Motor_Init(GIMBAL_YAW_ID, YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE, 300.0f, 16000.0f);
+
+    Motor_Init(GIMBAL_YAW_ID, YAW_KP, YAW_KI, YAW_KD, INITIAL_YAW_ANGLE, 300.0f, 300.0f);
     Motor_Init(GIMBAL_PITCH_ID, PITCH_KP, PITCH_KI, PITCH_KD, INITIAL_PITCH_ANGLE, 30000.0f, 25000.0f);
 
 

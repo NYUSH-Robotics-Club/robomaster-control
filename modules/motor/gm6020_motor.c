@@ -88,7 +88,7 @@ void Yaw_Speed_PID_Init(uint8_t id, float KP, float KI, float KD)
 {
   if (id < 1 || id > 7) return;
   GM6020_MotorContext *c = &g_ctx[id-1];
-  PID_Init(&c->speed_pid, KP, KI, KD, 30000.0f, 25000.0f);
+  PID_Init(&c->speed_pid, KP, KI, KD, 30000.0f, 4000.0f);
   PID_Reset(&c->speed_pid);
 }
 
