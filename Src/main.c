@@ -190,7 +190,7 @@ int main(void)
   HAL_Delay(WAIT_ESC_BOOT_MS);
 
   // Play boot beep sound
-  Buzzer_PlayBeep();
+  // Buzzer_PlayBeep();
 
   // Initialize WT61C-TTL IMU sensor on USART1
   
@@ -306,6 +306,12 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     // Restart DMA reception
     HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
     __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
+  }
+  else if (huart == &huart6) {
+    // Process vision communication data (USART6 for vision system)
+    extern void VisionComm_RxCallback(uint8_t *buf, uint32_t len);
+    extern uint8_t uart_recv_buff[18];
+    VisionComm_RxCallback(uart_recv_buff, Size);
   }
 }
 
