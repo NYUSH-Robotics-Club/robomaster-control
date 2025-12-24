@@ -22,13 +22,13 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP        (0.45f)
-#define YAW_KI        (0.0025f)
+#define YAW_KP        (0.70f)
+#define YAW_KI        (0.045f)
 #define YAW_KD        (0.04f)
 #define YAW_SPEED_KP  (30.0f)
-#define YAW_SPEED_KI  (0.10f)
+#define YAW_SPEED_KI  (0.01f)
 #define YAW_SPEED_KD  (3.0f)
-#define CURRENT_LIMIT (25000.0f) * 2.0f
+#define CURRENT_LIMIT (30000.0f)
 #define PITCH_KP (20.0f)
 #define PITCH_KI (0.0f)
 #define PITCH_KD (2.0f)
@@ -36,7 +36,7 @@ extern CAN_HandleTypeDef hcan2;
 #define INITIAL_YAW_ANGLE (0.0f)
 
 #define YAW_RPM_MAX               (220.0f) * 2.0f
-#define YAW_RPM_MIN               (80.0f) * 2.0f
+#define YAW_RPM_MIN               0.0f
 #define YAW_ERROR_FOR_FULL_SPEED  (1200.0f)
 // Static state for application
 static GimbalCmd s_last_cmd;
@@ -128,7 +128,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
 }
 
 // Test mode: generates step signal for tuning
-#define YAW_TEST_MODE 1
+#define YAW_TEST_MODE 0
 
 #if YAW_TEST_MODE
 static int16_t test_counter = 0;
@@ -143,7 +143,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 #if YAW_TEST_MODE
     // Generate step signal for testing (1024 ticks every 1 second)
     if (test_counter++ % 200 == 0) {
-        test_target += 8192 / 8;
+        test_target += 8192 / 18;
         if (test_target >= 8192) test_target = 0;
     }
     yaw->angle_target = (float)test_target;
@@ -165,6 +165,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (fabsf(angle_error) < 1.0f)
         angle_error = 0.0f;
 
+   
     // wrap error into [-ENC_MAX/2, ENC_MAX/2]
     if (angle_error >  YAW_CONTROL_ENC_MAX / 2.0f) angle_error -= YAW_CONTROL_ENC_MAX;
     if (angle_error < -YAW_CONTROL_ENC_MAX / 2.0f) angle_error += YAW_CONTROL_ENC_MAX;
@@ -176,19 +177,31 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     float abs_err = fabsf(angle_error);
 
     // Error-based dynamic speed limiting
-    float rpm_limit;
-    if (abs_err >= YAW_ERROR_FOR_FULL_SPEED) {
-        rpm_limit = YAW_RPM_MAX;
-    } else {
-        float t = abs_err / YAW_ERROR_FOR_FULL_SPEED;       // 0..1
-        rpm_limit = YAW_RPM_MIN + t * (YAW_RPM_MAX - YAW_RPM_MIN);
-    }
+    float rpm_limit =440.0f; // Minimum limit
 
     // Apply signed clamp
     if (cmd_angle_to_speed >  rpm_limit) cmd_angle_to_speed =  rpm_limit;
     if (cmd_angle_to_speed < -rpm_limit) cmd_angle_to_speed = -rpm_limit;
+    
+    
     float cmd_speed_to_current =
         PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
+    // const float KS_MAX = 7000.0f;
+    // const float KS_ON  = 350.0f;
+    // const float KS_OFF = 50.0f;
+
+    // float e = fabsf(angle_error);
+    // float ff = 0.0f;
+
+    // if (e < KS_ON && e > KS_OFF && fabsf(yaw->speed_rpm) < 6.0f) {
+    //     float scale = (e - KS_OFF) / (KS_ON - KS_OFF); // 1 → 0
+    //     ff = scale * KS_MAX;
+    //     if (angle_error < 0) ff = -ff;
+    // }
+
+
+
+    // cmd_speed_to_current += ff;
 
     // Clamp current
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
