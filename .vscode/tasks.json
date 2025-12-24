@@ -15,7 +15,41 @@
             ]
         },
         {
-            "label": "flash: openocd",
+            "label": "pack: elf -> bin",
+            "type": "shell",
+            "dependsOn": "cmake: build",
+            "dependsOrder": "sequence",
+            "command": "arm-none-eabi-objcopy",
+            "args": [
+                "-O",
+                "binary",
+                "${command:cmake.buildDirectory}/NYUSH_Infantry.elf",
+                "${command:cmake.buildDirectory}/NYUSH_Infantry.bin"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "flash: dfu-util",
+            "type": "shell",
+            "dependsOn": "pack: elf -> bin",
+            "dependsOrder": "sequence",
+            "command": "dfu-util",
+            "args": [
+                "-a",
+                "0",
+                "-s",
+                "0x08000000:leave",
+                "-D",
+                "${command:cmake.buildDirectory}/NYUSH_Infantry.bin"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "flash: openocd (stlink)",
             "type": "shell",
             "dependsOn": "cmake: build",
             "dependsOrder": "sequence",
@@ -28,11 +62,7 @@
                 "-c",
                 "init; reset init; program ${command:cmake.buildDirectory}/NYUSH_Infantry.elf verify reset exit"
             ],
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
+            "problemMatcher": []
         }
     ]
 }
