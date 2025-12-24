@@ -8,14 +8,13 @@ Example: python plot_yaw_data.py COM3 115200
 """
 
 import serial
+import serial.tools.list_ports
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from collections import deque
 import sys
 
 # Default serial port settings
-DEFAULT_PORT = 'COM6'
-DEFAULT_PORT = "/dev/tty.usbmodem3064356030341"
 DEFAULT_BAUD = 115200
 
 # Data buffer size (number of points to keep)
@@ -188,15 +187,69 @@ class YawDataPlotter:
                 print("Serial port closed.")
 
 
+def auto_detect_serial_port():
+    """Automatically detect available serial ports and let user choose"""
+    ports = serial.tools.list_ports.comports()
+
+    if not ports:
+        print("No serial ports found!")
+        return None
+
+    # Filter for USB serial ports (common patterns)
+    usb_ports = [p for p in ports if 'usb' in p.device.lower() or 'USB' in p.description]
+
+    # Use all ports if no USB ports found
+    available_ports = usb_ports if usb_ports else ports
+
+    if len(available_ports) == 1:
+        selected_port = available_ports[0].device
+        print(f"Auto-detected serial port: {selected_port}")
+        print(f"Description: {available_ports[0].description}")
+        return selected_port
+
+    # Multiple ports found, let user choose
+    print("Available serial ports:")
+    for i, port in enumerate(available_ports, 1):
+        print(f"  {i}. {port.device} - {port.description}")
+
+    try:
+        choice = input(f"Select port (1-{len(available_ports)}) or press Enter for first port: ").strip()
+        if not choice:
+            selected_port = available_ports[0].device
+        else:
+            idx = int(choice) - 1
+            if 0 <= idx < len(available_ports):
+                selected_port = available_ports[idx].device
+            else:
+                print("Invalid choice, using first port")
+                selected_port = available_ports[0].device
+
+        print(f"Selected: {selected_port}")
+        return selected_port
+    except (ValueError, KeyboardInterrupt):
+        print("\nUsing first available port")
+        return available_ports[0].device
+
+
 def main():
-    port = DEFAULT_PORT
+    # Auto-detect port if not specified in command line
+    port = None
     baudrate = DEFAULT_BAUD
+
     if len(sys.argv) > 1:
         port = sys.argv[1]
     if len(sys.argv) > 2:
         baudrate = int(sys.argv[2])
 
-    print(f"Yaw Motor Data Plotter")
+    # If port not specified, auto-detect
+    if port is None:
+        port = auto_detect_serial_port()
+        if port is None:
+            print("Failed to detect serial port. Please specify manually.")
+            print("Usage: python plot_yaw_data.py [COM_PORT] [BAUD_RATE]")
+            return
+
+    print(f"\nYaw Motor Data Plotter")
     print(f"Port: {port}, Baudrate: {baudrate}")
     print(f"Looking for CSV data with prefix 'YAW_CSV'\n")
 
