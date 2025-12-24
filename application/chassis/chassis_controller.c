@@ -85,14 +85,6 @@ void ChassisController_Update(ChassisController *controller, SensorData* sensor_
     Pair speed = to_real_speed(_speed, sensor_data->c_yaw, omega);
     float vx = speed.x, vy = speed.y;
 
-    if(fabs(omega) < 1e-2f && (fabs(vx) > 1e-2f || fabs(vy) > 1e-2f)) {
-        // if(abs(sensor_data->c_gz) > 1) {
-            USB_CDC_Printf("1 - c_gz: %d | omega: %.2f\n", sensor_data->c_gz, omega);
-            omega = -(sensor_data->c_gz * 22.0f);
-        // }
-            USB_CDC_Printf("2 - c_gz: %d | omega: %.2f\n", sensor_data->c_gz, omega);
-    }
-
     controller->target_speeds[0] = MOTOR_DIR[0] * (vx - vy + omega);
     controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy - omega);
     controller->target_speeds[2] = MOTOR_DIR[2] * (vx - vy - omega);

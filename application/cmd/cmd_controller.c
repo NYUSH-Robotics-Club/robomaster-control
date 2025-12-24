@@ -85,8 +85,8 @@ static void process_chassis_command(const RC_ctrl_t *rc) {
 
     // Convert to normalized values (-1.0 to 1.0)
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
-    s_chassis_cmd.vx = (float)vx_raw / max_input;
-    s_chassis_cmd.vy = (float)vy_raw / max_input;
+    s_chassis_cmd.vx = -(float)vx_raw / max_input;
+    s_chassis_cmd.vy = -(float)vy_raw / max_input;
     s_chassis_cmd.wz = (float)wz_raw / max_input;
     
     // Enable chassis if any joystick is moved

@@ -32,8 +32,8 @@ extern CAN_HandleTypeDef hcan2;
 #define PITCH_KP (20.0f)
 #define PITCH_KI (0.0f)
 #define PITCH_KD (2.0f)
-#define INITIAL_PITCH_ANGLE (-1.0f)
-#define INITIAL_YAW_ANGLE (0.0f)
+#define INITIAL_PITCH_ANGLE (3370.0f)  // 对齐位置编码器值（2025-12-25标定）
+#define INITIAL_YAW_ANGLE (2183.0f)    // 对齐位置编码器值（2025-12-25标定）
 
 #define YAW_RPM_MAX               (220.0f) * 2.0f
 #define YAW_RPM_MIN               0.0f
@@ -274,6 +274,23 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
             // Send CAN commands
             CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, pitch_current);
             CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, yaw_current);
+
+            // 输出编码器值到CDC串口 (20Hz更新率)
+            static uint32_t last_encoder_print = 0;
+            uint32_t now = HAL_GetTick();
+            if (now - last_encoder_print >= 50) {
+                last_encoder_print = now;
+                GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
+                GM6020_MotorContext *pitch = GM6020_GetContext(GIMBAL_PITCH_ID);
+                if (yaw && pitch) {
+                    USB_CDC_Printf("ENCODER,%lu,%d,%d,%.2f,%.2f\r\n",
+                                   now,
+                                   yaw->angle_raw,
+                                   pitch->angle_raw,
+                                   yaw->angle_target,
+                                   pitch->angle_target);
+                }
+            }
         } else {
             // Gimbal disabled, send zero current
             CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, 0);
