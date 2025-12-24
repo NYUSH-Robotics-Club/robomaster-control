@@ -148,7 +148,7 @@ class YawDataPlotter:
         """Update plot dynamically with auto-scaling"""
         self.read_serial_data()
         if not self.time_data:
-            return
+            return []
 
         t = list(self.time_data)
 

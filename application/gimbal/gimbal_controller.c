@@ -22,7 +22,7 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP        (1.0f)
+#define YAW_KP        (0.45f)
 #define YAW_KI        (0.0025f)
 #define YAW_KD        (0.04f)
 #define YAW_SPEED_KP  (30.0f)
@@ -51,6 +51,14 @@ void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_i
     Motor_Init(GIMBAL_PITCH_ID, pitch_kp, pitch_ki, pitch_kd, pitch_initial_angle, 30000.0f, 25000.0f);
 }
 
+// Test mode: generates step signal for tuning
+#define PITCH_TEST_MODE 0
+
+#if PITCH_TEST_MODE
+static int16_t pitch_test_counter = 0;
+static int16_t pitch_test_step = 0;
+#endif
+
 int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data)
 {
     (void)sensor_data;  // Not used for pitch
@@ -60,11 +68,20 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
         return 0;
     }
 
-    // Sensitivity: how much angle to add per control cycle for full stick deflection
+#if PITCH_TEST_MODE
+    // Generate step signal for pitch testing
+    // Pitch range: 1000 - 4000 ticks (3000 tick range)
+    // Create steps: 1500 -> 2500 -> 3500 -> 2500 -> 1500 (1000 tick steps)
+    if (pitch_test_counter++ % 200 == 0) {
+        const float steps[] = {1500.0f, 2500.0f, 3500.0f, 2500.0f};
+        pitch_test_step = (pitch_test_step + 1) % 4;
+        c->angle_target = steps[pitch_test_step];
+    }
+#else
+    // Normal joystick control
     float sensitivity = 40.0f;
-
-    // Update target angle based on normalized rate command (-1.0 to 1.0)
     c->angle_target += c->pitch_direction * sensitivity * rate_normalized;
+#endif
 
     if(id == PITCH_ID){
         if (c->angle_target > c->angle_max)
@@ -126,7 +143,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 #if YAW_TEST_MODE
     // Generate step signal for testing (1024 ticks every 1 second)
     if (test_counter++ % 200 == 0) {
-        test_target += 8192 / 36;
+        test_target += 8192 / 8;
         if (test_target >= 8192) test_target = 0;
     }
     yaw->angle_target = (float)test_target;
