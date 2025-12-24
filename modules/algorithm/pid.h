@@ -19,6 +19,23 @@ typedef struct {
   float output;
   float output_max;
   float integral_max;
+  
+  // Added fields for improved PID calculation
+  float last_measure;
+  float last_output;
+  float last_dout;
+  
+  float pout;
+  float iout;
+  float dout;
+  float iterm;
+  
+  float dt;
+  uint32_t last_time_us;
+  
+  // Low-pass filter RC constants
+  float output_lpf_rc;
+  float derivative_lpf_rc;
 } PID_Controller;
 
 void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float output_max, float integral_max);
