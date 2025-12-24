@@ -24,5 +24,17 @@ Firmware and tooling for the NYUSH Robotics Club RoboMaster C Board (STM32F4).
 
 ## Build & flash (summary)
 
-- Build: use CMake Tools in VS Code (see Setup Guide Step 5)
-- Flash: use STM32CubeProgrammer via USB (see Setup Guide Step 6)
+### Build
+- Use CMake Tools in VS Code (see Setup Guide Step 5)
+- Or use VSCode tasks: `Ctrl+Shift+B` / `Cmd+Shift+B`
+
+### Flash
+Two methods available:
+
+1. **STM32CubeProgrammer** (GUI method)
+   - Use STM32CubeProgrammer via USB (see Setup Guide Step 6)
+
+2. **VSCode Tasks** (command-line method)
+   - `flash: dfu-util` - Flash via USB using DFU mode (default build task)
+   - `flash: openocd (stlink)` - Flash using ST-Link debugger
+   - See Setup Guide Step 7 for detailed instructions
