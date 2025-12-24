@@ -2,7 +2,11 @@
 #define VISION_COMM_H
 
 #include "main.h"
+#include "usart.h"
 #include <stdint.h>
+
+// Vision communication UART handle
+#define VISION_UART_HANDLE huart6
 
 #define VISION_RECV_SIZE 18u
 #define VISION_SEND_SIZE 36u
@@ -91,7 +95,7 @@ typedef struct
 #pragma pack()
 
 /**
- * @brief Initialize vision communication module (using USB VCP)
+ * @brief Initialize vision communication module (using USART6)
  * @return Pointer to receive data structure
  */
 Vision_Recv_s *VisionComm_Init(void);
@@ -124,11 +128,16 @@ void VisionComm_SetAltitude(float yaw, float pitch, float roll);
 Vision_Recv_s *VisionComm_GetData(void);
 
 /**
- * @brief USB receive callback function (called in usbd_cdc_if.c)
+ * @brief UART receive callback function (called in UART interrupt)
  * @param buf Receive buffer
  * @param len Receive data length
  */
 void VisionComm_RxCallback(uint8_t *buf, uint32_t len);
+
+/**
+ * @brief Start UART reception for vision communication
+ */
+void VisionComm_StartReceive(void);
 
 #endif // VISION_COMM_H
 
