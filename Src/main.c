@@ -65,6 +65,8 @@
 #define CMD_REFRESH_INTERVAL_MS         (5U)
 // RC loss timeout for health gating
 #define RC_LOSS_TIMEOUT_MS              (200U)
+// USART6 hello message send interval
+#define USART6_SEND_INTERVAL_MS         (1000U)
 
 /* USER CODE END PD */
 
@@ -91,6 +93,9 @@ static uint8_t wt61c_rxbuf[RX_DMA_BUF_SZ];
 // Message center buffer
 #define MSG_CENTER_QUEUE_LEN 128
 static MsgEvent g_msg_queue[MSG_CENTER_QUEUE_LEN];
+
+// USART6 periodic send timer
+static uint32_t last_usart6_send_tick = 0;
 
 /* USER CODE END PV */
 
@@ -157,7 +162,7 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
   MX_TIM4_Init();
-
+  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
   BMI088_init();
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
@@ -185,7 +190,7 @@ int main(void)
   HAL_Delay(WAIT_ESC_BOOT_MS);
 
   // Play boot beep sound
-  Buzzer_PlayBeep();
+  // Buzzer_PlayBeep();
 
   // Initialize WT61C-TTL IMU sensor on USART1
   
@@ -209,12 +214,19 @@ int main(void)
     // Process command controller
     LED_SetRGB(1, 0, 0);
     CmdController_Task(current_tick);
-    
+
     // Dispatch message center events
     MsgCenter_Dispatch();
 
     // Update buzzer music playback (feature for fun :D)
     Buzzer_Update();
+
+    // Send "hello" through USART6 periodically
+    if (current_tick - last_usart6_send_tick >= USART6_SEND_INTERVAL_MS)
+    {
+        USART6_SendString("hello\r\n");
+        last_usart6_send_tick = current_tick;
+    }
 
     LED_SetRGB(0, 1, 0);
 
@@ -222,7 +234,7 @@ int main(void)
 
     /* USER CODE END WHILE */
   }
-  /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
 }
 
@@ -294,6 +306,12 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     // Restart DMA reception
     HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
     __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
+  }
+  else if (huart == &huart6) {
+    // Process vision communication data (USART6 for vision system)
+    extern void VisionComm_RxCallback(uint8_t *buf, uint32_t len);
+    extern uint8_t uart_recv_buff[18];
+    VisionComm_RxCallback(uart_recv_buff, Size);
   }
 }
 

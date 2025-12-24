@@ -1,11 +1,10 @@
 /**
  * @file vision_comm.c
- * @brief Vision communication module - using USB VCP
+ * @brief Vision communication module - using USART6
  */
 
 #include "vision_comm.h"
 #include "seasky_protocol.h"
-#include "usbd_cdc_if.h"
 #include "message_center.h"
 #include "gyro_data.h"
 #include "stm32f4xx_hal.h"
@@ -15,52 +14,55 @@
 static Vision_Recv_s recv_data;
 static Vision_Send_s send_data;
 
-// USB receive buffer
-static uint8_t usb_recv_buff[VISION_RECV_SIZE];
+// UART receive buffer (double buffer for DMA/IT mode)
+uint8_t uart_recv_buff[VISION_RECV_SIZE];  // Made non-static for access in HAL callback
+static uint8_t uart_recv_processing[VISION_RECV_SIZE];
 
 // Vision send frequency control (100Hz = 10ms interval)
 #define VISION_SEND_INTERVAL_MS 10
 static uint32_t last_send_time = 0;
 
 /**
- * @brief USB receive callback function (called in usbd_cdc_if.c)
+ * @brief UART receive callback function (called in UART interrupt)
  */
 void VisionComm_RxCallback(uint8_t *buf, uint32_t len)
 {
     uint16_t flag_register;
-    
-    // Copy data to local buffer
+
+    // Copy data to processing buffer
     if (len >= 18 && len <= VISION_RECV_SIZE) {
-        memcpy(usb_recv_buff, buf, len);
-        
+        memcpy(uart_recv_processing, buf, len);
+
         // Parse protocol
-        uint16_t cmd_id = get_protocol_info(usb_recv_buff, 
-                                            &flag_register, 
+        uint16_t cmd_id = get_protocol_info(uart_recv_processing,
+                                            &flag_register,
                                             (uint8_t *)&recv_data.pitch);
-        
+
         if (cmd_id == 0x0001) {
             // Parse flags
             recv_data.fire_mode = (Fire_Mode_e)(flag_register & 0x03);
             recv_data.target_state = (Target_State_e)((flag_register >> 2) & 0x03);
             recv_data.target_type = (Target_Type_e)((flag_register >> 4) & 0x0F);
-            
+
             // Mark data as updated
             recv_data.updated = 1;
-            
+
             // Publish vision data to message center
             (void)MsgCenter_Publish(TOPIC_VISION_DATA, &recv_data, sizeof(Vision_Recv_s));
-            
-            // Comment out debug output to avoid interfering with binary data
-            // static char debug_msg[128];
-            // int msg_len = snprintf(debug_msg, sizeof(debug_msg), 
-            //                       "[RX] pitch=%.3f, yaw=%.3f, mode=%d, state=%d, type=%d\r\n",
-            //                       recv_data.pitch, recv_data.yaw, 
-            //                       recv_data.fire_mode, recv_data.target_state, recv_data.target_type);
-            // if (msg_len > 0) {
-            //     CDC_Transmit_FS((uint8_t*)debug_msg, msg_len);
-            // }
         }
     }
+
+    // Restart reception
+    VisionComm_StartReceive();
+}
+
+/**
+ * @brief Start UART reception for vision communication
+ */
+void VisionComm_StartReceive(void)
+{
+    // Use HAL_UARTEx_ReceiveToIdle_IT for variable length reception
+    HAL_UARTEx_ReceiveToIdle_IT(&VISION_UART_HANDLE, uart_recv_buff, VISION_RECV_SIZE);
 }
 
 /**
@@ -94,10 +96,15 @@ Vision_Recv_s *VisionComm_Init(void)
     // Clear receive and send data
     memset(&recv_data, 0, sizeof(Vision_Recv_s));
     memset(&send_data, 0, sizeof(Vision_Send_s));
-    
+    memset(uart_recv_buff, 0, sizeof(uart_recv_buff));
+    memset(uart_recv_processing, 0, sizeof(uart_recv_processing));
+
     // Subscribe to IMU updates for sending vision data
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
-    
+
+    // Start UART reception
+    VisionComm_StartReceive();
+
     return &recv_data;
 }
 
@@ -129,20 +136,20 @@ void VisionComm_Send(void)
     static uint16_t flag_register;
     static uint8_t send_buff[VISION_SEND_SIZE];
     static uint16_t tx_len;
-    
+
     // Set flag register (example)
     flag_register = 30 << 8 | 0b00000001;
-    
+
     // Convert data to seasky protocol packet
     get_protocol_send_data(0x02,                // cmd_id = 0x0002 (attitude data)
-                          flag_register, 
+                          flag_register,
                           &send_data.yaw,       // 3 floats: yaw, pitch, roll
-                          3, 
-                          send_buff, 
+                          3,
+                          send_buff,
                           &tx_len);
-    
-    // Send via USB
-    // CDC_Transmit_FS(send_buff, tx_len);
+
+    // Send via USART6
+    HAL_UART_Transmit(&VISION_UART_HANDLE, send_buff, tx_len, HAL_MAX_DELAY);
 }
 
 /**
