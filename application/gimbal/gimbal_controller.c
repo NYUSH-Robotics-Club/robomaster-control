@@ -27,7 +27,7 @@ extern CAN_HandleTypeDef hcan2;
 
 
 // PID parameters
-#define YAW_KP        (0.45f)
+#define YAW_KP        (1.0f)
 #define YAW_KI        (0.0025f)
 #define YAW_KD        (0.04f)
 #define YAW_SPEED_KP  (30.0f)
@@ -179,13 +179,6 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     } else {
         float t = abs_err / YAW_ERROR_FOR_FULL_SPEED;       // 0..1
         rpm_limit = YAW_RPM_MIN + t * (YAW_RPM_MAX - YAW_RPM_MIN);
-    }
-
-    // Soft stop zone: when very close, fade speed to zero
-    const float SOFT_STOP_ERR = 150.0f;
-    if (abs_err < SOFT_STOP_ERR) {
-        float soft = abs_err / SOFT_STOP_ERR;   // 0..1
-        cmd_angle_to_speed *= soft;
     }
 
     // Apply signed clamp
