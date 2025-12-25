@@ -59,9 +59,13 @@ static void init_attitude_from_accel(float ax, float ay, float az)
     // process_noise1: 四元数过程噪声 (10)
     // process_noise2: 陀螺仪零偏过程噪声 (0.001)
     // measure_noise: 加速度计量测噪声 (1000000)
-    // lambda: 渐消因子 (0.9996)
+    // lambda: 渐消因子 (1 = 无渐消，与 basic_framework 一致)
     // lpf: 低通滤波系数 (0 = 不使用低通滤波)
-    IMU_QuaternionEKF_Init(init_quaternion, 10.0f, 0.001f, 1000000.0f, 0.9996f, 0.0f);
+    IMU_QuaternionEKF_Init(init_quaternion, 10.0f, 0.001f, 1000000.0f, 1.0f, 0.0f);
+
+    // 注意：不初始化 GyroBias，让 EKF 从 0 开始估计
+    // 因为我们会在传给 EKF 之前先减去校准零偏（特别是 Z 轴）
+    // EKF 会将 GyroBias[2] 强制设为 0（无法观测 Yaw 漂移）
 
     initialized = 1;
 
@@ -113,14 +117,14 @@ void gyro_calibrate(void)
             if (cali_count >= MAX_RETRY) {
                 USB_CDC_Printf("[BMI088] Max retry reached! Using last attempt values.\r\n");
                 // 使用最后一次尝试的值（总比默认值好）
-                accel_scale = 9.81f / g_norm;
+                accel_scale = GRAVITY_ACCEL / g_norm;
                 calibrated = 1;
             } else {
                 USB_CDC_Printf("[BMI088] Calibration timeout! Using default values.\r\n");
                 gyro_offset[0] = 0.0f;
                 gyro_offset[1] = 0.0f;
                 gyro_offset[2] = 0.0f;
-                g_norm = 9.81f;
+                g_norm = GRAVITY_ACCEL;  // 使用标准重力加速度
                 accel_scale = 1.0f;
                 temp = 40.0f;
                 calibrated = 0;
@@ -222,11 +226,16 @@ void gyro_calibrate(void)
              gyro_diff[0] > 0.15f ||
              gyro_diff[1] > 0.15f ||
              gyro_diff[2] > 0.15f ||
-             fabsf(gyro_offset[0]) > 0.05f ||  // 放宽到0.05（原来0.01太严格）
-             fabsf(gyro_offset[1]) > 0.05f ||
-             fabsf(gyro_offset[2]) > 0.05f);
+             fabsf(gyro_offset[0]) > 0.01f ||  // 零偏阈值收紧到0.01（与basic_framework一致）
+             fabsf(gyro_offset[1]) > 0.01f ||
+             fabsf(gyro_offset[2]) > 0.01f);
 
-    // 仅在成功时计算加速度计缩放系数
+    // 如果成功退出循环（不是因为超时/重试），设置校准成功标志
+    if (!calibrated && (HAL_GetTick() - start_time <= CALIB_TIMEOUT_MS && cali_count < MAX_RETRY)) {
+        calibrated = 1;
+    }
+
+    // 计算加速度计缩放系数（无论是否校准成功都要设置，避免使用未初始化的值）
     if (calibrated) {
         // gNorm是m/s²，accel_scale用于校准（理想情况下接近1.0）
         accel_scale = GRAVITY_ACCEL / g_norm;  // 应该接近1.0
@@ -264,11 +273,23 @@ void gyro_data_update(SensorData *sensor_data)
 
     // === QuaternionEKF姿态更新 ===
     // QuaternionEKF需要的输入：
-    // - 陀螺仪：rad/s（BMI088已经是rad/s）
-    // - 加速度计：m/s²（BMI088已经返回m/s²，直接使用）
+    // - 陀螺仪：rad/s（需要先减去校准零偏，特别是 Z 轴！）
+    // - 加速度计：m/s²（需要应用缩放系数校准）
     // - 采样周期：s
-    IMU_QuaternionEKF_Update(gyro[0], gyro[1], gyro[2],
-                              accel[0], accel[1], accel[2],
+    //
+    // 关键：EKF 无法观测 Yaw 轴零偏（GyroBias[2] 总是被设为 0），
+    //       所以必须在这里先减去校准零偏，再传给 EKF
+    float gyro_calibrated[3], accel_calibrated[3];
+    gyro_calibrated[0] = gyro[0] - gyro_offset[0];
+    gyro_calibrated[1] = gyro[1] - gyro_offset[1];
+    gyro_calibrated[2] = gyro[2] - gyro_offset[2];  // Z 轴最重要！
+    accel_calibrated[0] = accel[0] * accel_scale;
+    accel_calibrated[1] = accel[1] * accel_scale;
+    accel_calibrated[2] = accel[2] * accel_scale;
+
+    // EKF 会在内部再减去 GyroBias（X/Y 轴动态估计，Z 轴恒为 0）
+    IMU_QuaternionEKF_Update(gyro_calibrated[0], gyro_calibrated[1], gyro_calibrated[2],
+                              accel_calibrated[0], accel_calibrated[1], accel_calibrated[2],
                               DT);
 
     // 从QuaternionEKF获取姿态角度（度）
