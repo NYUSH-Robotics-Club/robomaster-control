@@ -43,6 +43,7 @@ add_subdirectory(cmake/stm32cubemx)
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
+    Middlewares/ST/ARM/DSP/Lib
 )
 
 # Add sources to executable
@@ -71,6 +72,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F4xx/Include
     Drivers/STM32F4xx_HAL_Driver/Inc
+    Middlewares/ST/ARM/DSP/Include
 )
 
 # Add project symbols (macros)
@@ -90,12 +92,15 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     modules
     application
     m
+    arm_cortexM4lf_math
 )
 
 # Create layered static libraries (placeholders for initial structure)
 add_library(modules STATIC
     modules/message_center/message_center.c
     modules/algorithm/pid.c
+    modules/algorithm/kalman_filter.c
+    modules/algorithm/QuaternionEKF.c
     modules/motor/gm6020_motor.c
     modules/remote/bsp_rc.c
     modules/remote/remote_control.c
@@ -125,6 +130,7 @@ target_include_directories(modules PUBLIC
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F4xx/Include
     Drivers/STM32F4xx_HAL_Driver/Inc
+    Middlewares/ST/ARM/DSP/Include
 )
 
 # Inherit STM32CubeMX interface includes and compile definitions (e.g., USE_HAL_DRIVER, STM32F407xx)

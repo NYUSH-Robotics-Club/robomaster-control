@@ -2,7 +2,7 @@
 #include "bmi088reg.h"
 #include "bmi088middleware.h"
 
-float BMI088_ACCEL_SEN = BMI088_ACCEL_3G_SEN;
+float BMI088_ACCEL_SEN = BMI088_ACCEL_6G_SEN;
 float BMI088_GYRO_SEN = BMI088_GYRO_2000_SEN;
 
 #if defined(BMI088_USE_SPI)
@@ -25,7 +25,11 @@ float BMI088_GYRO_SEN = BMI088_GYRO_2000_SEN;
     {                                              \
         BMI088_ACCEL_NS_L();                       \
         BMI088_read_write_byte((reg) | 0x80);      \
-        BMI088_read_muli_reg(reg, data, len);      \
+        BMI088_read_write_byte(0x55);              \
+        uint8_t __i;                               \
+        for (__i = 0; __i < (len); __i++) {        \
+            (data)[__i] = BMI088_read_write_byte(0x55); \
+        }                                          \
         BMI088_ACCEL_NS_H();                       \
     }
 
@@ -60,7 +64,7 @@ static uint8_t write_BMI088_accel_reg_data_error[BMI088_WRITE_ACCEL_REG_NUM][3] 
     {BMI088_ACC_PWR_CTRL, BMI088_ACC_ENABLE_ACC_ON, BMI088_ACC_PWR_CTRL_ERROR},
     {BMI088_ACC_PWR_CONF, BMI088_ACC_PWR_ACTIVE_MODE, BMI088_ACC_PWR_CONF_ERROR},
     {BMI088_ACC_CONF,  BMI088_ACC_NORMAL| BMI088_ACC_800_HZ | BMI088_ACC_CONF_MUST_Set, BMI088_ACC_CONF_ERROR},
-    {BMI088_ACC_RANGE, BMI088_ACC_RANGE_3G, BMI088_ACC_RANGE_ERROR},
+    {BMI088_ACC_RANGE, BMI088_ACC_RANGE_6G, BMI088_ACC_RANGE_ERROR},
     {BMI088_INT1_IO_CTRL, BMI088_ACC_INT1_IO_ENABLE | BMI088_ACC_INT1_GPIO_PP | BMI088_ACC_INT1_GPIO_LOW, BMI088_INT1_IO_CTRL_ERROR},
     {BMI088_INT_MAP_DATA, BMI088_ACC_INT1_DRDY_INTERRUPT, BMI088_INT_MAP_DATA_ERROR}
 };
@@ -88,6 +92,7 @@ uint8_t bmi088_accel_init(void)
 {
     uint8_t res = 0;
     uint8_t write_reg_num = 0;
+    uint8_t error = BMI088_NO_ERROR;
 
     BMI088_accel_read_single_reg(BMI088_ACC_CHIP_ID, res);
     BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
@@ -102,26 +107,49 @@ uint8_t bmi088_accel_init(void)
     BMI088_accel_read_single_reg(BMI088_ACC_CHIP_ID, res);
     BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
 
+    // Debug: print CHIP_ID
+    extern void USB_CDC_Printf(const char *format, ...);
+    USB_CDC_Printf("[BMI088_accel_init] CHIP_ID after reset: 0x%02X (expected 0x%02X)\r\n",
+                   res, BMI088_ACC_CHIP_ID_VALUE);
+
     if (res != BMI088_ACC_CHIP_ID_VALUE) {
         return BMI088_NO_SENSOR;
     }
 
+    // Configure registers and accumulate errors (don't return on first failure)
     for (write_reg_num = 0; write_reg_num < BMI088_WRITE_ACCEL_REG_NUM; write_reg_num++) {
         BMI088_accel_write_single_reg(write_BMI088_accel_reg_data_error[write_reg_num][0], write_BMI088_accel_reg_data_error[write_reg_num][1]);
-        BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
+
+        // PWR_CTRL and PWR_CONF need longer delay per BMI088 datasheet
+        if (write_reg_num == 0 || write_reg_num == 1) {
+            BMI088_delay_ms(5);  // 5ms for power management registers
+        } else {
+            BMI088_delay_ms(1);
+        }
+
         BMI088_accel_read_single_reg(write_BMI088_accel_reg_data_error[write_reg_num][0], res);
         BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
+
+        // Debug: print register verification
+        extern void USB_CDC_Printf(const char *format, ...);
+        USB_CDC_Printf("[BMI088_accel_init] Reg 0x%02X: wrote 0x%02X, read 0x%02X %s\r\n",
+                       write_BMI088_accel_reg_data_error[write_reg_num][0],
+                       write_BMI088_accel_reg_data_error[write_reg_num][1],
+                       res,
+                       (res == write_BMI088_accel_reg_data_error[write_reg_num][1]) ? "OK" : "FAIL");
+
         if (res != write_BMI088_accel_reg_data_error[write_reg_num][1]) {
-            return write_BMI088_accel_reg_data_error[write_reg_num][2];
+            error |= write_BMI088_accel_reg_data_error[write_reg_num][2];
         }
     }
-    return BMI088_NO_ERROR;
+    return error;
 }
 
 uint8_t bmi088_gyro_init(void)
 {
     uint8_t write_reg_num = 0;
     uint8_t res = 0;
+    uint8_t error = BMI088_NO_ERROR;
 
     BMI088_gyro_read_single_reg(BMI088_GYRO_CHIP_ID, res);
     BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
@@ -140,16 +168,17 @@ uint8_t bmi088_gyro_init(void)
         return BMI088_NO_SENSOR;
     }
 
+    // Configure registers and accumulate errors (don't return on first failure)
     for (write_reg_num = 0; write_reg_num < BMI088_WRITE_GYRO_REG_NUM; write_reg_num++) {
         BMI088_gyro_write_single_reg(write_BMI088_gyro_reg_data_error[write_reg_num][0], write_BMI088_gyro_reg_data_error[write_reg_num][1]);
-        BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
+        BMI088_delay_ms(1);  // Increase delay for consistency
         BMI088_gyro_read_single_reg(write_BMI088_gyro_reg_data_error[write_reg_num][0], res);
         BMI088_delay_us(BMI088_COM_WAIT_SENSOR_TIME);
         if (res != write_BMI088_gyro_reg_data_error[write_reg_num][1]) {
-            return write_BMI088_gyro_reg_data_error[write_reg_num][2];
+            error |= write_BMI088_gyro_reg_data_error[write_reg_num][2];
         }
     }
-    return BMI088_NO_ERROR;
+    return error;
 }
 
 void BMI088_read(float gyro[3], float accel[3], float *temperate)
@@ -158,6 +187,15 @@ void BMI088_read(float gyro[3], float accel[3], float *temperate)
     int16_t bmi088_raw_temp;
 
     BMI088_accel_read_muli_reg(BMI088_ACCEL_XOUT_L, buf, 6);
+
+    // Debug: print raw buffer (first 3 times)
+    static uint8_t debug_count = 0;
+    if (debug_count < 3) {
+        extern void USB_CDC_Printf(const char *format, ...);
+        USB_CDC_Printf("[BMI088_read] Accel raw: %02X %02X %02X %02X %02X %02X\r\n",
+                       buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+        debug_count++;
+    }
 
     bmi088_raw_temp = (int16_t)((buf[1]) << 8) | buf[0];
     accel[0] = bmi088_raw_temp * BMI088_ACCEL_SEN;

@@ -164,9 +164,66 @@ int main(void)
   MX_TIM4_Init();
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
-  BMI088_init();
+
+  // 等待3秒，给用户时间连接串口查看启动日志
+  USB_CDC_Printf("\r\n");
+  USB_CDC_Printf("========================================\r\n");
+  USB_CDC_Printf("   RoboMaster Control System Boot\r\n");
+  USB_CDC_Printf("   Waiting 3s for serial connection...\r\n");
+  USB_CDC_Printf("========================================\r\n");
+  HAL_Delay(3000);
+
+  // IMU Calibration (must be still during calibration)
+  USB_CDC_Printf("\r\n=== IMU Initialization ===\r\n");
+
+  // 测试CS引脚是否能正常工作
+  USB_CDC_Printf("[BMI088] Testing CS pins...\r\n");
+  USB_CDC_Printf("[BMI088] Testing ACCEL CS (PA4)...\r\n");
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+  HAL_Delay(10);
+  GPIO_PinState accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
+  USB_CDC_Printf("[BMI088] ACCEL CS HIGH: %s\r\n", accel_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
+
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
+  USB_CDC_Printf("[BMI088] ACCEL CS LOW: %s\r\n", accel_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  // 恢复高电平
+
+  USB_CDC_Printf("[BMI088] Testing GYRO CS (PB0)...\r\n");
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+  HAL_Delay(10);
+  GPIO_PinState gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
+  USB_CDC_Printf("[BMI088] GYRO CS HIGH: %s\r\n", gyro_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
+
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
+  USB_CDC_Printf("[BMI088] GYRO CS LOW: %s\r\n", gyro_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);  // 恢复高电平
+
+  uint8_t bmi088_error = BMI088_init();
+  USB_CDC_Printf("[BMI088] BMI088_init() returned: 0x%02X\r\n", bmi088_error);
+  if (bmi088_error != 0) {
+    USB_CDC_Printf("[BMI088] *** ERROR: BMI088 initialization failed! Error code: 0x%02X ***\r\n", bmi088_error);
+    USB_CDC_Printf("[BMI088] Error details:\r\n");
+    if (bmi088_error & 0x01) USB_CDC_Printf("  - BMI088_ACC_PWR_CTRL_ERROR\r\n");
+    if (bmi088_error & 0x02) USB_CDC_Printf("  - BMI088_ACC_PWR_CONF_ERROR\r\n");
+    if (bmi088_error & 0x04) USB_CDC_Printf("  - BMI088_ACC_CONF_ERROR\r\n");
+    if (bmi088_error & 0x08) USB_CDC_Printf("  - BMI088_ACC_SELF_TEST_ERROR\r\n");
+    if (bmi088_error & 0x10) USB_CDC_Printf("  - BMI088_ACC_RANGE_ERROR\r\n");
+    if (bmi088_error & 0x20) USB_CDC_Printf("  - BMI088_INT1_IO_CTRL_ERROR\r\n");
+    if (bmi088_error & 0x40) USB_CDC_Printf("  - BMI088_INT_MAP_DATA_ERROR\r\n");
+    if (bmi088_error & 0x80) USB_CDC_Printf("  - GYRO initialization errors\r\n");
+  } else {
+    USB_CDC_Printf("[BMI088] BMI088 initialization SUCCESS!\r\n");
+  }
+
+  gyro_calibrate();
+  USB_CDC_Printf("=== IMU Init Complete ===\r\n\r\n");
+
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
-  
+
   // Initialize command controller first (central control)
   CmdController_Init();
   
