@@ -233,7 +233,7 @@ int main(void)
 	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
 
     /* USER CODE END WHILE */
-  }
+
     /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
 }
