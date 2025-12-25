@@ -26,11 +26,15 @@ static float g_norm = 9.81f;        // 重力加速度范数
 
 /**
  * @brief 使用加速度计初始化四元数（仅roll和pitch）
- * @param ax, ay, az: 加速度计读数（单位：g）
+ * @param ax, ay, az: 加速度计读数（单位：m/s²）
  */
 static void init_attitude_from_accel(float ax, float ay, float az)
 {
-    // 注意：BMI088_read返回的accel单位是g，直接用于角度计算
+    // 注意：BMI088_read返回的accel单位是m/s²，需要转换为g用于角度计算
+    ax = ax / GRAVITY_ACCEL;
+    ay = ay / GRAVITY_ACCEL;
+    az = az / GRAVITY_ACCEL;
+
     // 计算roll和pitch（假设静止状态，加速度计测量重力方向）
     float roll = atan2f(ay, az);
     float pitch = atan2f(-ax, sqrtf(ay*ay + az*az));
@@ -87,7 +91,7 @@ void gyro_calibrate(void)
     // 验证BMI088是否初始化成功
     USB_CDC_Printf("[BMI088] Verifying BMI088 initialization...\r\n");
     BMI088_read(gyro, accel, &temp);
-    USB_CDC_Printf("[BMI088] Initial reading: accel=[%.3f,%.3f,%.3f]g, gyro=[%.3f,%.3f,%.3f]rad/s, temp=%.1f°C\r\n",
+    USB_CDC_Printf("[BMI088] Initial reading: accel=[%.3f,%.3f,%.3f]m/s², gyro=[%.3f,%.3f,%.3f]rad/s, temp=%.1f°C\r\n",
                    accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2], temp);
 
     if (accel[0] == 0.0f && accel[1] == 0.0f && accel[2] == 0.0f) {
@@ -141,13 +145,13 @@ void gyro_calibrate(void)
             BMI088_read(gyro, accel, &temp);
 
             // 累积加速度计范数（重力）
-            // 注意：BMI088_read返回的accel单位是g（重力加速度）
+            // 注意：BMI088_read返回的accel单位是m/s²
             g_norm_temp = sqrtf(accel[0]*accel[0] + accel[1]*accel[1] + accel[2]*accel[2]);
             g_norm += g_norm_temp;
 
             // 首次采样时打印调试信息
             if (i == 0 && cali_count == 0) {
-                USB_CDC_Printf("[BMI088] First sample: accel=[%.3f,%.3f,%.3f]g, gyro=[%.3f,%.3f,%.3f]rad/s, temp=%.1f°C\r\n",
+                USB_CDC_Printf("[BMI088] First sample: accel=[%.3f,%.3f,%.3f]m/s², gyro=[%.3f,%.3f,%.3f]rad/s, temp=%.1f°C\r\n",
                                accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2], temp);
             }
 
@@ -183,11 +187,11 @@ void gyro_calibrate(void)
                 gyro_diff[1] = gyro_max[1] - gyro_min[1];
                 gyro_diff[2] = gyro_max[2] - gyro_min[2];
 
-                if (g_norm_diff > 0.5f ||
+                if (g_norm_diff > 0.5f ||  // 重力范数变化 < 0.5 m/s²
                     gyro_diff[0] > 0.15f ||
                     gyro_diff[1] > 0.15f ||
                     gyro_diff[2] > 0.15f) {
-                    USB_CDC_Printf("[BMI088] Movement detected (gNorm_diff=%.3f, gyro_diff=[%.3f,%.3f,%.3f]), retry...\r\n",
+                    USB_CDC_Printf("[BMI088] Movement detected (gNorm_diff=%.3f m/s², gyro_diff=[%.3f,%.3f,%.3f]rad/s), retry...\r\n",
                                    g_norm_diff, gyro_diff[0], gyro_diff[1], gyro_diff[2]);
                     break;  // 跳出采样循环，重新开始
                 }
@@ -208,13 +212,13 @@ void gyro_calibrate(void)
         gyro_diff[1] = gyro_max[1] - gyro_min[1];
         gyro_diff[2] = gyro_max[2] - gyro_min[2];
 
-        USB_CDC_Printf("[BMI088] Sample complete: gNorm=%.3fg (%.2fm/s²), offset=[%.6f,%.6f,%.6f]rad/s\r\n",
-                       g_norm, g_norm * GRAVITY_ACCEL, gyro_offset[0], gyro_offset[1], gyro_offset[2]);
+        USB_CDC_Printf("[BMI088] Sample complete: gNorm=%.3f m/s² (%.2fg), offset=[%.6f,%.6f,%.6f]rad/s\r\n",
+                       g_norm, g_norm / GRAVITY_ACCEL, gyro_offset[0], gyro_offset[1], gyro_offset[2]);
 
         cali_count++;
 
-    } while (g_norm_diff > 0.05f ||                     // 重力范数变化 < 0.05g
-             fabsf(g_norm - 1.0f) > 0.05f ||          // gNorm应该接近1.0g（不是9.8!）
+    } while (g_norm_diff > 0.5f ||                                    // 重力范数变化 < 0.5 m/s²
+             fabsf(g_norm - GRAVITY_ACCEL) > 0.5f ||              // gNorm应该接近9.8 m/s²
              gyro_diff[0] > 0.15f ||
              gyro_diff[1] > 0.15f ||
              gyro_diff[2] > 0.15f ||
@@ -224,12 +228,12 @@ void gyro_calibrate(void)
 
     // 仅在成功时计算加速度计缩放系数
     if (calibrated) {
-        // gNorm是g单位，accel_scale用于将g转换为m/s²
-        accel_scale = GRAVITY_ACCEL / g_norm;  // 应该接近9.80665
+        // gNorm是m/s²，accel_scale用于校准（理想情况下接近1.0）
+        accel_scale = GRAVITY_ACCEL / g_norm;  // 应该接近1.0
         USB_CDC_Printf("[BMI088] ===== Calibration SUCCESS (attempts: %d) =====\r\n", cali_count);
         USB_CDC_Printf("Gyro offset: gx=%.6f, gy=%.6f, gz=%.6f rad/s\r\n",
                        gyro_offset[0], gyro_offset[1], gyro_offset[2]);
-        USB_CDC_Printf("Accel: gNorm=%.3fg, scale=%.6f (for g->m/s² conversion)\r\n", g_norm, accel_scale);
+        USB_CDC_Printf("Accel: gNorm=%.3f m/s² (%.2fg)\r\n", g_norm, g_norm / GRAVITY_ACCEL);
         USB_CDC_Printf("Temp when cali: %.2f °C\r\n", temp);
     }
 }
@@ -244,7 +248,7 @@ void gyro_data_update(SensorData *sensor_data)
 {
     BMI088_read(gyro, accel, &temp);
 
-    // 保存原始IMU数据（gyro: rad/s, accel: g）
+    // 保存原始IMU数据（gyro: rad/s, accel: m/s²）
     sensor_data->g_gx = gyro[0];
     sensor_data->g_gy = gyro[1];
     sensor_data->g_gz = gyro[2];
@@ -261,15 +265,10 @@ void gyro_data_update(SensorData *sensor_data)
     // === QuaternionEKF姿态更新 ===
     // QuaternionEKF需要的输入：
     // - 陀螺仪：rad/s（BMI088已经是rad/s）
-    // - 加速度计：m/s²（BMI088返回的是g，需要乘以GRAVITY_ACCEL转换）
+    // - 加速度计：m/s²（BMI088已经返回m/s²，直接使用）
     // - 采样周期：s
-    float accel_ms2[3];
-    accel_ms2[0] = accel[0] * GRAVITY_ACCEL;
-    accel_ms2[1] = accel[1] * GRAVITY_ACCEL;
-    accel_ms2[2] = accel[2] * GRAVITY_ACCEL;
-
     IMU_QuaternionEKF_Update(gyro[0], gyro[1], gyro[2],
-                              accel_ms2[0], accel_ms2[1], accel_ms2[2],
+                              accel[0], accel[1], accel[2],
                               DT);
 
     // 从QuaternionEKF获取姿态角度（度）
