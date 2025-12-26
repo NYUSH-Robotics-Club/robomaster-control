@@ -88,6 +88,75 @@ uint8_t BMI088_init(void)
     return error;
 }
 
+/**
+ * @brief Initialize BMI088 with comprehensive diagnostics and CS pin testing
+ * @return uint8_t Error code (0 = success, non-zero = error)
+ *
+ * This function performs:
+ * - CS pin functionality tests for both accelerometer and gyroscope
+ * - BMI088 sensor initialization
+ * - Detailed error reporting and diagnostics via USB CDC
+ */
+uint8_t BMI088_InitWithDiagnostics(void)
+{
+    extern void USB_CDC_Printf(const char *format, ...);
+    extern void HAL_Delay(uint32_t Delay);
+    extern GPIO_PinState HAL_GPIO_ReadPin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+    extern void HAL_GPIO_WritePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, GPIO_PinState PinState);
+
+    USB_CDC_Printf("\r\n=== BMI088 Initialization ===\r\n");
+
+    // Test CS pins
+    USB_CDC_Printf("[BMI088] Testing CS pins...\r\n");
+    USB_CDC_Printf("[BMI088] Testing ACCEL CS (PA4)...\r\n");
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+    HAL_Delay(10);
+    GPIO_PinState accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
+    USB_CDC_Printf("[BMI088] ACCEL CS HIGH: %s\r\n", accel_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
+
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+    HAL_Delay(10);
+    accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
+    USB_CDC_Printf("[BMI088] ACCEL CS LOW: %s\r\n", accel_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+    USB_CDC_Printf("[BMI088] Testing GYRO CS (PB0)...\r\n");
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+    HAL_Delay(10);
+    GPIO_PinState gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
+    USB_CDC_Printf("[BMI088] GYRO CS HIGH: %s\r\n", gyro_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
+
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+    HAL_Delay(10);
+    gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
+    USB_CDC_Printf("[BMI088] GYRO CS LOW: %s\r\n", gyro_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+    // Initialize BMI088
+    uint8_t bmi088_error = BMI088_init();
+    USB_CDC_Printf("[BMI088] BMI088_init() returned: 0x%02X\r\n", bmi088_error);
+
+    // Detailed error reporting
+    if (bmi088_error != 0) {
+        USB_CDC_Printf("[BMI088] *** ERROR: BMI088 initialization failed! Error code: 0x%02X ***\r\n", bmi088_error);
+        USB_CDC_Printf("[BMI088] Error details:\r\n");
+        if (bmi088_error & 0x01) USB_CDC_Printf("  - BMI088_ACC_PWR_CTRL_ERROR\r\n");
+        if (bmi088_error & 0x02) USB_CDC_Printf("  - BMI088_ACC_PWR_CONF_ERROR\r\n");
+        if (bmi088_error & 0x04) USB_CDC_Printf("  - BMI088_ACC_CONF_ERROR\r\n");
+        if (bmi088_error & 0x08) USB_CDC_Printf("  - BMI088_ACC_SELF_TEST_ERROR\r\n");
+        if (bmi088_error & 0x10) USB_CDC_Printf("  - BMI088_ACC_RANGE_ERROR\r\n");
+        if (bmi088_error & 0x20) USB_CDC_Printf("  - BMI088_INT1_IO_CTRL_ERROR\r\n");
+        if (bmi088_error & 0x40) USB_CDC_Printf("  - BMI088_INT_MAP_DATA_ERROR\r\n");
+        if (bmi088_error & 0x80) USB_CDC_Printf("  - GYRO initialization errors\r\n");
+    } else {
+        USB_CDC_Printf("[BMI088] BMI088 initialization SUCCESS!\r\n");
+    }
+
+    USB_CDC_Printf("=== BMI088 Init Complete ===\r\n\r\n");
+
+    return bmi088_error;
+}
+
 uint8_t bmi088_accel_init(void)
 {
     uint8_t res = 0;

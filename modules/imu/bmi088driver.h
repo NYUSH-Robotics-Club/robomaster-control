@@ -92,6 +92,7 @@ enum
 extern uint8_t BMI088_init(void);
 extern uint8_t bmi088_accel_init(void);
 extern uint8_t bmi088_gyro_init(void);
+extern uint8_t BMI088_InitWithDiagnostics(void);
 
 extern void BMI088_read(float gyro[3], float accel[3], float *temperate);
 
