@@ -74,6 +74,7 @@ static void process_chassis_command(const RC_ctrl_t *rc) {
         s_chassis_cmd.vx = 0.0f;
         s_chassis_cmd.vy = 0.0f;
         s_chassis_cmd.wz = 0.0f;
+        s_chassis_cmd.offset_angle = 0.0f;
         s_chassis_cmd.enabled = false;
         return;
     }
@@ -88,7 +89,11 @@ static void process_chassis_command(const RC_ctrl_t *rc) {
     s_chassis_cmd.vx = -(float)vx_raw / max_input;
     s_chassis_cmd.vy = -(float)vy_raw / max_input;
     s_chassis_cmd.wz = (float)wz_raw / max_input;
-    
+
+    // Fill gimbal angle for coordinate transformation
+    // s_last_sensor.yaw is the current gimbal yaw angle in degrees, convert to radians
+    s_chassis_cmd.offset_angle = s_last_sensor.yaw * (3.14159265f / 180.0f);
+
     // Enable chassis if any joystick is moved
     s_chassis_cmd.enabled = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
 }

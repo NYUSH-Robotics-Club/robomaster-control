@@ -8,13 +8,23 @@
 #include "remote_control.h"
 #include "motor_feedback.h"
 #include "gyro_data.h"
+#include "robot_config.h"
 
 // Chassis motor count
+#ifndef CHASSIS_MOTOR_COUNT
 #define CHASSIS_MOTOR_COUNT 4
+#endif
 
 // Chassis control parameters
+// Note: CHASSIS_DEMO_TARGET_SPEED and CHASSIS_RAMP_STEP are now defined in robot_config.h
+// Keeping these for backward compatibility if robot_config.h is not included
+#ifndef CHASSIS_DEMO_TARGET_SPEED
 #define CHASSIS_DEMO_TARGET_SPEED 7000
+#endif
+
+#ifndef CHASSIS_RAMP_STEP
 #define CHASSIS_RAMP_STEP 50.0f
+#endif
 
 
 // Chassis controller structure

@@ -11,10 +11,11 @@ extern "C" {
 
 // Chassis command structure
 typedef struct {
-    float vx;          // X-axis velocity (forward/backward)
-    float vy;          // Y-axis velocity (left/right)
-    float wz;          // Rotation velocity
-    bool enabled;      // Chassis enabled flag
+    float vx;           // X-axis velocity (forward/backward, in gimbal frame)
+    float vy;           // Y-axis velocity (left/right, in gimbal frame)
+    float wz;           // Rotation velocity
+    float offset_angle; // Gimbal yaw angle relative to chassis (radians), for coordinate transformation
+    bool enabled;       // Chassis enabled flag
 } ChassisCmd;
 
 // Shooter command structure  
