@@ -276,6 +276,13 @@ void gyro_data_init(void)
 
 void gyro_data_update(SensorData *sensor_data)
 {
+    // === 调试：确认函数被调用 ===
+    static uint32_t debug_counter = 0;
+    if (debug_counter < 5) {
+        USB_CDC_Printf("[DEBUG] gyro_data_update called, count=%lu, initialized=%d\r\n", debug_counter, initialized);
+        debug_counter++;
+    }
+
     // === 动态计算采样周期 ===
     uint32_t current_tick = HAL_GetTick();
     dt = (current_tick - last_update_tick) * 0.001f;  // ms -> s
@@ -336,10 +343,20 @@ void gyro_data_update(SensorData *sensor_data)
 
     // === CDC串口输出IMU姿态数据（10Hz） ===
     static uint32_t last_imu_print = 0;
+    static uint32_t imu_print_count = 0;
     uint32_t now = HAL_GetTick();
     if (now - last_imu_print >= 100) {  // 每100ms输出一次
         last_imu_print = now;
-        USB_CDC_Printf("IMU,%lu,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f\r\n",
+
+        // 调试：前3次输出时打印提示
+        if (imu_print_count < 3) {
+            USB_CDC_Printf("[DEBUG] About to print IMU data #%lu\r\n", imu_print_count);
+        }
+        imu_print_count++;
+
+        // Gimbal (BMI088): yaw, pitch, roll, yaw_total, round_count, gx, gy, gz (rad/s)
+        // Chassis (WT61C): yaw, pitch, roll, gx, gy, gz (rad/s), ax, ay, az (m/s²)
+        USB_CDC_Printf("IMU,%lu,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
                        now,
                        sensor_data->yaw,
                        sensor_data->pitch,
@@ -348,20 +365,34 @@ void gyro_data_update(SensorData *sensor_data)
                        sensor_data->yaw_round_count,
                        sensor_data->g_gx,
                        sensor_data->g_gy,
-                       sensor_data->g_gz);
+                       sensor_data->g_gz,
+                       sensor_data->c_yaw,
+                       sensor_data->c_pitch,
+                       sensor_data->c_roll,
+                       sensor_data->c_gx,
+                       sensor_data->c_gy,
+                       sensor_data->c_gz,
+                       sensor_data->c_ax,
+                       sensor_data->c_ay,
+                       sensor_data->c_az);
     }
 
-    // WT61C底盘IMU数据（保持原样）
     WT61C_Data const* d = WT61C_GetData();
-    sensor_data->c_ax = (int)(d->ax * 1000);
-    sensor_data->c_ay = (int)(d->ay * 1000);
-    sensor_data->c_az = (int)(d->az * 1000);
-    sensor_data->c_gx = (int)(d->gx );
-    sensor_data->c_gy = (int)(d->gy );
-    sensor_data->c_gz = (int)(d->gz );
-    sensor_data->c_roll = (int)(d->roll * 10);
-    sensor_data->c_pitch = (int)(d->pitch * 10);
-    sensor_data->c_yaw = (int)(d->yaw * 10);
+
+    // 姿态角：直接使用度数（float）
+    sensor_data->c_roll = d->roll;
+    sensor_data->c_pitch = d->pitch;
+    sensor_data->c_yaw = d->yaw;
+
+    // 陀螺仪：deg/s转换为rad/s（统一单位）
+    sensor_data->c_gx = d->gx * DEG_TO_RAD;
+    sensor_data->c_gy = d->gy * DEG_TO_RAD;
+    sensor_data->c_gz = d->gz * DEG_TO_RAD;
+
+    // 加速度计：已经是m/s²，直接使用
+    sensor_data->c_ax = d->ax;
+    sensor_data->c_ay = d->ay;
+    sensor_data->c_az = d->az;
 
     (void)MsgCenter_Publish(TOPIC_IMU_UPDATE, sensor_data, sizeof(*sensor_data));
 }

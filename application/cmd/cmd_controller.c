@@ -106,8 +106,8 @@ static void process_shooter_command(const RC_ctrl_t *rc) {
     // Up: friction + feed enabled
     // Mid: friction enabled only
     // Down: all disabled
-    bool right_switch_up = switch_is_up(rc->rc.s[0]);
-    bool right_switch_mid = switch_is_mid(rc->rc.s[0]);
+    bool right_switch_up = switch_is_up(rc->rc.s[1]);
+    bool right_switch_mid = switch_is_mid(rc->rc.s[1]);
     
     s_shoot_cmd.friction_enabled = (right_switch_up || right_switch_mid);
     s_shoot_cmd.feed_enabled = right_switch_up;
@@ -165,15 +165,16 @@ static void process_gimbal_command(const RC_ctrl_t *rc) {
     yaw_storage=yaw_raw; 
     //plot
     uint32_t timestamp = HAL_GetTick();
-    if(timestamp - s_last_yaw_print_tick >= 100) { // Print at 20 Hz
-        s_last_yaw_print_tick = timestamp;
-        USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%.2f\r\n",
-                   timestamp,
-                   yaw_raw,
-                   s_last_vision.yaw,
-                   s_gimbal_cmd.yaw_rate
-                 );
-    }
+    // YAW_CSV logging disabled to reduce noise
+    // if(timestamp - s_last_yaw_print_tick >= 100) { // Print at 20 Hz
+    //     s_last_yaw_print_tick = timestamp;
+    //     USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%.2f\r\n",
+    //                timestamp,
+    //                yaw_raw,
+    //                s_last_vision.yaw,
+    //                s_gimbal_cmd.yaw_rate
+    //              );
+    // }
     
 }
 

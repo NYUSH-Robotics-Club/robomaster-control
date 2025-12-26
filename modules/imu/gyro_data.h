@@ -16,11 +16,14 @@
  * @brief Sensor data structure for gyroscope and accelerometer readings
  * a is accelerometer, g is gyroscope
  * c_ means chassis sensor, g_ means gimbal sensor
+ *
+ * IMPORTANT: All IMU data now use consistent units:
+ *   - Angles: degrees (float)
+ *   - Gyroscope: rad/s (float)
+ *   - Accelerometer: m/s² (float)
  */
 typedef struct {
-    int c_ax, c_ay, c_az;
-    int c_gx, c_gy, c_gz;
-    int c_roll, c_pitch, c_yaw;
+    // === 云台IMU (BMI088) ===
     float g_gx, g_gy, g_gz;      // 云台IMU陀螺仪（rad/s）
     float g_ax, g_ay, g_az;      // 云台IMU加速度计（m/s²）
 
@@ -34,6 +37,11 @@ typedef struct {
     int32_t yaw_round_count;     // yaw圈数计数
 
     float absolute_angle;        // 兼容旧代码
+
+    // === 底盘IMU (WT61C) - 统一单位为float ===
+    float c_roll, c_pitch, c_yaw;    // 姿态角度（度）- 改为float
+    float c_gx, c_gy, c_gz;          // 陀螺仪（rad/s）- 改为float并统一单位
+    float c_ax, c_ay, c_az;          // 加速度计（m/s²）- 改为float
 
 } SensorData;
 

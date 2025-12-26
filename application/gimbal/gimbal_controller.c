@@ -114,14 +114,15 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
     if (cmd >  max_abs) cmd =  max_abs;
     if (cmd < -max_abs) cmd = -max_abs;
 
-    USB_CDC_Printf("PITCH_CSV,%lu,%.2f,%.2f,%d,%.2f,%.2f,%.2f\r\n",
-                   HAL_GetTick(),
-                   c->angle_target,
-                   current_angle,
-                   c->speed_rpm,
-                   cmd,
-                   error,
-                   rate_normalized * 300.0f);
+    // PITCH_CSV logging disabled to reduce noise
+    // USB_CDC_Printf("PITCH_CSV,%lu,%.2f,%.2f,%d,%.2f,%.2f,%.2f\r\n",
+    //                HAL_GetTick(),
+    //                c->angle_target,
+    //                current_angle,
+    //                c->speed_rpm,
+    //                cmd,
+    //                error,
+    //                rate_normalized * 300.0f);
 
 
     return (int16_t)cmd;
@@ -207,19 +208,19 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
     if (cmd_speed_to_current < -CURRENT_LIMIT) cmd_speed_to_current = -CURRENT_LIMIT;
 
-    // Logging for tuning/debug
-    USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
-                   HAL_GetTick(),
-                   yaw->angle_target,
-                   current,
-                   yaw->speed_rpm,
-                   cmd_speed_to_current,
-                   cmd_angle_to_speed,
-                   rate_normalized * 300.0f,
-                   angle_error,
-                   sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
-                       s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA),
-                   sensor_data->c_gz);
+    // Logging for tuning/debug (DISABLED to reduce noise)
+    // USB_CDC_Printf("YAW_CSV,%lu,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f\r\n",
+    //                HAL_GetTick(),
+    //                yaw->angle_target,
+    //                current,
+    //                yaw->speed_rpm,
+    //                cmd_speed_to_current,
+    //                cmd_angle_to_speed,
+    //                rate_normalized * 300.0f,
+    //                angle_error,
+    //                sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
+    //                    s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA),
+    //                sensor_data->c_gz);
 
     return (int16_t)cmd_speed_to_current;
 }
@@ -276,21 +277,22 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
             CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, yaw_current);
 
             // 输出编码器值到CDC串口 (20Hz更新率)
-            static uint32_t last_encoder_print = 0;
-            uint32_t now = HAL_GetTick();
-            if (now - last_encoder_print >= 50) {
-                last_encoder_print = now;
-                GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
-                GM6020_MotorContext *pitch = GM6020_GetContext(GIMBAL_PITCH_ID);
-                if (yaw && pitch) {
-                    USB_CDC_Printf("ENCODER,%lu,%d,%d,%.2f,%.2f\r\n",
-                                   now,
-                                   yaw->angle_raw,
-                                   pitch->angle_raw,
-                                   yaw->angle_target,
-                                   pitch->angle_target);
-                }
-            }
+            // ENCODER logging disabled to reduce noise
+            // static uint32_t last_encoder_print = 0;
+            // uint32_t now = HAL_GetTick();
+            // if (now - last_encoder_print >= 50) {
+            //     last_encoder_print = now;
+            //     GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
+            //     GM6020_MotorContext *pitch = GM6020_GetContext(GIMBAL_PITCH_ID);
+            //     if (yaw && pitch) {
+            //         USB_CDC_Printf("ENCODER,%lu,%d,%d,%.2f,%.2f\r\n",
+            //                        now,
+            //                        yaw->angle_raw,
+            //                        pitch->angle_raw,
+            //                        yaw->angle_target,
+            //                        pitch->angle_target);
+            //     }
+            // }
         } else {
             // Gimbal disabled, send zero current
             CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, 0);
