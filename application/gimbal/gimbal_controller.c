@@ -322,6 +322,67 @@ void GimbalApp_Init(void) {
     // Subscribe to messages
     (void)MsgCenter_Subscribe(TOPIC_GIMBAL_CMD, on_gimbal_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
-    
+
     s_initialized = true;
+}
+
+/**
+ * @brief Wait for gimbal to reach initial alignment position
+ * @note This function sends gimbal commands and waits for both yaw and pitch
+ *       to reach their initial positions before returning.
+ */
+void Gimbal_WaitForAlignment(void)
+{
+    const float ALIGNMENT_THRESHOLD = 50.0f;  // encoder ticks
+    const uint32_t TIMEOUT_MS = 10000;  // 10 seconds timeout
+    const uint32_t CHECK_INTERVAL_MS = 100;
+
+    USB_CDC_Printf("[Gimbal] Waiting for gimbal alignment...\r\n");
+
+    // Create gimbal command to enable gimbal and hold initial position
+    GimbalCmd cmd = {
+        .enabled = true,
+        .pitch_rate = 0.0f,
+        .yaw_rate = 0.0f,
+        .yaw_rate_memo = 0.0f,
+        .yaw_target_memo = 0.0f,
+        .vision_valid = false,
+        .vision_yaw_err_rad = 0.0f,
+        .vision_pitch_err_rad = 0.0f,
+        .vision_ts_ms = 0
+    };
+
+    uint32_t start_time = HAL_GetTick();
+
+    while (HAL_GetTick() - start_time < TIMEOUT_MS) {
+        // Continuously send command to keep gimbal control
+        MsgCenter_Publish(TOPIC_GIMBAL_CMD, &cmd, sizeof(cmd));
+        MsgCenter_Dispatch();  // Dispatch messages immediately
+
+        HAL_Delay(CHECK_INTERVAL_MS);
+
+        // Check if gimbal has reached target position
+        GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
+        GM6020_MotorContext *pitch = GM6020_GetContext(GIMBAL_PITCH_ID);
+
+        if (yaw && pitch && yaw->angle_inited && pitch->angle_inited) {
+            float yaw_error = fabsf(yaw->angle_target - yaw->angle_raw);
+            float pitch_error = fabsf(pitch->angle_target - pitch->angle_raw);
+
+            // Handle yaw wraparound (0-8192 encoder range)
+            if (yaw_error > 4096.0f) {
+                yaw_error = 8192.0f - yaw_error;
+            }
+
+            USB_CDC_Printf("[Gimbal] Yaw error: %.1f, Pitch error: %.1f\r\n",
+                          yaw_error, pitch_error);
+
+            if (yaw_error < ALIGNMENT_THRESHOLD && pitch_error < ALIGNMENT_THRESHOLD) {
+                USB_CDC_Printf("[Gimbal] Alignment complete!\r\n");
+                return;
+            }
+        }
+    }
+
+    USB_CDC_Printf("[Gimbal] Warning: Alignment timeout, continuing anyway...\r\n");
 }

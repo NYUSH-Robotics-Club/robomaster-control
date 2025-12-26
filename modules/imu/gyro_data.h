@@ -44,5 +44,11 @@ float gimbal_absolute_angle(SensorData* sensor_data);
 // 陀螺仪零偏校准
 void gyro_calibrate(void);
 
+// 校准期间的回调函数类型（在每次采样间隔时调用，用于保持云台位置等）
+typedef void (*GyroCalibCallback_t)(void);
+
+// 设置校准回调函数
+void gyro_calibrate_set_callback(GyroCalibCallback_t callback);
+
 #endif
 

@@ -23,6 +23,9 @@ static float g_norm = 9.81f;        // 重力加速度范数
 static uint32_t last_update_tick = 0;  // 上次更新时间戳（ms）
 static float dt = 0.005f;               // 动态计算的采样周期（s）
 
+// 校准期间的回调函数（用于保持云台位置等）
+static GyroCalibCallback_t gyro_calib_callback = NULL;
+
 #define RAD_TO_DEG (57.295779513f)
 #define DEG_TO_RAD (0.017453292f)
 #define GRAVITY_ACCEL (9.80665f)  // 标准重力加速度 m/s²
@@ -82,6 +85,15 @@ static void init_attitude_from_accel(float ax, float ay, float az)
  * @attention 调用此函数时，IMU必须静止不动
  * @note 采集6000个样本（约6秒），计算陀螺仪零偏和加速度计缩放
  */
+/**
+ * @brief 设置陀螺仪校准期间的回调函数
+ * @param callback 回调函数指针，在每次采样间隔时调用（约1ms间隔）
+ */
+void gyro_calibrate_set_callback(GyroCalibCallback_t callback)
+{
+    gyro_calib_callback = callback;
+}
+
 void gyro_calibrate(void)
 {
     #define CALIB_SAMPLES 2000    // 2000样本（约2秒）- 更实用
@@ -202,6 +214,11 @@ void gyro_calibrate(void)
                                    g_norm_diff, gyro_diff[0], gyro_diff[1], gyro_diff[2]);
                     break;  // 跳出采样循环，重新开始
                 }
+            }
+
+            // 调用回调函数（如果设置了），用于保持云台位置等
+            if (gyro_calib_callback != NULL) {
+                gyro_calib_callback();
             }
 
             HAL_Delay(1);  // 1ms间隔

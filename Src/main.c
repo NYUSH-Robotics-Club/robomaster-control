@@ -39,8 +39,10 @@
 #include "chassis_controller.h"
 #include "shooter_controller.h"
 #include "gimbal_controller.h"
+#include "gm6020_motor.h"
 #include "can_manager.h"
 #include <stdarg.h>
+#include <math.h>
 #include "printing.h"
 #include "wt61c.h"
 #include "gyro_data.h"
@@ -104,6 +106,7 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
+static void Gimbal_HoldPosition_Callback(void);
 
 SensorData sensor_data;
 
@@ -118,6 +121,35 @@ CAN receive callback - delegate to CAN manager
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
   CAN_Manager_GlobalCallback(hcan);
+}
+
+/**
+ * @brief Callback function to hold gimbal position during calibration
+ * @note This function is called every ~1ms during gyro calibration to keep
+ *       the gimbal motors actively holding their position.
+ */
+static void Gimbal_HoldPosition_Callback(void)
+{
+  static uint32_t call_count = 0;
+  call_count++;
+
+  // Only send command and dispatch every 5ms to reduce overhead
+  if (call_count % 5 == 0) {
+    GimbalCmd cmd = {
+      .enabled = true,
+      .pitch_rate = 0.0f,
+      .yaw_rate = 0.0f,
+      .yaw_rate_memo = 0.0f,
+      .yaw_target_memo = 0.0f,
+      .vision_valid = false,
+      .vision_yaw_err_rad = 0.0f,
+      .vision_pitch_err_rad = 0.0f,
+      .vision_ts_ms = 0
+    };
+
+    MsgCenter_Publish(TOPIC_GIMBAL_CMD, &cmd, sizeof(cmd));
+    MsgCenter_Dispatch();  // Process messages immediately
+  }
 }
 
 /* USER CODE END 0 */
@@ -165,18 +197,19 @@ int main(void)
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  // 等待3秒，给用户时间连接串口查看启动日志
+  // Print boot message
   USB_CDC_Printf("\r\n");
   USB_CDC_Printf("========================================\r\n");
   USB_CDC_Printf("   RoboMaster Control System Boot\r\n");
-  USB_CDC_Printf("   Waiting 3s for serial connection...\r\n");
   USB_CDC_Printf("========================================\r\n");
-  HAL_Delay(3000);
 
-  // IMU Calibration (must be still during calibration)
-  USB_CDC_Printf("\r\n=== IMU Initialization ===\r\n");
+  // Initialize buzzer
+  Buzzer_Init();
 
-  // 测试CS引脚是否能正常工作
+  // BMI088 Initialization (without calibration yet)
+  USB_CDC_Printf("\r\n=== BMI088 Initialization ===\r\n");
+
+  // Test CS pins
   USB_CDC_Printf("[BMI088] Testing CS pins...\r\n");
   USB_CDC_Printf("[BMI088] Testing ACCEL CS (PA4)...\r\n");
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
@@ -188,7 +221,7 @@ int main(void)
   HAL_Delay(10);
   accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
   USB_CDC_Printf("[BMI088] ACCEL CS LOW: %s\r\n", accel_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  // 恢复高电平
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
   USB_CDC_Printf("[BMI088] Testing GYRO CS (PB0)...\r\n");
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
@@ -200,7 +233,7 @@ int main(void)
   HAL_Delay(10);
   gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
   USB_CDC_Printf("[BMI088] GYRO CS LOW: %s\r\n", gyro_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);  // 恢复高电平
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
   uint8_t bmi088_error = BMI088_init();
   USB_CDC_Printf("[BMI088] BMI088_init() returned: 0x%02X\r\n", bmi088_error);
@@ -218,44 +251,73 @@ int main(void)
   } else {
     USB_CDC_Printf("[BMI088] BMI088 initialization SUCCESS!\r\n");
   }
+  USB_CDC_Printf("=== BMI088 Init Complete ===\r\n\r\n");
 
-  gyro_calibrate();
-  USB_CDC_Printf("=== IMU Init Complete ===\r\n\r\n");
-
+  // Initialize message center (needed for gimbal communication)
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
 
-  // Initialize command controller first (central control)
-  CmdController_Init();
-  
-  // Initialize application controllers
-  ChassisApp_Init();
-  ShooterApp_Init();
-  GimbalApp_Init();
-  
-  // Initialize remote control
-  remote_control_init();
-
-  // Initialize CAN managers (they will publish TOPIC_CAN_RX and TOPIC_MOTOR_FEEDBACK)
+  // Initialize CAN managers early (needed for gimbal motors)
   CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
   CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
   CAN_Manager_Start(&can1_manager);
   CAN_Manager_Start(&can2_manager);
-  
+
+  // Initialize gimbal early (before calibration)
+  GimbalApp_Init();
+
+  // Wait for CAN bus to stabilize and gimbal to receive initial feedback
+  USB_CDC_Printf("[Init] Waiting for CAN bus to stabilize...\r\n");
+  HAL_Delay(200);
+
+  // Wait for gimbal to reach initial alignment position
+  Gimbal_WaitForAlignment();
+
+  // Now start IMU calibration with gimbal in position
+  USB_CDC_Printf("\r\n=== Starting IMU Calibration ===\r\n");
+  USB_CDC_Printf("[Calibration] Keep the robot still!\r\n");
+
+  // Set LED to blue during calibration
+  LED_SetRGB(0, 0, 1);
+
+  // Set callback to keep gimbal holding position during calibration
+  gyro_calibrate_set_callback(Gimbal_HoldPosition_Callback);
+
+  // Perform gyro calibration
+  gyro_calibrate();
+
+  // Set LED to green
+  LED_SetRGB(0, 1, 0);
+
+  USB_CDC_Printf("=== IMU Calibration Complete ===\r\n\r\n");
+
+  // Continue with remaining initialization
+  // Initialize command controller (central control)
+  CmdController_Init();
+
+  // Now we can clear the callback since CmdController will take over
+  gyro_calibrate_set_callback(NULL);
+
+  // Initialize remaining application controllers
+  ChassisApp_Init();
+  ShooterApp_Init();
+
+  // Initialize remote control
+  remote_control_init();
+
   // Initialize Vision Communication
   VisionComm_Init();
-  
+
+  // Wait for ESC boot
   HAL_Delay(WAIT_ESC_BOOT_MS);
 
-  // Play boot beep sound
-  // Buzzer_PlayBeep();
-
   // Initialize WT61C-TTL IMU sensor on USART1
-  
   WT61C_Init(&WT61C_UART_HANDLE);
   // Start UART DMA reception with idle line detection
   HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
   // Disable half-transfer interrupt to reduce callback overhead
   __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
+
+  USB_CDC_Printf("\r\n=== System Ready ===\r\n\r\n");
 
   /* USER CODE END 2 */
 
