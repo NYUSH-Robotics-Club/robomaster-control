@@ -19,9 +19,12 @@ static uint8_t calibrated = 0;      // 校准完成标志
 static float accel_scale = 1.0f;    // 加速度计缩放系数
 static float g_norm = 9.81f;        // 重力加速度范数
 
+// 时间测量
+static uint32_t last_update_tick = 0;  // 上次更新时间戳（ms）
+static float dt = 0.005f;               // 动态计算的采样周期（s）
+
 #define RAD_TO_DEG (57.295779513f)
 #define DEG_TO_RAD (0.017453292f)
-#define DT (0.005f)  // 5ms = 200Hz
 #define GRAVITY_ACCEL (9.80665f)  // 标准重力加速度 m/s²
 
 /**
@@ -251,10 +254,20 @@ void gyro_data_init(void)
 {
     BMI088_init();
     initialized = 0;  // 标记为未初始化，等待第一次数据
+    last_update_tick = HAL_GetTick();  // 初始化时间戳
 }
 
 void gyro_data_update(SensorData *sensor_data)
 {
+    // === 动态计算采样周期 ===
+    uint32_t current_tick = HAL_GetTick();
+    dt = (current_tick - last_update_tick) * 0.001f;  // ms -> s
+    last_update_tick = current_tick;
+
+    // 限制 dt 范围，防止异常值（0.5ms ~ 20ms）
+    if (dt < 0.0005f) dt = 0.0005f;
+    if (dt > 0.02f) dt = 0.02f;
+
     BMI088_read(gyro, accel, &temp);
 
     // 保存原始IMU数据（gyro: rad/s, accel: m/s²）
@@ -290,7 +303,7 @@ void gyro_data_update(SensorData *sensor_data)
     // EKF 会在内部再减去 GyroBias（X/Y 轴动态估计，Z 轴恒为 0）
     IMU_QuaternionEKF_Update(gyro_calibrated[0], gyro_calibrated[1], gyro_calibrated[2],
                               accel_calibrated[0], accel_calibrated[1], accel_calibrated[2],
-                              DT);
+                              dt);  // 使用动态计算的 dt，而不是固定值
 
     // 从QuaternionEKF获取姿态角度（度）
     sensor_data->yaw = QEKF_INS.Yaw;
