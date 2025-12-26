@@ -31,6 +31,8 @@ typedef struct {
     Motor_Feedback motor_feedbacks[CHASSIS_MOTOR_COUNT];
     // Output currents
     int16_t output_currents[CHASSIS_MOTOR_COUNT];
+    PID_Controller angle_pids[2];
+
 } ChassisController;
 
 
@@ -94,5 +96,14 @@ bool ChassisController_IsRunning(const ChassisController *controller);
  */
 void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick);
 
-#endif // CHASSIS_CONTROLLER_H
+ typedef float fp32;
+ typedef double fp64;
+ extern fp32 vx_set, vy_set, wz_set;
+ extern fp32 PID_CurrentLT1, PID_CurrentLT2, PID_CurrentRT1, PID_CurrentRT2;
+ extern fp32 M3508_SPEED[4], MS7010_ANGLE[4];
+ float Angle_Limit(float angle, float max);
+ void chassis_vector_to_M3508_wheel_speed(fp32 vx_set, fp32 vy_set, fp32 wz_set, fp32 wheel_speed[4]);
+ void chassis_vector_to_GM6020_wheel_angle(fp32 vx_set, fp32 vy_set, fp32 wz_set, fp32 wheel_angle[4]);
+ void chassis_cmd_calc(void);
+ #endif // CHASSIS_CONTROLLER_H
 

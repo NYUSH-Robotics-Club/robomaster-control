@@ -50,13 +50,13 @@ bool GM6020_IsInitialized(uint8_t id)
     return g_ctx[id-1].angle_inited != 0;
 }
 
-void Motor_Init(uint8_t id, float KP, float KI, float KD, float initial_angle, float output_max, float integral_max)
+void Motor_Init(uint8_t id, int motor_number, float KP, float KI, float KD, float initial_angle, float output_max, float integral_max)
 {
   if (!g_subscribed) {
     (void)MsgCenter_Subscribe(TOPIC_GM6020_FEEDBACK, on_gm6020_feedback, NULL);
     g_subscribed = 1;
   }
-  if (id < 1 || id > 7) return;
+  if (id < 0 || id > motor_number+1) return;
   GM6020_MotorContext *c = &g_ctx[id-1];
   c->id = id;
   c->angle_raw = 0.0f;
