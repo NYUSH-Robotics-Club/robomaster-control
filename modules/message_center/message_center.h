@@ -23,7 +23,7 @@ typedef enum {
 } MsgTopic;
 
 #ifndef MC_MAX_PAYLOAD
-#define MC_MAX_PAYLOAD 64
+#define MC_MAX_PAYLOAD 128
 #endif
 
 typedef struct {
