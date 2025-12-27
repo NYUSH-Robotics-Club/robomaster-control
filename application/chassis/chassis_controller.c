@@ -12,8 +12,8 @@
 
 extern CAN_HandleTypeDef hcan1;
 
-#define SPEED_PID_KP (5.0f)
-#define SPEED_PID_KI (0.5f)
+#define SPEED_PID_KP (10.0f)
+#define SPEED_PID_KI (0.0f)
 #define SPEED_PID_KD (0.1f)
 #define SPEED_PID_OUTPUT_MAX (15000)
 #define SPEED_PID_INTEGRAL_MAX (7500)
@@ -28,13 +28,6 @@ static SensorData s_last_sensor;
 static ChassisController s_ctrl;
 
 static const int8_t MOTOR_DIR[CHASSIS_MOTOR_COUNT] = { -1, +1, +1, -1 };
-
-static float RampTowards(float current, float target, float step)
-{
-    if (current < target) { current += step; if (current > target) current = target; }
-    else if (current > target) { current -= step; if (current < target) current = target; }
-    return current;
-}
 
 static void ResetPidIntegrals(ChassisController *controller)
 {
@@ -53,12 +46,11 @@ void ChassisController_Init(ChassisController *controller)
     if (controller == NULL) return;
     memset(controller, 0, sizeof(ChassisController));
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
-        PID_Init(&controller->speed_pids[i], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, 
+        PID_Init(&controller->speed_pids[i], SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD,
                  SPEED_PID_OUTPUT_MAX, SPEED_PID_INTEGRAL_MAX);
     }
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
         controller->target_speeds[i] = 0.0f;
-        controller->ramped_targets[i] = 0.0f;
     }
 }
 
@@ -81,12 +73,8 @@ void ChassisController_Update(ChassisController *controller, SensorData* sensor_
     controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy - omega);
     controller->target_speeds[2] = MOTOR_DIR[2] * (vx - vy - omega);
     controller->target_speeds[3] = MOTOR_DIR[3] * (vx + vy + omega);
-    
+
     controller->running = s_last_cmd.enabled;
-    
-    for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
-        controller->ramped_targets[i] = RampTowards(controller->ramped_targets[i], controller->target_speeds[i], CHASSIS_RAMP_STEP);
-    }
 }
 
 void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t current_tick)
@@ -95,7 +83,7 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
     for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
         int16_t motor_current = ComputeSingleMotorCurrent(
             &controller->speed_pids[i],
-            controller->ramped_targets[i],
+            controller->target_speeds[i],
             &controller->motor_feedbacks[i],
             current_tick
         );
@@ -128,7 +116,7 @@ const int16_t* ChassisController_GetOutputCurrents(const ChassisController *cont
 bool ChassisController_IsRunning(const ChassisController *controller)
 {
     if (controller == NULL) return false;
-    for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) { if (controller->ramped_targets[i] != 0) { return true; } }
+    for (int i = 0; i < CHASSIS_MOTOR_COUNT; i++) { if (controller->target_speeds[i] != 0) { return true; } }
     return false;
 }
 

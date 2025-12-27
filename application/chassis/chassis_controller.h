@@ -14,15 +14,12 @@
 
 // Chassis control parameters
 #define CHASSIS_DEMO_TARGET_SPEED 7000
-#define CHASSIS_RAMP_STEP 50.0f
 
 
 // Chassis controller structure
 typedef struct {
     // Motor target speeds
     float target_speeds[CHASSIS_MOTOR_COUNT];
-    // Smoothed target speeds
-    float ramped_targets[CHASSIS_MOTOR_COUNT];
     // Running state
     bool running;
     // PID controllers
