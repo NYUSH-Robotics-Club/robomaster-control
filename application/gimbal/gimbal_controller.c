@@ -42,6 +42,7 @@ extern CAN_HandleTypeDef hcan2;
 static GimbalCmd s_last_cmd;
 static SensorData s_last_sensor;
 static bool s_initialized = false;
+static uint32_t s_last_spin_gim_dbg_tick = 0; // rate limiter for SPINGIM prints (tagged)
 
 void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
                            float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle)
@@ -175,18 +176,24 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     // OUTER LOOP: angle → speed
     // ==========================
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
-    float abs_err = fabsf(angle_error);
 
     // Error-based dynamic speed limiting
-    float rpm_limit =440.0f; // Minimum limit
+    float rpm_limit = 800.0f; // Minimum limit
 
     // Apply signed clamp
     if (cmd_angle_to_speed >  rpm_limit) cmd_angle_to_speed =  rpm_limit;
     if (cmd_angle_to_speed < -rpm_limit) cmd_angle_to_speed = -rpm_limit;
-    
-    
+
+    // ==========================
+    // INNER LOOP: speed → current
+    // ==========================
+    // Use IMU gyro as speed feedback (aligned with basic framework)
+    // Convert IMU gyro (rad/s) to RPM: 1 rad/s = 30/π RPM ≈ 9.549 RPM
+    // Note: Direction may need to be inverted depending on IMU mounting
+    float imu_gyro_rpm = -sensor_data->g_gz * 30.0f / (float)M_PI;  // negative because IMU z-axis convention
+
     float cmd_speed_to_current =
-        PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, yaw->speed_rpm);
+        PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, imu_gyro_rpm);
     // const float KS_MAX = 7000.0f;
     // const float KS_ON  = 350.0f;
     // const float KS_OFF = 50.0f;
@@ -235,7 +242,9 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
         // Execute gimbal control when command arrives
         if (s_last_cmd.enabled) {
             static bool s_yaw_vision_active = false;
+            static bool s_yaw_spin_hold_active = false;
             bool use_vision_target = s_last_cmd.vision_valid;
+            bool use_spin_hold = (!use_vision_target) && (s_last_cmd.yaw_rate_memo > 0.5f);
 
             // Continuous angle control: update target angle every cycle when vision is valid
             if (use_vision_target) {
@@ -262,19 +271,83 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
                 s_yaw_vision_active = false;
             }
 
+            // Spin-hold mode: hold gimbal absolute yaw (deg) using gimbal IMU yaw_total_angle.
+            // Target is carried via yaw_target_memo; enable flag via yaw_rate_memo.
+            if (use_spin_hold) {
+                GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
+                if (yaw && yaw->angle_inited && yaw->max_encoder > 0.0f) {
+                    // Calculate angle error with proper wrapping to [-180, 180] range
+                    float yaw_err_deg = s_last_cmd.yaw_target_memo - s_last_sensor.yaw_total_angle;
+
+                    // Wrap error to shortest path
+                    while (yaw_err_deg > 180.0f) yaw_err_deg -= 360.0f;
+                    while (yaw_err_deg < -180.0f) yaw_err_deg += 360.0f;
+
+                    // Convert to encoder ticks
+                    float ticks_per_deg = yaw->max_encoder / 360.0f;
+                    float err_ticks = yaw_err_deg * ticks_per_deg;
+
+                    // Set target angle in encoder space
+                    yaw->angle_target = (float)yaw->angle_raw + err_ticks;
+                    while (yaw->angle_target >= yaw->max_encoder) yaw->angle_target -= yaw->max_encoder;
+                    while (yaw->angle_target < 0.0f) yaw->angle_target += yaw->max_encoder;
+
+                    if (!s_yaw_spin_hold_active) {
+                        PID_Reset(&yaw->angle_pid);
+                        PID_Reset(&yaw->speed_pid);
+                    }
+                    s_yaw_spin_hold_active = true;
+                } else {
+                    s_yaw_spin_hold_active = false;
+                }
+            } else {
+                s_yaw_spin_hold_active = false;
+            }
+
             int16_t pitch_current = GimbalController_PitchControl(
                 GIMBAL_PITCH_ID, 
                 use_vision_target ? 0.0f : s_last_cmd.pitch_rate, 
                 &s_last_sensor
             );
             int16_t yaw_current = GimbalController_YawControlWithCompensation(
-                use_vision_target ? 0.0f : s_last_cmd.yaw_rate, 
+                (use_vision_target || use_spin_hold) ? 0.0f : s_last_cmd.yaw_rate,
                 &s_last_sensor
             );
             
             // Send CAN commands
             CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, pitch_current);
             CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, yaw_current);
+
+            // Tagged debug prints for spin diagnostics (10 Hz)
+            // Format:
+            // SPINGIM,ts_ms,enabled,vision,spin_hold,yaw_rate_cmd,yaw_raw,yaw_target,motor_rpm,imu_gyro_rpm,yaw_current_cmd
+            uint32_t now = HAL_GetTick();
+            if (now - s_last_spin_gim_dbg_tick >= 100) {
+                s_last_spin_gim_dbg_tick = now;
+                GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
+                if (yaw) {
+                    // Convert IMU gyro for logging (same as in control loop)
+                    float imu_gyro_rpm = -s_last_sensor.g_gz * 30.0f / (float)M_PI;
+                    USB_CDC_Printf("SPINGIM,%lu,%u,%u,%u,%.3f,%u,%.2f,%d,%.1f,%d\r\n",
+                                   (unsigned long)now,
+                                   (unsigned int)(s_last_cmd.enabled ? 1U : 0U),
+                                   (unsigned int)(use_vision_target ? 1U : 0U),
+                                   (unsigned int)(use_spin_hold ? 1U : 0U),
+                                   s_last_cmd.yaw_rate,
+                                   (unsigned int)yaw->angle_raw,
+                                   yaw->angle_target,
+                                   (int)yaw->speed_rpm,
+                                   imu_gyro_rpm,
+                                   (int)yaw_current);
+                } else {
+                    USB_CDC_Printf("SPINGIM,%lu,%u,%u,%u,%.3f,0,0.00,0,0.0,0\r\n",
+                                   (unsigned long)now,
+                                   (unsigned int)(s_last_cmd.enabled ? 1U : 0U),
+                                   (unsigned int)(use_vision_target ? 1U : 0U),
+                                   (unsigned int)(use_spin_hold ? 1U : 0U),
+                                   s_last_cmd.yaw_rate);
+                }
+            }
 
             // 输出编码器值到CDC串口 (20Hz更新率)
             // ENCODER logging disabled to reduce noise

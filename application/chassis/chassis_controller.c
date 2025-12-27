@@ -27,16 +27,6 @@ static ChassisCmd s_last_cmd;
 static SensorData s_last_sensor;
 static ChassisController s_ctrl;
 
-static Pair to_real_speed(Pair speed, float angle, float w) {
-    const float k = 0.01f;
-    angle += k * w;
-    angle = 0.0f;
-    Pair result;
-    result.x = speed.x * cosf(angle) - speed.y * sinf(angle);
-    result.y = speed.x * sinf(angle) + speed.y * cosf(angle);
-    return result;
-}
-
 static const int8_t MOTOR_DIR[CHASSIS_MOTOR_COUNT] = { -1, +1, +1, -1 };
 
 static float RampTowards(float current, float target, float step)
@@ -75,15 +65,17 @@ void ChassisController_Init(ChassisController *controller)
 void ChassisController_Update(ChassisController *controller, SensorData* sensor_data)
 {
     if (controller == NULL) return;
-    
+
     float vx_norm = s_last_cmd.vx;
     float vy_norm = s_last_cmd.vy;
     float wz_norm = s_last_cmd.wz;
     float scale = (float)CHASSIS_DEMO_TARGET_SPEED / 2.0f;
     float omega = wz_norm * scale;
-    Pair _speed = (Pair){vx_norm * scale, vy_norm * scale};
-    Pair speed = to_real_speed(_speed, sensor_data->c_yaw, omega);
-    float vx = speed.x, vy = speed.y;
+
+    // Coordinate transformation is already done in cmd_controller for spin mode
+    // So we directly use the vx/vy from command without additional transformation
+    float vx = vx_norm * scale;
+    float vy = vy_norm * scale;
 
     controller->target_speeds[0] = MOTOR_DIR[0] * (vx - vy + omega);
     controller->target_speeds[1] = MOTOR_DIR[1] * (vx + vy - omega);
