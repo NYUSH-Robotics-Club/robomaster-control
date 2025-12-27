@@ -17,7 +17,7 @@
 // ==========================
 // Small gyro (spinning) mode
 // ==========================
-// Trigger: right switch in MID position.
+// Trigger: left switch in MID position.
 // Behavior:
 //  - Chassis: constant spin + allow translation (field-oriented control).
 //  - Gimbal yaw: hold gimbal IMU absolute yaw steady (controlled by gimbal module's internal PID).
@@ -29,6 +29,16 @@
 
 static bool  s_spin_mode = false;
 static float s_spin_hold_yaw_deg = 0.0f;       // target absolute yaw (deg, gimbal IMU yaw_total_angle)
+
+// ==========================
+// Gimbal-oriented follow mode
+// ==========================
+// Trigger: left switch in UP position.
+// Behavior:
+//  - Chassis: movement direction follows gimbal orientation (field-oriented control).
+//  - Chassis does NOT auto-spin (wz controlled manually by joystick).
+//  - Gimbal: normal manual control.
+static bool s_gimbal_follow_mode = false;
 
 
 
@@ -106,7 +116,7 @@ static int16_t apply_deadband(int16_t value, int16_t deadband) {
 }
 
 // Process chassis control commands
-static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *sensor, bool spin_mode) {
+static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *sensor, bool spin_mode, bool gimbal_follow_mode) {
     if (rc == NULL) {
         // RC disconnected, stop chassis
         s_chassis_cmd.vx = 0.0f;
@@ -127,8 +137,8 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     float vy_f = -(float)vy_raw / max_input;
     float wz_n = (float)wz_raw / max_input;
 
-    if (spin_mode && sensor != NULL) {
-        // Spin mode: gimbal stays stable, chassis rotates, joystick input is in gimbal frame.
+    if ((spin_mode || gimbal_follow_mode) && sensor != NULL) {
+        // Spin mode OR Gimbal-follow mode: joystick input is in gimbal frame.
         // Need to convert joystick input from gimbal frame to chassis frame.
 
         // Calculate offset angle: gimbal yaw - chassis yaw
@@ -141,23 +151,34 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
         float vx_c = 0.0f, vy_c = 0.0f;
         gimbal_to_chassis_frame(vx_f, vy_f, offset_angle, &vx_c, &vy_c);
 
-        // Set chassis spin rate
-        const float omega = SPIN_WZ_NORM;
+        if (spin_mode) {
+            // Spin mode: chassis auto-rotates at constant speed
+            const float omega = SPIN_WZ_NORM;
 
-        // Limit translation velocity to prevent wheel saturation
-        // Use L2 norm (magnitude) instead of L1 norm for better control
-        float mag = sqrtf(vx_c * vx_c + vy_c * vy_c);
-        if (mag > SPIN_TRANSLATE_LIMIT_NORM) {
-            float scale = SPIN_TRANSLATE_LIMIT_NORM / mag;
-            vx_c *= scale;
-            vy_c *= scale;
+            // Limit translation velocity to prevent wheel saturation
+            // Use L2 norm (magnitude) instead of L1 norm for better control
+            float mag = sqrtf(vx_c * vx_c + vy_c * vy_c);
+            if (mag > SPIN_TRANSLATE_LIMIT_NORM) {
+                float scale = SPIN_TRANSLATE_LIMIT_NORM / mag;
+                vx_c *= scale;
+                vy_c *= scale;
+            }
+
+            // Swap vx_c and vy_c to match chassis coordinate system, negate vy for correct direction
+            s_chassis_cmd.vx = vy_c;
+            s_chassis_cmd.vy = -vx_c;
+            s_chassis_cmd.wz = omega;
+            // In spin mode we always enable chassis so it keeps rotating even with sticks centered.
+            s_chassis_cmd.enabled = true;
+        } else {
+            // Gimbal-follow mode: chassis does NOT auto-rotate, manual wz control
+            // Swap vx_c and vy_c to match chassis coordinate system, negate vy for correct direction
+            s_chassis_cmd.vx = vy_c;
+            s_chassis_cmd.vy = -vx_c;
+            s_chassis_cmd.wz = wz_n;
+            // Enable chassis if any joystick is moved
+            s_chassis_cmd.enabled = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
         }
-
-        s_chassis_cmd.vx = vx_c;
-        s_chassis_cmd.vy = vy_c;
-        s_chassis_cmd.wz = omega;
-        // In spin mode we always enable chassis so it keeps rotating even with sticks centered.
-        s_chassis_cmd.enabled = true;
     } else {
         // Normal (original) behavior
         s_chassis_cmd.vx = vx_f;
@@ -288,16 +309,24 @@ void CmdController_Task(uint32_t current_tick) {
         return;
     }
 
-    // Small gyro mode gating: right switch in MID position.
-    bool spin_now = switch_is_mid(s_last_rc.rc.s[0]);
-    if (spin_now && !s_spin_mode) {
-        // Rising edge: latch current gimbal absolute yaw as hold target.
+    // Mode selection based on left switch position:
+    // UP   -> Gimbal-follow mode (movement follows gimbal orientation, no auto-spin)
+    // MID  -> Small gyro mode (chassis auto-spins, gimbal holds yaw)
+    // DOWN -> Normal mode (chassis frame movement)
+    bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[0]);
+    bool spin_now = switch_is_up(s_last_rc.rc.s[0]);
+
+    // Spin mode rising edge: latch current gimbal absolute yaw as hold target
+    if (spin_now && !s_spin_mode)
+    {
         s_spin_hold_yaw_deg = s_last_sensor.yaw_total_angle;
     }
+
+    s_gimbal_follow_mode = gimbal_follow_now;
     s_spin_mode = spin_now;
 
     // Process control input
-    process_chassis_command(&s_last_rc, &s_last_sensor, s_spin_mode);
+    process_chassis_command(&s_last_rc, &s_last_sensor, s_spin_mode, s_gimbal_follow_mode);
     process_shooter_command(&s_last_rc);
     process_gimbal_command(&s_last_rc, &s_last_sensor, s_spin_mode);
 
