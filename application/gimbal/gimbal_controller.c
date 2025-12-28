@@ -23,7 +23,7 @@ extern CAN_HandleTypeDef hcan2;
 
 // PID parameters
 #define YAW_KP        (0.70f)
-#define YAW_KI        (0.020f)
+#define YAW_KI        (0.045f)
 #define YAW_KD        (0.04f)
 #define YAW_SPEED_KP  (30.0f)
 #define YAW_SPEED_KI  (0.01f)
@@ -42,7 +42,6 @@ extern CAN_HandleTypeDef hcan2;
 static GimbalCmd s_last_cmd;
 static SensorData s_last_sensor;
 static bool s_initialized = false;
-static uint32_t s_last_spin_gim_dbg_tick = 0; // rate limiter for SPINGIM prints (tagged)
 
 void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
                            float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle)
@@ -118,7 +117,7 @@ static int16_t test_counter = 0;
 static int16_t test_target = 0;
 #endif
 
-int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data)
+int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data, bool use_imu_feedback)
 {
     GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
     if (!yaw || !yaw->angle_inited) return 0;
@@ -159,23 +158,28 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     // ==========================
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
 
-    // Fixed speed limit for yaw control stability
-    float rpm_limit = 800.0f;
+    // Speed limit for yaw control stability (from working commit 22e9ff0e7a)
+    float rpm_limit = 440.0f;
 
     // Apply signed clamp
     if (cmd_angle_to_speed >  rpm_limit) cmd_angle_to_speed =  rpm_limit;
     if (cmd_angle_to_speed < -rpm_limit) cmd_angle_to_speed = -rpm_limit;
 
-    // ==========================
-    // INNER LOOP: speed → current
-    // ==========================
-    // Use IMU gyro as speed feedback (aligned with basic framework)
-    // Convert IMU gyro (rad/s) to RPM: 1 rad/s = 30/π RPM ≈ 9.549 RPM
-    // Note: Direction may need to be inverted depending on IMU mounting
-    float imu_gyro_rpm = -sensor_data->g_gz * 30.0f / (float)M_PI;  // negative because IMU z-axis convention
+    // Speed feedback source selection:
+    // - Spin mode: Use IMU gyro for absolute yaw stability
+    // - Normal mode: Use motor encoder for better response
+    float speed_feedback;
+    if (use_imu_feedback) {
+        // IMU gyro feedback (for spin mode)
+        // Convert IMU gyro (rad/s) to RPM: 1 rad/s = 30/π RPM ≈ 9.549 RPM
+        speed_feedback = -sensor_data->g_gz * 30.0f / (float)M_PI;  // negative because IMU z-axis convention
+    } else {
+        // Motor encoder speed feedback (for normal mode)
+        speed_feedback = (float)yaw->speed_rpm;
+    }
 
     float cmd_speed_to_current =
-        PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, imu_gyro_rpm);
+        PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, speed_feedback);
 
     // Clamp current
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
@@ -271,13 +275,14 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
             }
 
             int16_t pitch_current = GimbalController_PitchControl(
-                GIMBAL_PITCH_ID, 
-                use_vision_target ? 0.0f : s_last_cmd.pitch_rate, 
+                GIMBAL_PITCH_ID,
+                use_vision_target ? 0.0f : s_last_cmd.pitch_rate,
                 &s_last_sensor
             );
             int16_t yaw_current = GimbalController_YawControlWithCompensation(
                 (use_vision_target || use_spin_hold) ? 0.0f : s_last_cmd.yaw_rate,
-                &s_last_sensor
+                &s_last_sensor,
+                use_spin_hold  // Use IMU feedback only in spin mode
             );
             
             // Send CAN commands

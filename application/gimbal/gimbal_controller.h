@@ -56,9 +56,10 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
  * @brief Yaw control with compensation (chassis rotation + gyro feedback)
  * @param rate_normalized Normalized yaw rate (-1.0 to 1.0)
  * @param sensor_data Sensor data pointer
+ * @param use_imu_feedback Use IMU gyro for speed feedback (true for spin mode, false for encoder)
  * @return Motor current command
  */
-int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data);
+int16_t GimbalController_YawControlWithCompensation(float rate_normalized, SensorData* sensor_data, bool use_imu_feedback);
 
 /**
  * @brief Target angle correction for yaw (chassis compensation)
