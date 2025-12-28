@@ -286,8 +286,6 @@ int main(void)
     // Update sensor data and publishes IMU topic
     gyro_data_update(&sensor_data);
 
-    // Process command controller
-    LED_SetRGB(1, 0, 0);
     CmdController_Task(current_tick);
 
     // Dispatch message center events
@@ -296,17 +294,9 @@ int main(void)
     // Update buzzer music playback (feature for fun :D)
     Buzzer_Update();
 
-    // Send "hello" through USART6 periodically
-    if (current_tick - last_usart6_send_tick >= USART6_SEND_INTERVAL_MS)
-    {
-        USART6_SendString("hello\r\n");
-        last_usart6_send_tick = current_tick;
-    }
-
     LED_SetRGB(0, 1, 0);
 
 	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
-
     /* USER CODE END WHILE */
   }
     /* USER CODE BEGIN 3 */

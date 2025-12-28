@@ -141,11 +141,11 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
         // Spin mode OR Gimbal-follow mode: joystick input is in gimbal frame.
         // Need to convert joystick input from gimbal frame to chassis frame.
 
-        // Calculate offset angle: gimbal yaw - chassis yaw
+        // Calculate offset angle: chassis yaw - gimbal yaw
         // Both angles need to be normalized to same range for correct subtraction
         float gimbal_yaw_norm = normalize_angle_180(sensor->yaw_total_angle);
         float chassis_yaw_norm = normalize_angle_180(sensor->c_yaw);
-        float offset_angle = normalize_angle_180(- gimbal_yaw_norm + chassis_yaw_norm);
+        float offset_angle = normalize_angle_180(chassis_yaw_norm - gimbal_yaw_norm);
 
         // Rotate joystick input from gimbal frame to chassis frame
         float vx_c = 0.0f, vy_c = 0.0f;
@@ -231,11 +231,11 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
     int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
 
-    if (abs(yaw_storage-yaw_raw)>1000){
-        yaw_raw=yaw_storage;
+    // RC signal glitch filter: reject sudden jumps >1000 units (likely signal noise/interference)
+    if (abs(yaw_storage - yaw_raw) > 1000) {
+        yaw_raw = yaw_storage;
     }
 
-          
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
     float yaw_rate_manual = (float)yaw_raw / max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
@@ -278,9 +278,7 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
             s_gimbal_cmd.vision_valid = false;
         }
     }
-    yaw_storage=yaw_raw; 
-    // NOTE: Tagged debug printing is done in CmdController_Task() to keep one place for mode diagnostics.
-    
+    yaw_storage = yaw_raw;
 }
 
 void CmdController_Init(void) {
@@ -310,8 +308,8 @@ void CmdController_Task(uint32_t current_tick) {
     }
 
     // Mode selection based on left switch position:
-    // UP   -> Gimbal-follow mode (movement follows gimbal orientation, no auto-spin)
-    // MID  -> Small gyro mode (chassis auto-spins, gimbal holds yaw)
+    // UP   -> Small gyro mode (chassis auto-spins, gimbal holds yaw)
+    // MID  -> Gimbal-follow mode (movement follows gimbal orientation, no auto-spin)
     // DOWN -> Normal mode (chassis frame movement)
     bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[0]);
     bool spin_now = switch_is_up(s_last_rc.rc.s[0]);

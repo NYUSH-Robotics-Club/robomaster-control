@@ -27,6 +27,8 @@ static ChassisCmd s_last_cmd;
 static SensorData s_last_sensor;
 static ChassisController s_ctrl;
 
+// Motor direction correction array for mecanum wheel kinematics
+// Indices: [front-left, front-right, back-left, back-right]
 static const int8_t MOTOR_DIR[CHASSIS_MOTOR_COUNT] = { -1, +1, +1, -1 };
 
 static void ResetPidIntegrals(ChassisController *controller)

@@ -12,7 +12,7 @@
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 
-// Control parameters (local aliases for readability)
+// Motor ID definitions
 #define PITCH_ID 7
 #define YAW_ID 6
 
@@ -23,7 +23,7 @@ extern CAN_HandleTypeDef hcan2;
 
 // PID parameters
 #define YAW_KP        (0.70f)
-#define YAW_KI        (0.045f)
+#define YAW_KI        (0.020f)
 #define YAW_KD        (0.04f)
 #define YAW_SPEED_KP  (30.0f)
 #define YAW_SPEED_KI  (0.01f)
@@ -47,18 +47,10 @@ static uint32_t s_last_spin_gim_dbg_tick = 0; // rate limiter for SPINGIM prints
 void GimbalController_Init(float yaw_kp, float yaw_ki, float yaw_kd, float yaw_initial_angle,
                            float pitch_kp, float pitch_ki, float pitch_kd, float pitch_initial_angle)
 {
-    // Motor_Init already initializes motor parameters in module layer
+    // Initialize motor parameters in module layer
     Motor_Init(GIMBAL_YAW_ID, yaw_kp, yaw_ki, yaw_kd, yaw_initial_angle, 300.0f, 150.0f);
     Motor_Init(GIMBAL_PITCH_ID, pitch_kp, pitch_ki, pitch_kd, pitch_initial_angle, 30000.0f, 25000.0f);
 }
-
-// Test mode: generates step signal for tuning
-#define PITCH_TEST_MODE 0
-
-#if PITCH_TEST_MODE
-static int16_t pitch_test_counter = 0;
-static int16_t pitch_test_step = 0;
-#endif
 
 int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data)
 {
@@ -69,20 +61,9 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorD
         return 0;
     }
 
-#if PITCH_TEST_MODE
-    // Generate step signal for pitch testing
-    // Pitch range: 1000 - 4000 ticks (3000 tick range)
-    // Create steps: 1500 -> 2500 -> 3500 -> 2500 -> 1500 (1000 tick steps)
-    if (pitch_test_counter++ % 200 == 0) {
-        const float steps[] = {1500.0f, 2500.0f, 3500.0f, 2500.0f};
-        pitch_test_step = (pitch_test_step + 1) % 4;
-        c->angle_target = steps[pitch_test_step];
-    }
-#else
-    // Normal joystick control
-    float sensitivity = 40.0f;
-    c->angle_target += c->pitch_direction * sensitivity * rate_normalized;
-#endif
+// Joystick control with sensitivity scaling
+float sensitivity = 40.0f;
+c->angle_target += c->pitch_direction * sensitivity * rate_normalized;
 
     if(id == PITCH_ID){
         if (c->angle_target > c->angle_max)
@@ -143,14 +124,15 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     if (!yaw || !yaw->angle_inited) return 0;
 
 #if YAW_TEST_MODE
-    // Generate step signal for testing (1024 ticks every 1 second)
+    // Generate step signal for testing (full 360° rotation over 18 seconds)
+    // Increments by 8192/18 ≈ 455 ticks every 1 second (200 cycles @ 5ms)
     if (test_counter++ % 200 == 0) {
         test_target += 8192 / 18;
         if (test_target >= 8192) test_target = 0;
     }
     yaw->angle_target = (float)test_target;
 #else
-    // Normal joystick control
+    // Joystick control
     yaw->angle_target += 50.0f * rate_normalized;
 #endif
 
@@ -177,8 +159,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
     // ==========================
     float cmd_angle_to_speed = PID_Calculate(&yaw->angle_pid, 0.0f, -angle_error);
 
-    // Error-based dynamic speed limiting
-    float rpm_limit = 800.0f; // Minimum limit
+    // Fixed speed limit for yaw control stability
+    float rpm_limit = 800.0f;
 
     // Apply signed clamp
     if (cmd_angle_to_speed >  rpm_limit) cmd_angle_to_speed =  rpm_limit;
@@ -194,22 +176,6 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized, Senso
 
     float cmd_speed_to_current =
         PID_Calculate(&yaw->speed_pid, cmd_angle_to_speed, imu_gyro_rpm);
-    // const float KS_MAX = 7000.0f;
-    // const float KS_ON  = 350.0f;
-    // const float KS_OFF = 50.0f;
-
-    // float e = fabsf(angle_error);
-    // float ff = 0.0f;
-
-    // if (e < KS_ON && e > KS_OFF && fabsf(yaw->speed_rpm) < 6.0f) {
-    //     float scale = (e - KS_OFF) / (KS_ON - KS_OFF); // 1 → 0
-    //     ff = scale * KS_MAX;
-    //     if (angle_error < 0) ff = -ff;
-    // }
-
-
-
-    // cmd_speed_to_current += ff;
 
     // Clamp current
     if (cmd_speed_to_current >  CURRENT_LIMIT) cmd_speed_to_current =  CURRENT_LIMIT;
@@ -317,37 +283,6 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
             // Send CAN commands
             CAN_Manager_SendGM6020Current(&hcan2, GIMBAL_PITCH_ID, pitch_current);
             CAN_Manager_SendGM6020Current(&hcan1, GIMBAL_YAW_ID, yaw_current);
-
-            // Tagged debug prints for spin diagnostics (10 Hz)
-            // Format:
-            // SPINGIM,ts_ms,enabled,vision,spin_hold,yaw_rate_cmd,yaw_raw,yaw_target,motor_rpm,imu_gyro_rpm,yaw_current_cmd
-            uint32_t now = HAL_GetTick();
-            if (now - s_last_spin_gim_dbg_tick >= 100) {
-                s_last_spin_gim_dbg_tick = now;
-                GM6020_MotorContext *yaw = GM6020_GetContext(GIMBAL_YAW_ID);
-                if (yaw) {
-                    // Convert IMU gyro for logging (same as in control loop)
-                    float imu_gyro_rpm = -s_last_sensor.g_gz * 30.0f / (float)M_PI;
-                    USB_CDC_Printf("SPINGIM,%lu,%u,%u,%u,%.3f,%u,%.2f,%d,%.1f,%d\r\n",
-                                   (unsigned long)now,
-                                   (unsigned int)(s_last_cmd.enabled ? 1U : 0U),
-                                   (unsigned int)(use_vision_target ? 1U : 0U),
-                                   (unsigned int)(use_spin_hold ? 1U : 0U),
-                                   s_last_cmd.yaw_rate,
-                                   (unsigned int)yaw->angle_raw,
-                                   yaw->angle_target,
-                                   (int)yaw->speed_rpm,
-                                   imu_gyro_rpm,
-                                   (int)yaw_current);
-                } else {
-                    USB_CDC_Printf("SPINGIM,%lu,%u,%u,%u,%.3f,0,0.00,0,0.0,0\r\n",
-                                   (unsigned long)now,
-                                   (unsigned int)(s_last_cmd.enabled ? 1U : 0U),
-                                   (unsigned int)(use_vision_target ? 1U : 0U),
-                                   (unsigned int)(use_spin_hold ? 1U : 0U),
-                                   s_last_cmd.yaw_rate);
-                }
-            }
 
             // 输出编码器值到CDC串口 (20Hz更新率)
             // ENCODER logging disabled to reduce noise

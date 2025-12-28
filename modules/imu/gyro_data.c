@@ -81,11 +81,6 @@ static void init_attitude_from_accel(float ax, float ay, float az)
 }
 
 /**
- * @brief IMU校准（与basic_framework的Calibrate_MPU_Offset完全一致）
- * @attention 调用此函数时，IMU必须静止不动
- * @note 采集6000个样本（约6秒），计算陀螺仪零偏和加速度计缩放
- */
-/**
  * @brief 设置陀螺仪校准期间的回调函数
  * @param callback 回调函数指针，在每次采样间隔时调用（约1ms间隔）
  */
@@ -94,9 +89,14 @@ void gyro_calibrate_set_callback(GyroCalibCallback_t callback)
     gyro_calib_callback = callback;
 }
 
+/**
+ * @brief IMU校准（与basic_framework的Calibrate_MPU_Offset相似）
+ * @attention 调用此函数时，IMU必须静止不动
+ * @note 采集2000个样本（约2秒），计算陀螺仪零偏和加速度计缩放
+ */
 void gyro_calibrate(void)
 {
-    #define CALIB_SAMPLES 2000    // 2000样本（约2秒）- 更实用
+    #define CALIB_SAMPLES 2000    // 2000样本（约2秒）
     #define CALIB_TIMEOUT_MS 15000  // 15秒超时
     #define MAX_RETRY 3             // 最多重试3次
 
