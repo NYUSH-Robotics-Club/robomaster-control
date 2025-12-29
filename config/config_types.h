@@ -27,6 +27,7 @@ typedef enum {
  */
 typedef enum {
     MOTOR_ROLE_CHASSIS_DRIVE,      // Chassis drive motor (mecanum or swerve)
+    
     MOTOR_ROLE_CHASSIS_STEER,      // Swerve drive steering motor
     MOTOR_ROLE_GIMBAL_YAW,         // Gimbal yaw axis
     MOTOR_ROLE_GIMBAL_PITCH,       // Gimbal pitch axis

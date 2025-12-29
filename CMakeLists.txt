@@ -164,13 +164,33 @@ target_compile_definitions(modules PRIVATE
 target_link_libraries(modules PUBLIC stm32cubemx)
 target_compile_options(modules PUBLIC -mthumb)
 
-# application library
-add_library(application STATIC
+# ------------------------------------------------------------
+# application library (select chassis vs sentry at configure-time)
+# ------------------------------------------------------------
+
+# Common application sources (always built)
+set(APPLICATION_SOURCES
     application/cmd/cmd_controller.c
-    application/chassis/chassis_controller.c
     application/shoot/shooter_controller.c
     application/gimbal/gimbal_controller.c
 )
+
+# Pick ONE chassis implementation based on ROBOT_TYPE
+# - infantry_standard -> chassis_controller
+# - sentry_swerve     -> sentry_controller (and do NOT compile chassis_controller)
+if(ROBOT_TYPE STREQUAL "sentry_swerve")
+    list(APPEND APPLICATION_SOURCES
+        application/chassis/sentry_controller.c
+    )
+    message(STATUS "Chassis implementation: sentry_controller.c")
+else()
+    list(APPEND APPLICATION_SOURCES
+        application/chassis/chassis_controller.c
+    )
+    message(STATUS "Chassis implementation: chassis_controller.c")
+endif()
+
+add_library(application STATIC ${APPLICATION_SOURCES})
 
 target_include_directories(application PUBLIC
     config
@@ -193,14 +213,13 @@ target_include_directories(application PUBLIC
     Drivers/STM32F4xx_HAL_Driver/Inc
 )
 
-# Apply ROBOT_TYPE macro to application compilation units too
 target_compile_definitions(application PRIVATE
     ROBOT_TYPE_${ROBOT_TYPE}
 )
 
-# Inherit STM32CubeMX interface includes and compile definitions (e.g., USE_HAL_DRIVER, STM32F407xx)
 target_link_libraries(application PUBLIC stm32cubemx modules)
 target_compile_options(application PUBLIC -mthumb)
+
 
 # ------------------------------------------------------------
 # Link executable to libraries

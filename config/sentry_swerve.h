@@ -105,8 +105,8 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
             .initial_angle = 0.0f
         },
         // Typical: position(angle) PID for steering
-        .pid_outer = { 20.0f, 0.0f, 2.0f, 30000.0f, 25000.0f },
-        .pid_inner = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
+        .pid_outer = { 0.70f, 0.045f, 0.04f, 300.0f, 300.0f },    // Yaw angle PID
+        .pid_inner = { 30.0f, 0.01f, 3.0f, 30000.0f, 4000.0f }        // Yaw speed PID
     },
 
     // Steer motor B (GM6020 ID 6 => RX 0x20A)
@@ -125,8 +125,8 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
             .gravity_compensation = 0.0f,
             .initial_angle = 0.0f
         },
-        .pid_outer = { 20.0f, 0.0f, 2.0f, 30000.0f, 25000.0f },
-        .pid_inner = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
+        .pid_outer = { 0.70f, 0.045f, 0.04f, 300.0f, 300.0f },    // Yaw angle PID
+        .pid_inner = { 30.0f, 0.01f, 3.0f, 30000.0f, 4000.0f }        // Yaw speed PID
     }
 };
 

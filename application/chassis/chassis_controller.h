@@ -13,24 +13,37 @@
 // Chassis motor count
 #define CHASSIS_MOTOR_COUNT 4
 
+#define CHASSIS_STEER_COUNT 2
+
 // Chassis control parameters
 #define CHASSIS_DEMO_TARGET_SPEED 7000
 
 
 // Chassis controller structure
 typedef struct {
-    // Motor target speeds
+    // Drive motor target speeds
     float target_speeds[CHASSIS_MOTOR_COUNT];
+
     // Running state
     bool running;
-    // PID controllers
-    PID_Controller speed_pids[CHASSIS_MOTOR_COUNT];
-    // Motor feedbacks
-    Motor_Feedback motor_feedbacks[CHASSIS_MOTOR_COUNT];
-    // Output currents
-    int16_t output_currents[CHASSIS_MOTOR_COUNT];
-} ChassisController;
 
+    // Drive PID controllers
+    PID_Controller speed_pids[CHASSIS_MOTOR_COUNT];
+
+    // Drive motor feedbacks
+    Motor_Feedback motor_feedbacks[CHASSIS_MOTOR_COUNT];
+
+    // Drive output currents
+    int16_t output_currents[CHASSIS_MOTOR_COUNT];
+
+    // -----------------------------
+    // Swerve steering (optional)
+    // -----------------------------
+    float steer_target_angles[CHASSIS_STEER_COUNT];          // encoder ticks
+    PID_Controller steer_pids[CHASSIS_STEER_COUNT];          // angle PID
+    Motor_Feedback steer_feedbacks[CHASSIS_STEER_COUNT];     // steer feedback
+    int16_t steer_output_currents[CHASSIS_STEER_COUNT];      // steer currents
+} ChassisController;
 
 
 /**
