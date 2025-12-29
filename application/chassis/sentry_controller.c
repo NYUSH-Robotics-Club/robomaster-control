@@ -13,8 +13,14 @@
 #include "can_comm.h"
 #include "printing.h"
 #include "cmd_controller.h"
+#include <stdint.h>
 
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
+
+// Math constants
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 
 // Static variables for app wrapper
 static ChassisCmd s_last_cmd;
@@ -83,6 +89,13 @@ void ChassisController_Init(ChassisController *controller)
         CHASSIS_STEER_COUNT
     );
 
+    // DEBUG: Print found steer motors
+    USB_CDC_Printf("[CHASSIS_INIT] Found %d steer motors: ", s_steer_motor_count);
+    for (uint8_t i = 0; i < s_steer_motor_count; i++) {
+        USB_CDC_Printf("%d ", s_steer_motor_ids[i]);
+    }
+    USB_CDC_Printf("\r\n");
+
     // Init drive PIDs from motor contexts
     for (uint8_t i = 0; i < s_drive_motor_count; i++) {
         MotorContext_t *ctx = MotorDriver_GetContext(s_drive_motor_ids[i]);
@@ -128,28 +141,37 @@ void ChassisController_Update(ChassisController *controller, SensorData *sensor_
     float wz_norm = s_last_cmd.wz;
 
     float scale = (float)CHASSIS_DEMO_TARGET_SPEED / 2.0f;
-    float omega = wz_norm * scale;
 
     // cmd_controller already did coordinate transform (per your comment in chassis_controller.c)
     float vx = vx_norm * scale;
     float vy = vy_norm * scale;
 
-    // Drive targets (keep your original mixing for now)
+    // ===== Swerve Drive Logic =====
+    // Calculate velocity magnitude (for drive speed)
+    float velocity_magnitude = sqrtf(vx * vx + vy * vy);
+
+    // Calculate movement angle (for steer direction)
+    // Swap parameters: atan2(vx, vy) so vx (forward/back) becomes primary direction
+    // vx: forward/backward, vy: left/right
+    float movement_angle_rad = atan2f(vx, vy);
+    // Convert to encoder ticks: angle_ticks = (angle_rad / (2*PI)) * 8192
+    // Adjust so that forward (vx+) = 4096 ticks
+    float angle_ticks = (movement_angle_rad / (2.0f * M_PI)) * 8192.0f + 4096.0f;
+
+    // Wrap to 0-8192 range
+    while (angle_ticks >= 8192.0f) angle_ticks -= 8192.0f;
+    while (angle_ticks < 0.0f) angle_ticks += 8192.0f;
+
+    // Drive targets: all wheels same speed (velocity magnitude)
     if (s_drive_motor_count >= 4) {
-        controller->target_speeds[0] = s_drive_motor_directions[0] * (vy );
-        controller->target_speeds[1] = s_drive_motor_directions[1] * (vy);
-        controller->target_speeds[2] = s_drive_motor_directions[2] * (vy);
-        controller->target_speeds[3] = s_drive_motor_directions[3] * (vy);
+        for (uint8_t i = 0; i < s_drive_motor_count; i++) {
+            controller->target_speeds[i] = s_drive_motor_directions[i] * velocity_magnitude;
+        }
     }
 
-    // ===== Steer targets based on vy =====
-    const float STEER_CENTER = 4096.0f;     // straight forward
-    const float STEER_RANGE  = 2048.0f;     // ±90 deg
-    float steer_offset = vy_norm * STEER_RANGE;
-
+    // Steer targets: point wheels in movement direction
     for (uint8_t i = 0; i < s_steer_motor_count; i++) {
-        controller->steer_target_angles[i] =
-            STEER_CENTER + s_steer_motor_directions[i] * steer_offset;
+        controller->steer_target_angles[i] = angle_ticks;
     }
 
 
@@ -165,6 +187,16 @@ static int16_t SteerController_CascadeControl(
 {
     MotorContext_t *steer = MotorDriver_GetContext(motor_id);
     if (!steer || !steer->angle_initialized || !steer->config) {
+        // DEBUG: Print why steer control is returning 0
+        static uint32_t last_debug = 0;
+        if (HAL_GetTick() - last_debug > 500) {
+            USB_CDC_Printf("[STEER_CASCADE] Motor %d: steer=%p init=%d cfg=%p\r\n",
+                          motor_id,
+                          steer,
+                          (steer ? steer->angle_initialized : -1),
+                          (steer ? steer->config : NULL));
+            last_debug = HAL_GetTick();
+        }
         return 0;
     }
 
@@ -287,7 +319,7 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
         int16_t motor_current =
             SteerController_CascadeControl(
                 s_steer_motor_ids[i],
-                s_last_cmd.vy        // vy controls steering
+                s_last_cmd.vx        // vx (left/right stick) controls steering
             );
 
         controller->steer_output_currents[i] = motor_current;
@@ -399,11 +431,20 @@ static void on_motor_feedback(const MsgEvent *ev, void *user)
                 return;
             }
         }
+    }
+}
+
+// NEW: GM6020 feedback callback for steer motors
+static void on_gm6020_feedback(const MsgEvent *ev, void *user)
+{
+    (void)user;
+    if (ev->size == sizeof(GM6020FeedbackEvent)) {
+        const GM6020FeedbackEvent *m = (const GM6020FeedbackEvent *)ev->data;
 
         // Steer motor match -> update steer feedback by LOCAL INDEX 0..1
         for (uint8_t i = 0; i < s_steer_motor_count; i++) {
             if (m->id == s_steer_motor_ids[i]) {
-                ChassisController_UpdateSteerFeedback(&s_ctrl, i, m->angle, m->speed, m->current, m->temp, m->tick_ms);
+                ChassisController_UpdateSteerFeedback(&s_ctrl, i, m->angle, m->speed, m->current, 0, m->tick_ms);
                 return;
             }
         }
@@ -420,6 +461,7 @@ void ChassisApp_Init(void)
     (void)MsgCenter_Subscribe(TOPIC_CHASSIS_CMD, on_chassis_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_MOTOR_FEEDBACK, on_motor_feedback, NULL);
+    (void)MsgCenter_Subscribe(TOPIC_GM6020_FEEDBACK, on_gm6020_feedback, NULL);  // Subscribe to GM6020 feedback for steer motors
 }
 
 ChassisController* ChassisApp_GetController(void)

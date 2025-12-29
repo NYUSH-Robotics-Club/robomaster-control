@@ -92,11 +92,11 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
     {
         .motor_id = 5,
         .type = MOTOR_TYPE_GM6020,
-        .role = MOTOR_ROLE_CHASSIS_STEER,   // if your enums don’t have this, rename to whatever your project uses
-        .can_channel = CAN_CHANNEL_2,
+        .role = MOTOR_ROLE_CHASSIS_STEER,   // if your enums don't have this, rename to whatever your project uses
+        .can_channel = CAN_CHANNEL_1,       // Changed from CAN_CHANNEL_2 to CAN_CHANNEL_1
         .can_rx_id = 0x209,                 // 0x204 + 5
-        .can_tx_id = 0x2FF,
-        .tx_slot = 0,                       // For 0x2FF, many stacks map slots as (motor_id - 5). Adjust if needed.
+        .can_tx_id = 0x2FF,                 // GM6020 ID 5-7 use 0x2FF
+        .tx_slot = 0,                       // For 0x2FF, slot = (motor_id - 5)
         .direction = 1,
         .limits.gm6020 = {
             .angle_min = 0.0f,
@@ -114,10 +114,10 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         .motor_id = 6,
         .type = MOTOR_TYPE_GM6020,
         .role = MOTOR_ROLE_CHASSIS_STEER,
-        .can_channel = CAN_CHANNEL_2,
+        .can_channel = CAN_CHANNEL_1,       // Changed from CAN_CHANNEL_2 to CAN_CHANNEL_1
         .can_rx_id = 0x20A,                 // 0x204 + 6
-        .can_tx_id = 0x2FF,
-        .tx_slot = 1,                       // (motor_id - 5)
+        .can_tx_id = 0x2FF,                 // GM6020 ID 5-7 use 0x2FF
+        .tx_slot = 1,                       // For 0x2FF, slot = (motor_id - 5)
         .direction = 1,
         .limits.gm6020 = {
             .angle_min = 0.0f,
