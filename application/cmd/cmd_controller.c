@@ -331,24 +331,24 @@ void CmdController_Task(uint32_t current_tick) {
     // Tagged debug prints for spin mode (10 Hz), to avoid mixing with other logs.
     // Format:
     // SPINDBG,ts_ms,spin,sw0,sw1,c_yaw_deg,g_yaw_total_deg,hold_yaw_deg,yaw_err_deg,yaw_rate_cmd,vx_cmd,vy_cmd,wz_cmd
-    if (HAL_GetTick() - s_last_spin_dbg_tick >= 100) {
-        s_last_spin_dbg_tick = HAL_GetTick();
+    // if (HAL_GetTick() - s_last_spin_dbg_tick >= 100) {
+    //     s_last_spin_dbg_tick = HAL_GetTick();
 
-        float yaw_err_deg = s_spin_hold_yaw_deg - s_last_sensor.yaw_total_angle;
-        USB_CDC_Printf("SPINDBG,%lu,%u,%u,%u,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f\r\n",
-                       (unsigned long)s_last_spin_dbg_tick,
-                       (unsigned int)(s_spin_mode ? 1U : 0U),
-                       (unsigned int)((uint8_t)s_last_rc.rc.s[0]),
-                       (unsigned int)((uint8_t)s_last_rc.rc.s[1]),
-                       s_last_sensor.c_yaw,
-                       s_last_sensor.yaw_total_angle,
-                       s_spin_hold_yaw_deg,
-                       yaw_err_deg,
-                       s_gimbal_cmd.yaw_rate,
-                       s_chassis_cmd.vx,
-                       s_chassis_cmd.vy,
-                       s_chassis_cmd.wz);
-    }
+    //     float yaw_err_deg = s_spin_hold_yaw_deg - s_last_sensor.yaw_total_angle;
+    //     USB_CDC_Printf("SPINDBG,%lu,%u,%u,%u,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f\r\n",
+    //                    (unsigned long)s_last_spin_dbg_tick,
+    //                    (unsigned int)(s_spin_mode ? 1U : 0U),
+    //                    (unsigned int)((uint8_t)s_last_rc.rc.s[0]),
+    //                    (unsigned int)((uint8_t)s_last_rc.rc.s[1]),
+    //                    s_last_sensor.c_yaw,
+    //                    s_last_sensor.yaw_total_angle,
+    //                    s_spin_hold_yaw_deg,
+    //                    yaw_err_deg,
+    //                    s_gimbal_cmd.yaw_rate,
+    //                    s_chassis_cmd.vx,
+    //                    s_chassis_cmd.vy,
+    //                    s_chassis_cmd.wz);
+    // }
 
     // Publish commands to message center
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));

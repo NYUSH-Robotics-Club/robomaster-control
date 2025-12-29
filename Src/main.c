@@ -37,6 +37,7 @@
 #include <string.h>
 #include "remote_control.h"
 #include "chassis_controller.h"
+#include "swerve_chassis_controller.h"
 #include "shooter_controller.h"
 #include "gimbal_controller.h"
 #include "motor_driver.h"
@@ -264,7 +265,15 @@ int main(void)
   gyro_calibrate_set_callback(NULL);
 
   // Initialize remaining application controllers
-  ChassisApp_Init();
+  // Select chassis controller based on robot configuration
+  if (robot_cfg->chassis_type == CHASSIS_TYPE_SWERVE) {
+    USB_CDC_Printf("[Init] Using SWERVE chassis controller\r\n");
+    SwerveChassisApp_Init();
+  } else {
+    USB_CDC_Printf("[Init] Using MECANUM chassis controller\r\n");
+    ChassisApp_Init();
+  }
+
   ShooterApp_Init();
 
   // Initialize remote control

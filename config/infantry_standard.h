@@ -181,6 +181,7 @@ static const MotorConfig_t g_motor_configs_infantry_standard[] = {
 // Robot configuration structure
 static const RobotConfig_t g_robot_config_infantry_standard = {
     .name = "Infantry Standard",
+    .chassis_type = CHASSIS_TYPE_SWERVE,
     .chassis_motor_count = 4,
     .gimbal_motor_count = 2,
     .shooter_motor_count = 3,

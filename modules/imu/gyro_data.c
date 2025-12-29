@@ -356,25 +356,25 @@ void gyro_data_update(SensorData *sensor_data)
 
         // Gimbal (BMI088): yaw, pitch, roll, yaw_total, round_count, gx, gy, gz (rad/s)
         // Chassis (WT61C): yaw, pitch, roll, gx, gy, gz (rad/s), ax, ay, az (m/s²)
-        USB_CDC_Printf("IMU,%lu,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
-                       now,
-                       sensor_data->yaw,
-                       sensor_data->pitch,
-                       sensor_data->roll,
-                       sensor_data->yaw_total_angle,
-                       sensor_data->yaw_round_count,
-                       sensor_data->g_gx,
-                       sensor_data->g_gy,
-                       sensor_data->g_gz,
-                       sensor_data->c_yaw,
-                       sensor_data->c_pitch,
-                       sensor_data->c_roll,
-                       sensor_data->c_gx,
-                       sensor_data->c_gy,
-                       sensor_data->c_gz,
-                       sensor_data->c_ax,
-                       sensor_data->c_ay,
-                       sensor_data->c_az);
+        // USB_CDC_Printf("IMU,%lu,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+        //                now,
+        //                sensor_data->yaw,
+        //                sensor_data->pitch,
+        //                sensor_data->roll,
+        //                sensor_data->yaw_total_angle,
+        //                sensor_data->yaw_round_count,
+        //                sensor_data->g_gx,
+        //                sensor_data->g_gy,
+        //                sensor_data->g_gz,
+        //                sensor_data->c_yaw,
+        //                sensor_data->c_pitch,
+        //                sensor_data->c_roll,
+        //                sensor_data->c_gx,
+        //                sensor_data->c_gy,
+        //                sensor_data->c_gz,
+        //                sensor_data->c_ax,
+        //                sensor_data->c_ay,
+        //                sensor_data->c_az);
     }
 
     WT61C_Data const* d = WT61C_GetData();

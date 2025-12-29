@@ -22,6 +22,16 @@ typedef enum {
 } MotorType_e;
 
 /**
+ * @brief Chassis type enumeration
+ * Defines the type of chassis drive system
+ */
+typedef enum {
+    CHASSIS_TYPE_MECANUM,     // 4-wheel mecanum drive
+    CHASSIS_TYPE_SWERVE,      // Swerve drive (with steering motors)
+    CHASSIS_TYPE_OMNI         // Omni-directional wheels (future use)
+} ChassisType_e;
+
+/**
  * @brief Motor role enumeration
  * Defines the functional role of each motor in the robot system
  */
@@ -91,6 +101,7 @@ typedef struct {
  */
 typedef struct {
     const char *name;                    // Robot configuration name
+    ChassisType_e chassis_type;          // Chassis type (mecanum/swerve/omni)
     uint8_t chassis_motor_count;         // Number of chassis motors
     uint8_t gimbal_motor_count;          // Number of gimbal motors
     uint8_t shooter_motor_count;         // Number of shooter motors

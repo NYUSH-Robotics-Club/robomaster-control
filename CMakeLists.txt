@@ -149,6 +149,7 @@ target_compile_options(modules PUBLIC -mthumb)
 add_library(application STATIC
     application/cmd/cmd_controller.c
     application/chassis/chassis_controller.c
+    application/chassis/swerve_chassis_controller.c
     application/shoot/shooter_controller.c
     application/gimbal/gimbal_controller.c
 )
