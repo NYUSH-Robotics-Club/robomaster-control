@@ -307,6 +307,8 @@ int main(void)
 
     LED_SetRGB(0, 1, 0);
 
+
+
 	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE END WHILE */
   }

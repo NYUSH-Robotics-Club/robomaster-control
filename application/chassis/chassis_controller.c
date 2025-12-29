@@ -38,12 +38,14 @@ static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Moto
 void ChassisController_Init(ChassisController *controller)
 {
     if (controller == NULL) return;
+    
     memset(controller, 0, sizeof(ChassisController));
 
     // Find chassis motors by role (module layer handles config)
     s_chassis_motor_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE,
                                                      s_chassis_motor_ids,
                                                      CHASSIS_MOTOR_COUNT);
+
 
     // Get motor directions and initialize PIDs from motor contexts
     for (uint8_t i = 0; i < s_chassis_motor_count; i++) {
@@ -90,6 +92,28 @@ void ChassisController_Update(ChassisController *controller, SensorData* sensor_
 void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t current_tick)
 {
     if (controller == NULL) return;
+    
+    static uint32_t last = 0;
+    if (HAL_GetTick() - last > 200) {
+        last = HAL_GetTick();
+
+        USB_CDC_Printf("[CHASSIS_CUR] en=%d\r\n", (int)s_last_cmd.enabled);
+
+        for (uint8_t i = 0; i < s_chassis_motor_count; i++) {
+            uint32_t dt = HAL_GetTick() - controller->motor_feedbacks[i].last_update_time;
+
+            USB_CDC_Printf(
+                "  i=%d id=%d tgt=%.1f fb=%.1f dt=%lu out=%d\r\n",
+                i,
+                s_chassis_motor_ids[i],
+                controller->target_speeds[i],
+                controller->motor_feedbacks[i].speed,
+                (unsigned long)dt,
+                controller->output_currents[i]
+            );
+        }
+    }
+
 
     // Compute current for each chassis motor
     for (int i = 0; i < s_chassis_motor_count; i++) {
@@ -138,6 +162,7 @@ bool ChassisController_IsRunning(const ChassisController *controller)
 
 void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick)
 {
+
     if (controller == NULL || motor_id >= CHASSIS_MOTOR_COUNT) return;
     controller->motor_feedbacks[motor_id].angle = angle;
     controller->motor_feedbacks[motor_id].speed = speed;
@@ -181,6 +206,7 @@ static void on_motor_feedback(const MsgEvent *ev, void *user) {
 }
 
 void ChassisApp_Init(void) {
+    
     memset(&s_last_cmd, 0, sizeof(s_last_cmd));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
 
