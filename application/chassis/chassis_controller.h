@@ -8,6 +8,7 @@
 #include "remote_control.h"
 #include "motor_feedback.h"
 #include "gyro_data.h"
+#include "config_types.h"
 
 // Chassis motor count
 #define CHASSIS_MOTOR_COUNT 4
@@ -35,8 +36,9 @@ typedef struct {
 /**
  * @brief Initialize chassis controller
  * @param controller Chassis controller pointer
+ * @param robot_cfg Robot configuration pointer
  */
-void ChassisController_Init(ChassisController *controller);
+void ChassisController_Init(ChassisController *controller, const RobotConfig_t *robot_cfg);
 
 /**
  * @brief Update chassis control logic
