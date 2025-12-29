@@ -235,38 +235,47 @@ int main(void)
   USB_CDC_Printf("[Init] Waiting for CAN bus to stabilize...\r\n");
   HAL_Delay(200);
 
-  // Wait for gimbal to reach initial alignment position
-  Gimbal_WaitForAlignment();
+  // Wait for gimbal to reach initial alignment position (if gimbal exists)
+  if (robot_cfg->gimbal_motor_count > 0) {
+    Gimbal_WaitForAlignment();
+  }
 
-  // Now start IMU calibration with gimbal in position
-  USB_CDC_Printf("\r\n=== Starting IMU Calibration ===\r\n");
-  USB_CDC_Printf("[Calibration] Keep the robot still!\r\n");
+  // Perform IMU calibration if enabled in robot configuration
+  if (robot_cfg->enable_imu_calibration) {
+    // Now start IMU calibration with gimbal in position
+    USB_CDC_Printf("\r\n=== Starting IMU Calibration ===\r\n");
+    USB_CDC_Printf("[Calibration] Keep the robot still!\r\n");
 
-  // Set LED to blue during calibration
-  LED_SetRGB(0, 0, 1);
+    // Set LED to blue during calibration
+    LED_SetRGB(0, 0, 1);
 
-  // Set callback to keep gimbal holding position during calibration
-  gyro_calibrate_set_callback(Gimbal_HoldPosition_Callback);
+    // Set callback to keep gimbal holding position during calibration
+    if (robot_cfg->gimbal_motor_count > 0) {
+      gyro_calibrate_set_callback(Gimbal_HoldPosition_Callback);
+    }
 
-  // Perform gyro calibration
-  gyro_calibrate();
+    // Perform gyro calibration
+    gyro_calibrate();
 
-  // Set LED to green
-  LED_SetRGB(0, 1, 0);
+    // Set LED to green
+    LED_SetRGB(0, 1, 0);
 
-  USB_CDC_Printf("=== IMU Calibration Complete ===\r\n\r\n");
+    USB_CDC_Printf("=== IMU Calibration Complete ===\r\n\r\n");
+
+    // Clear the callback since CmdController will take over
+    gyro_calibrate_set_callback(NULL);
+  } else {
+    USB_CDC_Printf("[Init] IMU calibration disabled for this robot type\r\n");
+  }
 
   // Continue with remaining initialization
   // Initialize command controller (central control)
   CmdController_Init();
 
-  // Now we can clear the callback since CmdController will take over
-  gyro_calibrate_set_callback(NULL);
-
   // Initialize remaining application controllers
   ChassisApp_Init();
   ShooterApp_Init();
-  
+
   // Align swerve steer motors to initial position (sentry_swerve only)
   #if defined(ROBOT_TYPE_sentry_swerve)
   Sentry_WaitForSteerAlignment();

@@ -137,7 +137,8 @@ static const RobotConfig_t g_robot_config_sentry_swerve = {
     .gimbal_motor_count = 0,
     .shooter_motor_count = 0,
     .motor_configs = g_motor_configs_sentry_swerve,
-    .total_motor_count = 6
+    .total_motor_count = 6,
+    .enable_imu_calibration = 0  // Sentry does not need IMU calibration
 };
 
 #endif // SENTRY_SWERVE_STANDARD_H

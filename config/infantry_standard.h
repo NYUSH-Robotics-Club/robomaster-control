@@ -185,7 +185,8 @@ static const RobotConfig_t g_robot_config_infantry_standard = {
     .gimbal_motor_count = 2,
     .shooter_motor_count = 3,
     .motor_configs = g_motor_configs_infantry_standard,
-    .total_motor_count = 9
+    .total_motor_count = 9,
+    .enable_imu_calibration = 1  // Infantry needs IMU calibration
 };
 
 #endif // INFANTRY_STANDARD_H

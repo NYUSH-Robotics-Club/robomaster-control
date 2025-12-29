@@ -97,6 +97,7 @@ typedef struct {
     uint8_t shooter_motor_count;         // Number of shooter motors
     const MotorConfig_t *motor_configs;  // Pointer to motor configuration array
     uint8_t total_motor_count;           // Total number of motors
+    uint8_t enable_imu_calibration;      // Enable IMU calibration at startup (1 = enabled, 0 = disabled)
 } RobotConfig_t;
 
 #endif // CONFIG_TYPES_H
