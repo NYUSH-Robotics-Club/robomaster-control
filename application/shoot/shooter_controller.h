@@ -7,6 +7,8 @@
 #include "remote_control.h"
 #include "motor_feedback.h"
 #include "gyro_data.h"
+#include "config_types.h"
+
 // Shooter system motor count
 #define SHOOTER_MOTOR_COUNT 4
 
@@ -50,8 +52,9 @@ typedef struct {
 /**
  * @brief Initialize shooter controller
  * @param controller Shooter controller pointer
+ * @param robot_cfg Robot configuration pointer
  */
-void ShooterController_Init(ShooterController *controller);
+void ShooterController_Init(ShooterController *controller, const RobotConfig_t *robot_cfg);
 
 /**
  * @brief Update shooter control logic
