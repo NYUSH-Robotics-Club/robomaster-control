@@ -1,25 +1,15 @@
 #include "gimbal_controller.h"
 #include "motor_driver.h"
-#include "robot_config.h"
 #include "pid.h"
 #include "message_center.h"
-#include "can.h"
-#include "can_manager.h"
 #include <math.h>
 #include <string.h>
 #include "printing.h"
 #include "stm32f4xx_hal.h"
 
-extern CAN_HandleTypeDef hcan1;
-extern CAN_HandleTypeDef hcan2;
-extern CAN_Manager_t can1_manager;
-extern CAN_Manager_t can2_manager;
-
 // Motor IDs (dynamically assigned during init)
 static uint8_t s_pitch_motor_id = 0xFF;
 static uint8_t s_yaw_motor_id = 0xFF;
-static CAN_Manager_t *s_pitch_can_mgr = NULL;
-static CAN_Manager_t *s_yaw_can_mgr = NULL;
 
 // Yaw control parameters
 #define YAW_CONTROL_ENC_MAX         (8192.0f)
@@ -277,11 +267,10 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
                 use_spin_hold  // Use IMU feedback only in spin mode
             );
 
-            // Send CAN commands using new API
-            CAN_Manager_SendMotorCurrent(s_pitch_can_mgr, s_pitch_motor_id, pitch_current);
-            CAN_Manager_SendMotorCurrent(s_yaw_can_mgr, s_yaw_motor_id, yaw_current);
-            CAN_Manager_FlushTx(s_pitch_can_mgr);
-            CAN_Manager_FlushTx(s_yaw_can_mgr);
+            // Send motor currents (module layer handles CAN)
+            MotorDriver_SendCurrent(s_pitch_motor_id, pitch_current);
+            MotorDriver_SendCurrent(s_yaw_motor_id, yaw_current);
+            MotorDriver_FlushAll();
 
             // 输出编码器值到CDC串口 (20Hz更新率)
             // ENCODER logging disabled to reduce noise
@@ -302,10 +291,9 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
             // }
         } else {
             // Gimbal disabled, send zero current
-            CAN_Manager_SendMotorCurrent(s_pitch_can_mgr, s_pitch_motor_id, 0);
-            CAN_Manager_SendMotorCurrent(s_yaw_can_mgr, s_yaw_motor_id, 0);
-            CAN_Manager_FlushTx(s_pitch_can_mgr);
-            CAN_Manager_FlushTx(s_yaw_can_mgr);
+            MotorDriver_SendCurrent(s_pitch_motor_id, 0);
+            MotorDriver_SendCurrent(s_yaw_motor_id, 0);
+            MotorDriver_FlushAll();
         }
     }
 }
@@ -325,23 +313,16 @@ void GimbalApp_Init(void) {
     memset(&s_last_cmd, 0, sizeof(s_last_cmd));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
 
-    // Get robot configuration
-    const RobotConfig_t *robot_cfg = RobotConfig_Get();
+    // Find gimbal motors by role (module layer handles config)
+    uint8_t pitch_motors[1];
+    uint8_t yaw_motors[1];
 
-    // Find gimbal motors by role
-    for (uint8_t i = 0; i < robot_cfg->total_motor_count; i++) {
-        const MotorConfig_t *motor_cfg = &robot_cfg->motor_configs[i];
+    if (MotorDriver_FindByRole(MOTOR_ROLE_GIMBAL_PITCH, pitch_motors, 1) > 0) {
+        s_pitch_motor_id = pitch_motors[0];
+    }
 
-        if (motor_cfg->role == MOTOR_ROLE_GIMBAL_PITCH) {
-            s_pitch_motor_id = motor_cfg->motor_id;
-            s_pitch_can_mgr = (motor_cfg->can_channel == CAN_CHANNEL_1) ? &can1_manager : &can2_manager;
-            MotorDriver_Init(s_pitch_motor_id, motor_cfg);
-        }
-        else if (motor_cfg->role == MOTOR_ROLE_GIMBAL_YAW) {
-            s_yaw_motor_id = motor_cfg->motor_id;
-            s_yaw_can_mgr = (motor_cfg->can_channel == CAN_CHANNEL_1) ? &can1_manager : &can2_manager;
-            MotorDriver_Init(s_yaw_motor_id, motor_cfg);
-        }
+    if (MotorDriver_FindByRole(MOTOR_ROLE_GIMBAL_YAW, yaw_motors, 1) > 0) {
+        s_yaw_motor_id = yaw_motors[0];
     }
 
     // Subscribe to messages

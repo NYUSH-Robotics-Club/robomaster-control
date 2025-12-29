@@ -1,11 +1,20 @@
 #include "motor_driver.h"
 #include "message_center.h"
 #include "can_comm.h"
+#include "can_manager.h"
+#include "robot_config.h"
 #include <math.h>
 #include <string.h>
 
+// External CAN managers
+extern CAN_Manager_t can1_manager;
+extern CAN_Manager_t can2_manager;
+
 // Global motor contexts (one per motor)
 static MotorContext_t g_motor_contexts[MOTOR_DRIVER_MAX_MOTORS];
+
+// Robot configuration reference (set during init)
+static const RobotConfig_t *g_robot_config = NULL;
 
 // Subscription flags
 static bool g_module_initialized = false;
@@ -25,6 +34,17 @@ void MotorDriver_ModuleInit(void)
 
     // Clear all motor contexts
     memset(g_motor_contexts, 0, sizeof(g_motor_contexts));
+
+    // Get robot configuration
+    g_robot_config = RobotConfig_Get();
+
+    // Initialize all motors from configuration
+    if (g_robot_config != NULL) {
+        for (uint8_t i = 0; i < g_robot_config->total_motor_count; i++) {
+            const MotorConfig_t *motor_cfg = &g_robot_config->motor_configs[i];
+            MotorDriver_Init(motor_cfg->motor_id, motor_cfg);
+        }
+    }
 
     // Subscribe to CAN feedback topics
     (void)MsgCenter_Subscribe(TOPIC_GM6020_FEEDBACK, on_gm6020_feedback, NULL);
@@ -281,4 +301,59 @@ static void on_motor_feedback(const MsgEvent *ev, void *user)
         const MotorFeedbackEvent *m = (const MotorFeedbackEvent *)ev->data;
         MotorDriver_UpdateFeedback(m->id, m->angle, m->speed, m->current, m->tick_ms);
     }
+}
+
+// ========== Application Layer Interface ==========
+
+/**
+ * @brief Find motors by role
+ */
+uint8_t MotorDriver_FindByRole(MotorRole_e role, uint8_t *motor_ids, uint8_t max_count)
+{
+    if (motor_ids == NULL || max_count == 0 || g_robot_config == NULL) {
+        return 0;
+    }
+
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < g_robot_config->total_motor_count && count < max_count; i++) {
+        const MotorConfig_t *motor_cfg = &g_robot_config->motor_configs[i];
+        if (motor_cfg->role == role) {
+            motor_ids[count] = motor_cfg->motor_id;
+            count++;
+        }
+    }
+
+    return count;
+}
+
+/**
+ * @brief Send current command to a motor
+ */
+void MotorDriver_SendCurrent(uint8_t motor_id, int16_t current)
+{
+    if (motor_id >= MOTOR_DRIVER_MAX_MOTORS) {
+        return;
+    }
+
+    MotorContext_t *ctx = &g_motor_contexts[motor_id];
+    if (!ctx->initialized || ctx->config == NULL) {
+        return;
+    }
+
+    // Determine which CAN manager to use
+    CAN_Manager_t *can_mgr = (ctx->config->can_channel == CAN_CHANNEL_1) ?
+                              &can1_manager : &can2_manager;
+
+    // Send current via CAN manager
+    CAN_Manager_SendMotorCurrent(can_mgr, motor_id, current);
+}
+
+/**
+ * @brief Flush all pending motor current commands
+ */
+void MotorDriver_FlushAll(void)
+{
+    // Flush both CAN channels
+    CAN_Manager_FlushTx(&can1_manager);
+    CAN_Manager_FlushTx(&can2_manager);
 }

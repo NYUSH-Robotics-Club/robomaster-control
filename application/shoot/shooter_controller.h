@@ -52,9 +52,8 @@ typedef struct {
 /**
  * @brief Initialize shooter controller
  * @param controller Shooter controller pointer
- * @param robot_cfg Robot configuration pointer
  */
-void ShooterController_Init(ShooterController *controller, const RobotConfig_t *robot_cfg);
+void ShooterController_Init(ShooterController *controller);
 
 /**
  * @brief Update shooter control logic

@@ -68,10 +68,11 @@ typedef struct {
 } MotorContext_t;
 
 /**
- * @brief Initialize motor driver module
+ * @brief Initialize motor driver module from robot configuration
  *
- * Subscribes to relevant CAN feedback topics. Should be called once
- * during system initialization.
+ * This function should be called once during system initialization.
+ * It loads the robot configuration and sets up all motors.
+ * Application layer does not need to access configuration directly.
  */
 void MotorDriver_ModuleInit(void);
 
@@ -162,5 +163,38 @@ void MotorDriver_SetAngleTarget(uint8_t motor_id, float target_angle);
  * @param motor_id Motor ID
  */
 void MotorDriver_ResetPID(uint8_t motor_id);
+
+/**
+ * @brief Find motors by role
+ *
+ * Application layer uses this to discover which motors are available
+ * for a specific function without knowing configuration details.
+ *
+ * @param role Motor role to search for
+ * @param motor_ids Output array to store found motor IDs
+ * @param max_count Maximum number of motors to find (size of motor_ids array)
+ * @return Number of motors found
+ */
+uint8_t MotorDriver_FindByRole(MotorRole_e role, uint8_t *motor_ids, uint8_t max_count);
+
+/**
+ * @brief Send current command to a motor
+ *
+ * Application layer calls this to command a motor. The module layer
+ * handles CAN transmission internally. Application doesn't need to know
+ * about CAN managers or channels.
+ *
+ * @param motor_id Motor ID
+ * @param current Current command value
+ */
+void MotorDriver_SendCurrent(uint8_t motor_id, int16_t current);
+
+/**
+ * @brief Flush all pending motor current commands
+ *
+ * Should be called once per control cycle after all SendCurrent calls.
+ * This triggers actual CAN transmission for all buffered commands.
+ */
+void MotorDriver_FlushAll(void);
 
 #endif // MOTOR_DRIVER_H

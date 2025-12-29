@@ -40,6 +40,7 @@
 #include "shooter_controller.h"
 #include "gimbal_controller.h"
 #include "gm6020_motor.h"
+#include "motor_driver.h"
 #include "can_manager.h"
 #include "motor_registry.h"
 #include "robot_config.h"
@@ -224,6 +225,9 @@ int main(void)
   CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2, robot_cfg, &can2_registry);
   CAN_Manager_Start(&can1_manager);
   CAN_Manager_Start(&can2_manager);
+
+  // Initialize motor driver module (loads config and initializes all motors)
+  MotorDriver_ModuleInit();
 
   // Initialize gimbal early (before calibration)
   GimbalApp_Init();

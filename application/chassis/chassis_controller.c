@@ -1,8 +1,5 @@
 #include "chassis_controller.h"
 #include "motor_driver.h"
-#include "robot_config.h"
-#include "can.h"
-#include "can_manager.h"
 #include <string.h>
 #include <math.h>
 #include "message_center.h"
@@ -11,10 +8,6 @@
 #include "can_comm.h"
 #include "printing.h"
 #include "cmd_controller.h"
-
-extern CAN_HandleTypeDef hcan1;
-extern CAN_Manager_t can1_manager;
-extern CAN_Manager_t can2_manager;
 
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
 
@@ -29,7 +22,6 @@ static ChassisController s_ctrl;
 static uint8_t s_chassis_motor_ids[CHASSIS_MOTOR_COUNT];
 static int8_t s_motor_directions[CHASSIS_MOTOR_COUNT];
 static uint8_t s_chassis_motor_count = 0;
-static CAN_Manager_t *s_chassis_can_mgr = NULL;
 
 static void ResetPidIntegrals(ChassisController *controller)
 {
@@ -43,36 +35,31 @@ static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Moto
     return (int16_t)PID_Calculate(pid, target, current_speed);
 }
 
-void ChassisController_Init(ChassisController *controller, const RobotConfig_t *robot_cfg)
+void ChassisController_Init(ChassisController *controller)
 {
-    if (controller == NULL || robot_cfg == NULL) return;
+    if (controller == NULL) return;
     memset(controller, 0, sizeof(ChassisController));
 
-    // Find chassis motors from configuration
-    s_chassis_motor_count = 0;
-    for (uint8_t i = 0; i < robot_cfg->total_motor_count && s_chassis_motor_count < CHASSIS_MOTOR_COUNT; i++) {
-        const MotorConfig_t *motor_cfg = &robot_cfg->motor_configs[i];
-        if (motor_cfg->role == MOTOR_ROLE_CHASSIS_DRIVE) {
-            uint8_t idx = s_chassis_motor_count;
-            s_chassis_motor_ids[idx] = motor_cfg->motor_id;
-            s_motor_directions[idx] = motor_cfg->direction;
+    // Find chassis motors by role (module layer handles config)
+    s_chassis_motor_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE,
+                                                     s_chassis_motor_ids,
+                                                     CHASSIS_MOTOR_COUNT);
+
+    // Get motor directions and initialize PIDs from motor contexts
+    for (uint8_t i = 0; i < s_chassis_motor_count; i++) {
+        MotorContext_t *ctx = MotorDriver_GetContext(s_chassis_motor_ids[i]);
+        if (ctx && ctx->config) {
+            s_motor_directions[i] = ctx->config->direction;
 
             // Initialize PID from config
-            PID_Init(&controller->speed_pids[idx],
-                     motor_cfg->pid_outer.kp,
-                     motor_cfg->pid_outer.ki,
-                     motor_cfg->pid_outer.kd,
-                     motor_cfg->pid_outer.output_max,
-                     motor_cfg->pid_outer.integral_max);
+            PID_Init(&controller->speed_pids[i],
+                     ctx->config->pid_outer.kp,
+                     ctx->config->pid_outer.ki,
+                     ctx->config->pid_outer.kd,
+                     ctx->config->pid_outer.output_max,
+                     ctx->config->pid_outer.integral_max);
 
-            controller->target_speeds[idx] = 0.0f;
-
-            // Store CAN manager (assume all chassis motors on same channel)
-            if (s_chassis_can_mgr == NULL) {
-                s_chassis_can_mgr = (motor_cfg->can_channel == CAN_CHANNEL_1) ? &can1_manager : &can2_manager;
-            }
-
-            s_chassis_motor_count++;
+            controller->target_speeds[i] = 0.0f;
         }
     }
 }
@@ -102,7 +89,7 @@ void ChassisController_Update(ChassisController *controller, SensorData* sensor_
 
 void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t current_tick)
 {
-    if (controller == NULL || s_chassis_can_mgr == NULL) return;
+    if (controller == NULL) return;
 
     // Compute current for each chassis motor
     for (int i = 0; i < s_chassis_motor_count; i++) {
@@ -114,12 +101,12 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
         );
         controller->output_currents[i] = motor_current;
 
-        // Send motor current using new API
-        CAN_Manager_SendMotorCurrent(s_chassis_can_mgr, s_chassis_motor_ids[i], motor_current);
+        // Send motor current (module layer handles CAN)
+        MotorDriver_SendCurrent(s_chassis_motor_ids[i], motor_current);
     }
 
-    // Flush all pending CAN transmissions
-    CAN_Manager_FlushTx(s_chassis_can_mgr);
+    // Flush all pending motor commands
+    MotorDriver_FlushAll();
 }
 
 void ChassisController_SetTargetSpeeds(ChassisController *controller, const float speeds[CHASSIS_MOTOR_COUNT])
@@ -197,9 +184,8 @@ void ChassisApp_Init(void) {
     memset(&s_last_cmd, 0, sizeof(s_last_cmd));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
 
-    // Get robot configuration and initialize chassis controller
-    const RobotConfig_t *robot_cfg = RobotConfig_Get();
-    ChassisController_Init(&s_ctrl, robot_cfg);
+    // Initialize chassis controller (module layer handles config)
+    ChassisController_Init(&s_ctrl);
 
     (void)MsgCenter_Subscribe(TOPIC_CHASSIS_CMD, on_chassis_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);

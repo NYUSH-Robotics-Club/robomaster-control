@@ -36,9 +36,8 @@ typedef struct {
 /**
  * @brief Initialize chassis controller
  * @param controller Chassis controller pointer
- * @param robot_cfg Robot configuration pointer
  */
-void ChassisController_Init(ChassisController *controller, const RobotConfig_t *robot_cfg);
+void ChassisController_Init(ChassisController *controller);
 
 /**
  * @brief Update chassis control logic

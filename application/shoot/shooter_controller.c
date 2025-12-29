@@ -1,18 +1,11 @@
 #include "shooter_controller.h"
 #include "motor_driver.h"
-#include "robot_config.h"
-#include "can.h"
-#include "can_manager.h"
 #include <string.h>
 #include "message_center.h"
 #include "remote_control.h"
 #include "gyro_data.h"
 #include "can_comm.h"
 #include "cmd_controller.h"
-
-extern CAN_HandleTypeDef hcan2;
-extern CAN_Manager_t can1_manager;
-extern CAN_Manager_t can2_manager;
 
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
 
@@ -25,7 +18,6 @@ static ShooterController s_ctrl;
 static uint8_t s_feed_motor_id = 0xFF;      // Turntable/feed motor
 static uint8_t s_friction1_motor_id = 0xFF; // Friction wheel 1
 static uint8_t s_friction2_motor_id = 0xFF; // Friction wheel 2
-static CAN_Manager_t *s_shooter_can_mgr = NULL;
 
 static float RampTowards(float current, float target, float step)
 {
@@ -41,58 +33,60 @@ static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target, Moto
     return (int16_t)PID_Calculate(pid, target, current_speed);
 }
 
-void ShooterController_Init(ShooterController *controller, const RobotConfig_t *robot_cfg)
+void ShooterController_Init(ShooterController *controller)
 {
-    if (controller == NULL || robot_cfg == NULL) return;
+    if (controller == NULL) return;
     memset(controller, 0, sizeof(ShooterController));
 
-    // Find shooter motors from configuration
-    uint8_t friction_count = 0;
-    for (uint8_t i = 0; i < robot_cfg->total_motor_count; i++) {
-        const MotorConfig_t *motor_cfg = &robot_cfg->motor_configs[i];
+    // Find shooter motors by role (module layer handles config)
+    uint8_t feed_motors[1];
+    uint8_t friction_motors[2];
 
-        if (motor_cfg->role == MOTOR_ROLE_SHOOTER_FEED) {
-            s_feed_motor_id = motor_cfg->motor_id;
-            // Initialize turntable PID from config
+    // Find feed motor
+    if (MotorDriver_FindByRole(MOTOR_ROLE_SHOOTER_FEED, feed_motors, 1) > 0) {
+        s_feed_motor_id = feed_motors[0];
+
+        // Initialize turntable PID from motor context
+        MotorContext_t *ctx = MotorDriver_GetContext(s_feed_motor_id);
+        if (ctx && ctx->config) {
             PID_Init(&controller->turntable_pid,
-                     motor_cfg->pid_outer.kp,
-                     motor_cfg->pid_outer.ki,
-                     motor_cfg->pid_outer.kd,
-                     motor_cfg->pid_outer.output_max,
-                     motor_cfg->pid_outer.integral_max);
-
-            // Store CAN manager
-            if (s_shooter_can_mgr == NULL) {
-                s_shooter_can_mgr = (motor_cfg->can_channel == CAN_CHANNEL_1) ? &can1_manager : &can2_manager;
-            }
+                     ctx->config->pid_outer.kp,
+                     ctx->config->pid_outer.ki,
+                     ctx->config->pid_outer.kd,
+                     ctx->config->pid_outer.output_max,
+                     ctx->config->pid_outer.integral_max);
         }
-        else if (motor_cfg->role == MOTOR_ROLE_SHOOTER_FRICTION) {
-            if (friction_count == 0) {
-                s_friction1_motor_id = motor_cfg->motor_id;
-                // Initialize shooter1 PID from config
-                PID_Init(&controller->shooter1_pid,
-                         motor_cfg->pid_outer.kp,
-                         motor_cfg->pid_outer.ki,
-                         motor_cfg->pid_outer.kd,
-                         motor_cfg->pid_outer.output_max,
-                         motor_cfg->pid_outer.integral_max);
-            }
-            else if (friction_count == 1) {
-                s_friction2_motor_id = motor_cfg->motor_id;
-                // Initialize shooter2 PID from config
-                PID_Init(&controller->shooter2_pid,
-                         motor_cfg->pid_outer.kp,
-                         motor_cfg->pid_outer.ki,
-                         motor_cfg->pid_outer.kd,
-                         motor_cfg->pid_outer.output_max,
-                         motor_cfg->pid_outer.integral_max);
-            }
-            friction_count++;
+    }
 
-            // Store CAN manager
-            if (s_shooter_can_mgr == NULL) {
-                s_shooter_can_mgr = (motor_cfg->can_channel == CAN_CHANNEL_1) ? &can1_manager : &can2_manager;
-            }
+    // Find friction wheels
+    uint8_t friction_count = MotorDriver_FindByRole(MOTOR_ROLE_SHOOTER_FRICTION, friction_motors, 2);
+    if (friction_count > 0) {
+        s_friction1_motor_id = friction_motors[0];
+
+        // Initialize shooter1 PID from motor context
+        MotorContext_t *ctx = MotorDriver_GetContext(s_friction1_motor_id);
+        if (ctx && ctx->config) {
+            PID_Init(&controller->shooter1_pid,
+                     ctx->config->pid_outer.kp,
+                     ctx->config->pid_outer.ki,
+                     ctx->config->pid_outer.kd,
+                     ctx->config->pid_outer.output_max,
+                     ctx->config->pid_outer.integral_max);
+        }
+    }
+
+    if (friction_count > 1) {
+        s_friction2_motor_id = friction_motors[1];
+
+        // Initialize shooter2 PID from motor context
+        MotorContext_t *ctx = MotorDriver_GetContext(s_friction2_motor_id);
+        if (ctx && ctx->config) {
+            PID_Init(&controller->shooter2_pid,
+                     ctx->config->pid_outer.kp,
+                     ctx->config->pid_outer.ki,
+                     ctx->config->pid_outer.kd,
+                     ctx->config->pid_outer.output_max,
+                     ctx->config->pid_outer.integral_max);
         }
     }
 }
@@ -120,7 +114,7 @@ void ShooterController_Update(ShooterController *controller, SensorData* sensor_
 
 void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t current_tick)
 {
-    if (controller == NULL || s_shooter_can_mgr == NULL) return;
+    if (controller == NULL) return;
 
     // Compute currents for each shooter motor
     controller->output_currents[0] = ComputeSingleMotorCurrent(&controller->turntable_pid, controller->ramped_turntable, &controller->turntable_feedback, current_tick);
@@ -128,19 +122,19 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
     controller->output_currents[2] = 0;  // Not used
     controller->output_currents[3] = ComputeSingleMotorCurrent(&controller->shooter2_pid, controller->ramped_shooter2, &controller->shooter2_feedback, current_tick);
 
-    // Send motor currents using new API
+    // Send motor currents (module layer handles CAN)
     if (s_feed_motor_id != 0xFF) {
-        CAN_Manager_SendMotorCurrent(s_shooter_can_mgr, s_feed_motor_id, controller->output_currents[0]);
+        MotorDriver_SendCurrent(s_feed_motor_id, controller->output_currents[0]);
     }
     if (s_friction1_motor_id != 0xFF) {
-        CAN_Manager_SendMotorCurrent(s_shooter_can_mgr, s_friction1_motor_id, controller->output_currents[1]);
+        MotorDriver_SendCurrent(s_friction1_motor_id, controller->output_currents[1]);
     }
     if (s_friction2_motor_id != 0xFF) {
-        CAN_Manager_SendMotorCurrent(s_shooter_can_mgr, s_friction2_motor_id, controller->output_currents[3]);
+        MotorDriver_SendCurrent(s_friction2_motor_id, controller->output_currents[3]);
     }
 
-    // Flush all pending CAN transmissions
-    CAN_Manager_FlushTx(s_shooter_can_mgr);
+    // Flush all pending motor commands
+    MotorDriver_FlushAll();
 }
 
 void ShooterController_SetTurntableSpeed(ShooterController *controller, float speed)
@@ -236,9 +230,8 @@ void ShooterApp_Init(void) {
     memset(&s_last_cmd, 0, sizeof(s_last_cmd));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
 
-    // Get robot configuration and initialize shooter controller
-    const RobotConfig_t *robot_cfg = RobotConfig_Get();
-    ShooterController_Init(&s_ctrl, robot_cfg);
+    // Initialize shooter controller (module layer handles config)
+    ShooterController_Init(&s_ctrl);
 
     (void)MsgCenter_Subscribe(TOPIC_SHOOT_CMD, on_shoot_cmd, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
