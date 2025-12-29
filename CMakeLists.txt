@@ -108,7 +108,6 @@ add_library(modules STATIC
     modules/algorithm/pid.c
     modules/algorithm/kalman_filter.c
     modules/algorithm/QuaternionEKF.c
-    modules/motor/gm6020_motor.c
     modules/motor/motor_driver.c
     modules/remote/bsp_rc.c
     modules/remote/remote_control.c

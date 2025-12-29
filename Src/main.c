@@ -39,7 +39,6 @@
 #include "chassis_controller.h"
 #include "shooter_controller.h"
 #include "gimbal_controller.h"
-#include "gm6020_motor.h"
 #include "motor_driver.h"
 #include "can_manager.h"
 #include "motor_registry.h"

@@ -319,7 +319,6 @@ static void on_motor_feedback(const MsgEvent *ev, void *user)
 uint8_t MotorDriver_FindByRole(MotorRole_e role, uint8_t *motor_ids, uint8_t max_count)
 {
     if (motor_ids == NULL || max_count == 0 || g_robot_config == NULL) {
-        USB_CDC_Printf("[MotorDriver] FindByRole: NULL params or no config (role=%d)\r\n", role);
         return 0;
     }
 
@@ -332,7 +331,6 @@ uint8_t MotorDriver_FindByRole(MotorRole_e role, uint8_t *motor_ids, uint8_t max
         }
     }
 
-    USB_CDC_Printf("[MotorDriver] FindByRole: role=%d found %d motors\r\n", role, count);
     return count;
 }
 
@@ -370,17 +368,6 @@ void MotorDriver_SendCurrent(uint8_t motor_id, int16_t current)
  */
 void MotorDriver_FlushAll(void)
 {
-    static uint32_t flush_count = 0;
-    static uint32_t last_debug = 0;
-    flush_count++;
-
-    // Print debug every second
-    if (HAL_GetTick() - last_debug > 1000) {
-        USB_CDC_Printf("[MotorDriver] FlushAll called %lu times\r\n", flush_count);
-        last_debug = HAL_GetTick();
-        flush_count = 0;
-    }
-
     // Flush both CAN channels
     CAN_Manager_FlushTx(&can1_manager);
     CAN_Manager_FlushTx(&can2_manager);

@@ -153,8 +153,8 @@ static const MotorConfig_t g_motor_configs_infantry_standard[] = {
             .gravity_compensation = 0.0f,
             .initial_angle = 2183.0f  // Calibration value from 2025-12-25
         },
-        .pid_outer = { 0.70f, 0.045f, 0.04f, 30000.0f, 15000.0f },    // Yaw angle PID
-        .pid_inner = { 30.0f, 0.01f, 3.0f, 30000.0f, 15000.0f }        // Yaw speed PID
+        .pid_outer = { 0.70f, 0.045f, 0.04f, 300.0f, 300.0f },    // Yaw angle PID
+        .pid_inner = { 30.0f, 0.01f, 3.0f, 30000.0f, 4000.0f }        // Yaw speed PID
     },
 
     // Pitch gimbal motor (ID 7)
