@@ -97,7 +97,7 @@ static const MotorConfig_t g_motor_configs_infantry_standard[] = {
         .limits.m3508 = {
             .speed_limit = 10000.0f
         },
-        .pid_outer = { 5.0f, 0.5f, 0.1f, 15000.0f, 7500.0f },  // Shooter PID
+        .pid_outer = { 3.0f, 0.0f, 0.0f, 15000.0f, 7500.0f },  // Shooter feed PID (reduced Kp, increased Kd for stability)
         .pid_inner = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
     },
 
