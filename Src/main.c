@@ -266,6 +266,11 @@ int main(void)
   // Initialize remaining application controllers
   ChassisApp_Init();
   ShooterApp_Init();
+  
+  // Align swerve steer motors to initial position (sentry_swerve only)
+  #if defined(ROBOT_TYPE_sentry_swerve)
+  Sentry_WaitForSteerAlignment();
+  #endif
 
   // Initialize remote control
   remote_control_init();

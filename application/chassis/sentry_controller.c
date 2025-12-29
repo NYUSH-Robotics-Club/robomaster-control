@@ -468,3 +468,61 @@ ChassisController* ChassisApp_GetController(void)
 {
     return &s_ctrl;
 }
+
+/**
+ * @brief Wait for swerve steer motors to align to initial position
+ * @note Should be called after ChassisApp_Init() and CAN bus stabilization
+ */
+void Sentry_WaitForSteerAlignment(void)
+{
+    const float ALIGNMENT_THRESHOLD = 100.0f;  // encoder ticks tolerance
+    const uint32_t TIMEOUT_MS = 5000;  // 5 seconds timeout
+    const uint32_t CHECK_INTERVAL_MS = 50;
+
+    USB_CDC_Printf("[Sentry] Waiting for steer motors to align to initial position...\r\n");
+
+    uint32_t start_time = HAL_GetTick();
+    bool all_aligned = false;
+
+    while (HAL_GetTick() - start_time < TIMEOUT_MS && !all_aligned) {
+        // Send zero command to hold position (motors will go to initial_angle)
+        // Just dispatch messages to process feedback
+        MsgCenter_Dispatch();
+
+        // Send currents to hold steer motors at target position
+        ChassisController_ComputeCurrents(&s_ctrl, HAL_GetTick());
+
+        HAL_Delay(CHECK_INTERVAL_MS);
+
+        // Check if all steer motors have reached target position
+        all_aligned = true;
+        for (uint8_t i = 0; i < s_steer_motor_count; i++) {
+            MotorContext_t *steer = MotorDriver_GetContext(s_steer_motor_ids[i]);
+            if (steer && steer->angle_initialized) {
+                float target = steer->angle_target;
+                float current = (float)steer->angle_raw;
+                float error = fabsf(target - current);
+
+                // Handle wraparound (0-8192 encoder range)
+                if (error > 4096.0f) {
+                    error = 8192.0f - error;
+                }
+
+                USB_CDC_Printf("[Sentry] Steer motor %d: target=%.1f current=%.1f error=%.1f\r\n",
+                              s_steer_motor_ids[i], target, current, error);
+
+                if (error > ALIGNMENT_THRESHOLD) {
+                    all_aligned = false;
+                }
+            } else {
+                all_aligned = false;
+            }
+        }
+    }
+
+    if (all_aligned) {
+        USB_CDC_Printf("[Sentry] Steer alignment complete!\r\n");
+    } else {
+        USB_CDC_Printf("[Sentry] Warning: Steer alignment timeout, continuing anyway...\r\n");
+    }
+}
