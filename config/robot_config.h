@@ -4,27 +4,36 @@
 #include "config_types.h"
 
 /**
- * @brief Robot Configuration Selector
+ * Robot Configuration Selector
  *
  * This file selects the appropriate robot configuration based on
- * compile-time definitions set by CMake.
+ * compile-time definitions set by CMake:
  *
- * To build for a specific robot type:
- *   cmake -DROBOT_TYPE=infantry_standard -S . -B build
- *   cmake -DROBOT_TYPE=infantry_swerve -S . -B build
+ *   cmake -S . -B build -DROBOT_TYPE=infantry_standard
+ *   cmake -S . -B build -DROBOT_TYPE=infantry_swerve
+ *   cmake -S . -B build -DROBOT_TYPE=sentry_swerve
+ *   cmake -S . -B build -DROBOT_TYPE=sentry_standard   (if you still use it)
  */
 
-// Select configuration based on compile-time definition
 #if defined(ROBOT_TYPE_infantry_swerve)
-    #include "infantry_swerve.h"
-    #define ACTIVE_ROBOT_CONFIG g_robot_config_infantry_swerve
+  #include "infantry_swerve.h"
+  #define ACTIVE_ROBOT_CONFIG g_robot_config_infantry_swerve
+
 #elif defined(ROBOT_TYPE_infantry_standard)
-    #include "infantry_standard.h"
-    #define ACTIVE_ROBOT_CONFIG g_robot_config_infantry_standard
+  #include "infantry_standard.h"
+  #define ACTIVE_ROBOT_CONFIG g_robot_config_infantry_standard
+
+#elif defined(ROBOT_TYPE_sentry_swerve)
+  #include "sentry_swerve.h"
+  #define ACTIVE_ROBOT_CONFIG g_robot_config_sentry_swerve
+
+
+#elif defined(ROBOT_TYPE_sentry_standard)
+  #include "sentry_standard.h"
+  #define ACTIVE_ROBOT_CONFIG g_robot_config_sentry_standard
+
 #else
-    // Default to standard infantry if no type specified
-    #include "infantry_standard.h"
-    #define ACTIVE_ROBOT_CONFIG g_robot_config_infantry_standard
+  #error "Unknown or missing ROBOT_TYPE_*. Set -DROBOT_TYPE=infantry_standard|infantry_swerve|sentry_swerve|sentry_standard"
 #endif
 
 /**
