@@ -15,9 +15,16 @@
 // Chassis control parameters
 #define CHASSIS_DEMO_TARGET_SPEED 7000
 
+// Enable two-diagonal steer mode: LF and RB are steer+drive; RF and LB disabled
+// Set to 1 to enable the minimal-change two-diagonal steer behavior
+#define CHASSIS_MODE_TWO_DIAG_STEER 1
+
+// Enable debug logging for chassis (USB CDC). Set to 1 to enable, 0 to disable.
+#define CHASSIS_DEBUG 1
 
 // Chassis controller structure
-typedef struct {
+typedef struct
+{
     // Motor target speeds
     float target_speeds[CHASSIS_MOTOR_COUNT];
     // Running state
@@ -30,8 +37,6 @@ typedef struct {
     int16_t output_currents[CHASSIS_MOTOR_COUNT];
 } ChassisController;
 
-
-
 /**
  * @brief Initialize chassis controller
  * @param controller Chassis controller pointer
@@ -43,7 +48,7 @@ void ChassisController_Init(ChassisController *controller);
  * @param controller Chassis controller pointer
  * @param sensor_data Sensor data pointer
  */
-void ChassisController_Update(ChassisController *controller, SensorData* sensor_data);
+void ChassisController_Update(ChassisController *controller, SensorData *sensor_data);
 
 /**
  * @brief Compute chassis motor currents
@@ -70,7 +75,7 @@ void ChassisController_Stop(ChassisController *controller);
  * @param controller Chassis controller pointer
  * @return Output currents array pointer
  */
-const int16_t* ChassisController_GetOutputCurrents(const ChassisController *controller);
+const int16_t *ChassisController_GetOutputCurrents(const ChassisController *controller);
 
 /**
  * @brief Check if any motor is running
@@ -92,4 +97,3 @@ bool ChassisController_IsRunning(const ChassisController *controller);
 void ChassisController_UpdateMotorFeedback(ChassisController *controller, uint8_t motor_id, uint16_t angle, int16_t speed, int16_t current, uint8_t temp, uint32_t current_tick);
 
 #endif // CHASSIS_CONTROLLER_H
-
