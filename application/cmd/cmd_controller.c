@@ -202,8 +202,8 @@ static void process_shooter_command(const RC_ctrl_t *rc) {
     // Up: friction + feed enabled
     // Mid: friction enabled only
     // Down: all disabled
-    bool right_switch_up = switch_is_up(rc->rc.s[1]);
-    bool right_switch_mid = switch_is_mid(rc->rc.s[1]);
+    bool right_switch_up = switch_is_up(rc->rc.s[0]);
+    bool right_switch_mid = switch_is_mid(rc->rc.s[0]);
     
     s_shoot_cmd.friction_enabled = (right_switch_up || right_switch_mid);
     s_shoot_cmd.feed_enabled = right_switch_up;
@@ -311,8 +311,8 @@ void CmdController_Task(uint32_t current_tick) {
     // UP   -> Small gyro mode (chassis auto-spins, gimbal holds yaw)
     // MID  -> Gimbal-follow mode (movement follows gimbal orientation, no auto-spin)
     // DOWN -> Normal mode (chassis frame movement)
-    bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[0]);
-    bool spin_now = switch_is_up(s_last_rc.rc.s[0]);
+    bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[1]);
+    bool spin_now = switch_is_up(s_last_rc.rc.s[1]);
 
     // Spin mode rising edge: latch current gimbal absolute yaw as hold target
     if (spin_now && !s_spin_mode)

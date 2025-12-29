@@ -76,11 +76,6 @@ bool MotorDriver_Init(uint8_t motor_id, const MotorConfig_t *config)
         return false;
     }
 
-    // Ensure module is initialized
-    if (!g_module_initialized) {
-        MotorDriver_ModuleInit();
-    }
-
     MotorContext_t *ctx = &g_motor_contexts[motor_id];
 
     // Clear context
