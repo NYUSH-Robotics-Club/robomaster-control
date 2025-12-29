@@ -41,6 +41,8 @@
 #include "gimbal_controller.h"
 #include "gm6020_motor.h"
 #include "can_manager.h"
+#include "motor_registry.h"
+#include "robot_config.h"
 #include <stdarg.h>
 #include <math.h>
 #include "printing.h"
@@ -84,6 +86,10 @@
 // CAN managers
 CAN_Manager_t can1_manager;
 CAN_Manager_t can2_manager;
+
+// Motor registry storage (one per CAN channel)
+static MotorRegistry_t can1_registry;
+static MotorRegistry_t can2_registry;
 
 float gyro[3], accel[3], temp;
 
@@ -213,8 +219,9 @@ int main(void)
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
 
   // Initialize CAN managers early (needed for gimbal motors)
-  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1);
-  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2);
+  const RobotConfig_t *robot_cfg = RobotConfig_Get();
+  CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1, robot_cfg, &can1_registry);
+  CAN_Manager_Init(&can2_manager, CAN_CHANNEL_2, &hcan2, robot_cfg, &can2_registry);
   CAN_Manager_Start(&can1_manager);
   CAN_Manager_Start(&can2_manager);
 

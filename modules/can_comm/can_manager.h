@@ -4,19 +4,30 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "can.h"
+#include "config_types.h"
+#include "motor_registry.h"
 
-// CAN channel enumeration
-typedef enum {
-    CAN_CHANNEL_1 = 0,
-    CAN_CHANNEL_2 = 1,
-    CAN_CHANNEL_COUNT
-} CAN_Channel_t;
+// TX frame structure for aggregating motor commands
+#define CAN_TX_FRAME_COUNT 3  // Support 0x200, 0x1FF, 0x2FF
+typedef struct {
+    uint16_t std_id;           // Standard ID (0x200, 0x1FF, or 0x2FF)
+    int16_t currents[4];       // Currents for 4 motor slots
+    uint8_t pending;           // true if frame needs to be sent
+} CANTxFrame_t;
 
 // CAN manager structure
 typedef struct {
     CAN_HandleTypeDef *hcan;
+    CAN_Channel_t channel;
     uint32_t filter_bank;
     uint8_t initialized;
+
+    // Motor registry for dynamic motor lookup
+    MotorRegistry_t *registry;  // Pointer to avoid circular dependency
+
+    // TX frame aggregation buffers
+    CANTxFrame_t tx_frames[CAN_TX_FRAME_COUNT];
+
     // Debug counters
     uint32_t tx_ok;
     uint32_t tx_err;
@@ -27,15 +38,19 @@ typedef struct {
 } CAN_Manager_t;
 
 /**
- * @brief Initialize CAN manager
+ * @brief Initialize CAN manager with robot configuration
  * @param manager CAN manager pointer
  * @param channel CAN channel (CAN_CHANNEL_1 or CAN_CHANNEL_2)
  * @param hcan CAN handle pointer
- * @param chassis_controller Chassis controller pointer
- * @param shooter_controller Shooter controller pointer
+ * @param robot_config Robot configuration (for motor registry initialization)
+ * @param registry_storage Pointer to registry storage (allocated by caller)
  * @return HAL status
  */
-HAL_StatusTypeDef CAN_Manager_Init(CAN_Manager_t *manager, CAN_Channel_t channel, CAN_HandleTypeDef *hcan);
+HAL_StatusTypeDef CAN_Manager_Init(CAN_Manager_t *manager,
+                                  CAN_Channel_t channel,
+                                  CAN_HandleTypeDef *hcan,
+                                  const RobotConfig_t *robot_config,
+                                  MotorRegistry_t *registry_storage);
 
 /**
  * @brief Start CAN communication
@@ -79,6 +94,39 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
  * @return HAL status
  */
 HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t motor_id, int16_t current);
+
+/**
+ * @brief Send motor current by motor ID (new configurable API)
+ *
+ * Aggregates motor current into appropriate TX frame buffer based on
+ * motor configuration. Call CAN_Manager_FlushTx() to actually send frames.
+ *
+ * @param manager CAN manager pointer
+ * @param motor_id Motor ID
+ * @param current Current value (will be clamped based on motor type)
+ * @return HAL status
+ */
+HAL_StatusTypeDef CAN_Manager_SendMotorCurrent(CAN_Manager_t *manager,
+                                              uint8_t motor_id,
+                                              int16_t current);
+
+/**
+ * @brief Flush all pending TX frames
+ *
+ * Sends all TX frames that have been populated by CAN_Manager_SendMotorCurrent()
+ * and clears the pending flags.
+ *
+ * @param manager CAN manager pointer
+ * @return HAL status (returns error if any frame failed to send)
+ */
+HAL_StatusTypeDef CAN_Manager_FlushTx(CAN_Manager_t *manager);
+
+/**
+ * @brief Get CAN manager from handle (for reverse lookup)
+ * @param hcan CAN handle
+ * @return Pointer to CAN manager, or NULL if not found
+ */
+CAN_Manager_t* CAN_Manager_FromHandle(CAN_HandleTypeDef *hcan);
 
 /**
  * @brief Process CAN receive callback

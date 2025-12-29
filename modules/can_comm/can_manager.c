@@ -1,8 +1,11 @@
 #include "can_manager.h"
+#include "motor_registry.h"
+#include "robot_config.h"
 #include "message_center.h"
 #include "can_comm.h"
 #include <string.h>
 #include "printing.h"
+
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 
@@ -13,11 +16,22 @@ extern CAN_HandleTypeDef hcan2;
 #define CAN_FIFO_ASSIGNMENT CAN_FILTER_FIFO0
 #define CAN_IT_TYPE         CAN_IT_RX_FIFO0_MSG_PENDING
 
-HAL_StatusTypeDef CAN_Manager_Init(CAN_Manager_t *manager, CAN_Channel_t channel, CAN_HandleTypeDef *hcan)
+HAL_StatusTypeDef CAN_Manager_Init(CAN_Manager_t *manager,
+                                  CAN_Channel_t channel,
+                                  CAN_HandleTypeDef *hcan,
+                                  const RobotConfig_t *robot_config,
+                                  MotorRegistry_t *registry_storage)
 {
-    if (manager == NULL || hcan == NULL) return HAL_ERROR;
+    if (manager == NULL || hcan == NULL || robot_config == NULL || registry_storage == NULL) {
+        return HAL_ERROR;
+    }
+
+    // Clear manager structure
     memset(manager, 0, sizeof(CAN_Manager_t));
     manager->hcan = hcan;
+    manager->channel = channel;
+
+    // Set filter bank based on channel
     switch (channel)
     {
         case CAN_CHANNEL_1:
@@ -29,6 +43,16 @@ HAL_StatusTypeDef CAN_Manager_Init(CAN_Manager_t *manager, CAN_Channel_t channel
         default:
             return HAL_ERROR;
     }
+
+    // Initialize motor registry
+    manager->registry = registry_storage;
+    MotorRegistry_Init(manager->registry, robot_config, channel);
+
+    // Initialize TX frame buffers
+    manager->tx_frames[0].std_id = 0x200;
+    manager->tx_frames[1].std_id = 0x1FF;
+    manager->tx_frames[2].std_id = 0x2FF;
+
     manager->initialized = 1;
     return HAL_OK;
 }
@@ -84,37 +108,63 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
     if (rx.DLC <= 8) { memcpy(f.data, d, rx.DLC); }
     (void)MsgCenter_Publish(TOPIC_CAN_RX, &f, sizeof(f));
 
-    // Process M3508/M2006 motor feedback (0x201-0x207): chassis (0x201-0x204) and shooter (0x205-0x207)
-    // These motors have full feedback: angle, speed, current, temp
-    // 0x205-0x207 are M3508 shooter motors
-    if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x201 && rx.StdId<=0x207) {
-        uint8_t mid = rx.StdId - 0x201;
-        // Map CAN IDs to motor IDs: 0x201-0x204 -> 0-3 (chassis), 0x205-0x207 -> 4,5,7 (shooter)
-        if (rx.StdId == 0x207) {
-            mid = 7;  // Map 0x207 to motor_id 7 (shooter2), not 6
-        }
-        uint16_t angle = (d[0]<<8) | d[1];
-        int16_t  speed = (int16_t)((d[2]<<8) | d[3]);
-        int16_t  current = (int16_t)((d[4]<<8) | d[5]);
-        uint8_t  temp = d[6];
-        MotorFeedbackEvent ev = { mid, angle, speed, current, temp, current_tick };
+    // ========== NEW: Dynamic motor feedback processing using registry ==========
+    // Only process standard ID frames with 8 bytes of data
+    if (rx.IDE != CAN_ID_STD || rx.DLC != 8) {
+        return;
+    }
+
+    // Look up motor configuration by RX ID
+    const MotorConfig_t *motor = MotorRegistry_FindByRxId(manager->registry, rx.StdId);
+    if (motor == NULL) {
+        // Not a registered motor - ignore
+        return;
+    }
+
+    // Parse feedback based on motor type
+    if (motor->type == MOTOR_TYPE_M3508 || motor->type == MOTOR_TYPE_M2006) {
+        // M3508/M2006 feedback format:
+        // Bytes [0-1]: Encoder angle (0-8191)
+        // Bytes [2-3]: Speed (RPM, signed)
+        // Bytes [4-5]: Current (signed)
+        // Byte  [6]:   Temperature (degrees C)
+        uint16_t angle   = (uint16_t)((d[0] << 8) | d[1]);
+        int16_t  speed   = (int16_t)((d[2] << 8) | d[3]);
+        int16_t  current = (int16_t)((d[4] << 8) | d[5]);
+        uint8_t  temp    = d[6];
+
+        // Publish to message center
+        MotorFeedbackEvent ev = {
+            .id = motor->motor_id,
+            .angle = angle,
+            .speed = speed,
+            .current = current,
+            .temp = temp,
+            .tick_ms = current_tick
+        };
         (void)MsgCenter_Publish(TOPIC_MOTOR_FEEDBACK, &ev, sizeof(ev));
     }
-    
-    // Process GM6020 motor feedback (0x20A-0x20B): gimbal motors (Yaw=6, Pitch=7)
-    // GM6020 feedback format: angle (d[0-1]), speed (d[2-3]), current (d[4-5]), temp (d[6])
-    // But we only extract angle and speed for gimbal control
-    // Note: GM6020 CAN ID = 0x204 + motor_id, so motor_id 6->0x20A, 7->0x20B
-    if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId>=0x20A && rx.StdId<=0x20B) {
-        uint8_t gid = (uint8_t)(rx.StdId - 0x204);  // GM6020 motor_id: 0x20A->6, 0x20B->7
-        if (gid >= 6 && gid <= 7) {
-            uint16_t angle_raw = (uint16_t)((d[0]<<8) | d[1]);
-            int16_t  speed_rpm = (int16_t)((d[2]<<8) | d[3]);
-            int16_t  current = (int16_t)((d[4]<<8) | d[5]);
-            GM6020FeedbackEvent gev = { gid, angle_raw, speed_rpm, current_tick, current };
-            (void)MsgCenter_Publish(TOPIC_GM6020_FEEDBACK, &gev, sizeof(gev));
-        }
+    else if (motor->type == MOTOR_TYPE_GM6020) {
+        // GM6020 feedback format:
+        // Bytes [0-1]: Encoder angle (0-8191)
+        // Bytes [2-3]: Speed (RPM, signed)
+        // Bytes [4-5]: Current (signed)
+        // Byte  [6]:   Temperature (degrees C)
+        uint16_t angle_raw = (uint16_t)((d[0] << 8) | d[1]);
+        int16_t  speed_rpm = (int16_t)((d[2] << 8) | d[3]);
+        int16_t  current   = (int16_t)((d[4] << 8) | d[5]);
+
+        // Publish to message center
+        GM6020FeedbackEvent gev = {
+            .id = motor->motor_id,
+            .angle = angle_raw,
+            .speed = speed_rpm,
+            .tick_ms = current_tick,
+            .current = current
+        };
+        (void)MsgCenter_Publish(TOPIC_GM6020_FEEDBACK, &gev, sizeof(gev));
     }
+    // ========== END: Dynamic feedback processing ==========
 }
 
 extern CAN_Manager_t can1_manager;
@@ -189,6 +239,123 @@ HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t
         m->last_tx_time = HAL_GetTick();
     }
     return st;
+}
+
+/**
+ * @brief Send motor current by motor ID (new configurable API)
+ */
+HAL_StatusTypeDef CAN_Manager_SendMotorCurrent(CAN_Manager_t *manager,
+                                              uint8_t motor_id,
+                                              int16_t current)
+{
+    if (manager == NULL || !manager->initialized || manager->registry == NULL) {
+        return HAL_ERROR;
+    }
+
+    // Find motor configuration
+    const MotorConfig_t *motor = MotorRegistry_FindByMotorId(manager->registry, motor_id);
+    if (motor == NULL) {
+        return HAL_ERROR;  // Motor not found in this CAN channel
+    }
+
+    // Clamp current based on motor type
+    if (motor->type == MOTOR_TYPE_GM6020) {
+        if (current >  25000) current =  25000;
+        if (current < -25000) current = -25000;
+    } else {  // M3508/M2006
+        if (current >  16384) current =  16384;
+        if (current < -16384) current = -16384;
+    }
+
+    // Find appropriate TX frame
+    CANTxFrame_t *tx_frame = NULL;
+    for (uint8_t i = 0; i < CAN_TX_FRAME_COUNT; i++) {
+        if (manager->tx_frames[i].std_id == motor->can_tx_id) {
+            tx_frame = &manager->tx_frames[i];
+            break;
+        }
+    }
+
+    if (tx_frame == NULL) {
+        return HAL_ERROR;  // Unsupported TX ID
+    }
+
+    // Aggregate current into appropriate slot
+    if (motor->tx_slot < 4) {
+        tx_frame->currents[motor->tx_slot] = current;
+        tx_frame->pending = 1;  // Mark frame as pending
+    } else {
+        return HAL_ERROR;  // Invalid slot
+    }
+
+    return HAL_OK;
+}
+
+/**
+ * @brief Flush all pending TX frames
+ */
+HAL_StatusTypeDef CAN_Manager_FlushTx(CAN_Manager_t *manager)
+{
+    if (manager == NULL || !manager->initialized) {
+        return HAL_ERROR;
+    }
+
+    HAL_StatusTypeDef result = HAL_OK;
+
+    // Send all pending frames
+    for (uint8_t i = 0; i < CAN_TX_FRAME_COUNT; i++) {
+        CANTxFrame_t *tx_frame = &manager->tx_frames[i];
+
+        if (tx_frame->pending) {
+            // Prepare CAN message
+            CAN_TxHeaderTypeDef tx_header = {0};
+            uint8_t data[8] = {0};
+            uint32_t mailbox;
+
+            tx_header.StdId = tx_frame->std_id;
+            tx_header.IDE = CAN_ID_STD;
+            tx_header.RTR = CAN_RTR_DATA;
+            tx_header.DLC = 8;
+
+            // Pack currents into data buffer (big-endian)
+            for (uint8_t slot = 0; slot < 4; slot++) {
+                data[slot * 2 + 0] = (uint8_t)((tx_frame->currents[slot] >> 8) & 0xFF);
+                data[slot * 2 + 1] = (uint8_t)(tx_frame->currents[slot] & 0xFF);
+            }
+
+            // Send CAN message
+            HAL_StatusTypeDef status = HAL_CAN_AddTxMessage(manager->hcan, &tx_header, data, &mailbox);
+            if (status == HAL_OK) {
+                manager->tx_ok++;
+            } else {
+                manager->tx_err++;
+                result = HAL_ERROR;  // Mark as error but continue sending other frames
+            }
+            manager->last_tx_time = HAL_GetTick();
+
+            // Clear frame for next cycle
+            memset(tx_frame->currents, 0, sizeof(tx_frame->currents));
+            tx_frame->pending = 0;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * @brief Get CAN manager from handle (for reverse lookup)
+ */
+CAN_Manager_t* CAN_Manager_FromHandle(CAN_HandleTypeDef *hcan)
+{
+    extern CAN_Manager_t can1_manager;
+    extern CAN_Manager_t can2_manager;
+
+    if (hcan == can1_manager.hcan) {
+        return &can1_manager;
+    } else if (hcan == can2_manager.hcan) {
+        return &can2_manager;
+    }
+    return NULL;
 }
 
 uint32_t CAN_Manager_GetTxOk(const CAN_Manager_t *m){ return m?m->tx_ok:0; }

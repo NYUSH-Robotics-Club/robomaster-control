@@ -21,6 +21,10 @@ endif()
 # Set the project name
 set(CMAKE_PROJECT_NAME NYUSH_Infantry)
 
+# Robot configuration type (can be overridden with -DROBOT_TYPE=...)
+set(ROBOT_TYPE "infantry_standard" CACHE STRING "Robot configuration type")
+message("Robot type: " ${ROBOT_TYPE})
+
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
@@ -56,6 +60,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Inc
+    config
     modules
     modules/message_center
     modules/can_comm
@@ -78,6 +83,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+    ROBOT_TYPE_${ROBOT_TYPE}
 )
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE -mthumb)
 
@@ -97,6 +103,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
 # Create layered static libraries (placeholders for initial structure)
 add_library(modules STATIC
+    config/robot_config.c
     modules/message_center/message_center.c
     modules/algorithm/pid.c
     modules/algorithm/kalman_filter.c
@@ -109,6 +116,7 @@ add_library(modules STATIC
     modules/imu/gyro_data.c
     modules/imu/wt61c.c
     modules/can_comm/can_manager.c
+    modules/can_comm/motor_registry.c
     modules/debug_print/printing.c
     modules/vision_comm/crc8.c
     modules/vision_comm/crc16.c
@@ -117,6 +125,7 @@ add_library(modules STATIC
 )
 
 target_include_directories(modules PUBLIC
+    config
     modules
     modules/message_center
     modules/can_comm
@@ -145,6 +154,7 @@ add_library(application STATIC
 )
 
 target_include_directories(application PUBLIC
+    config
     application
     application/cmd
     application/chassis
