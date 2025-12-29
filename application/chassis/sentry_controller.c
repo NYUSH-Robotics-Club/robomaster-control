@@ -146,33 +146,19 @@ void ChassisController_Update(ChassisController *controller, SensorData *sensor_
     float vx = vx_norm * scale;
     float vy = vy_norm * scale;
 
-    // ===== Swerve Drive Logic =====
-    // Calculate velocity magnitude (for drive speed)
-    float velocity_magnitude = sqrtf(vx * vx + vy * vy);
+    // ===== Simple Drive Logic =====
+    // Drive motors: controlled by vy (left/right stick)
+    // Steer motors: controlled by vx (forward/backward stick)
 
-    // Calculate movement angle (for steer direction)
-    // Swap parameters: atan2(vx, vy) so vx (forward/back) becomes primary direction
-    // vx: forward/backward, vy: left/right
-    float movement_angle_rad = atan2f(vx, vy);
-    // Convert to encoder ticks: angle_ticks = (angle_rad / (2*PI)) * 8192
-    // Adjust so that forward (vx+) = 4096 ticks
-    float angle_ticks = (movement_angle_rad / (2.0f * M_PI)) * 8192.0f + 4096.0f;
-
-    // Wrap to 0-8192 range
-    while (angle_ticks >= 8192.0f) angle_ticks -= 8192.0f;
-    while (angle_ticks < 0.0f) angle_ticks += 8192.0f;
-
-    // Drive targets: all wheels same speed (velocity magnitude)
+    // Drive targets: all wheels use vy speed only (left/right stick)
     if (s_drive_motor_count >= 4) {
         for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-            controller->target_speeds[i] = s_drive_motor_directions[i] * velocity_magnitude;
+            controller->target_speeds[i] = s_drive_motor_directions[i] * vy;
         }
     }
 
-    // Steer targets: point wheels in movement direction
-    for (uint8_t i = 0; i < s_steer_motor_count; i++) {
-        controller->steer_target_angles[i] = angle_ticks;
-    }
+    // Steer targets: not used (steer uses manual speed control via vx)
+    // No need to set steer_target_angles here
 
 
 
@@ -314,12 +300,12 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
     }
 
     // Steer currents
-    // ===== Steer currents (cascade like yaw) =====
+    // ===== Steer currents (manual speed control) =====
     for (int i = 0; i < s_steer_motor_count; i++) {
         int16_t motor_current =
             SteerController_CascadeControl(
                 s_steer_motor_ids[i],
-                s_last_cmd.vx        // vx (left/right stick) controls steering
+                s_last_cmd.vx        // vx (forward/backward stick) controls steering speed
             );
 
         controller->steer_output_currents[i] = motor_current;
