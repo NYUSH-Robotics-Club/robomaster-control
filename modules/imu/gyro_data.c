@@ -4,6 +4,7 @@
 #include "printing.h"
 #include "message_center.h"
 #include "QuaternionEKF.h"
+#include "buzzer.h"
 #include <math.h>
 
 static float gyro[3];
@@ -124,6 +125,7 @@ void gyro_calibrate(void)
     }
 
     USB_CDC_Printf("[BMI088] Starting calibration, keep IMU still for 2 seconds...\r\n");
+    Buzzer_PlayBeep();
 
     // do-while循环：重试直到校准成功或超时
     do {
@@ -264,6 +266,7 @@ void gyro_calibrate(void)
                        gyro_offset[0], gyro_offset[1], gyro_offset[2]);
         USB_CDC_Printf("Accel: gNorm=%.3f m/s² (%.2fg)\r\n", g_norm, g_norm / GRAVITY_ACCEL);
         USB_CDC_Printf("Temp when cali: %.2f °C\r\n", temp);
+        Buzzer_PlayBeep();
     }
 }
 
