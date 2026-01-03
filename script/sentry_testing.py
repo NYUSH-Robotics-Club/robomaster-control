@@ -14,6 +14,7 @@ PORT = "/dev/tty.usbmodem3088357D30341"
 BAUD = 115200
 BUFFER = 600
 MAX_MOTORS = 4          # set to your s_steer_motor_count
+ENC_MAX = 8192.0        # encoder ticks per revolution (wrap for plotting)
 WINDOW_SEC = 30.0
 # ==========================================
 
@@ -33,6 +34,12 @@ def parse_str_line(line: str):
     tgt = float(m.group(3))
     ang = int(m.group(4))   # encoder ticks (uint)
     return idx, mid, tgt, ang
+
+def _wrap_enc(v: float) -> float:
+    """Wrap encoder-like values into [0, ENC_MAX) for clean plotting."""
+    # Python % handles negatives too
+    return v % ENC_MAX
+
 
 def main():
     ser = serial.Serial(PORT, BAUD, timeout=0.1)
@@ -56,8 +63,8 @@ def main():
     for i in range(MAX_MOTORS):
         axes[i].grid(True)
         axes[i].set_ylabel(f"i={i}")
-        lt, = axes[i].plot([], [], "--", label="target")
-        la, = axes[i].plot([], [], label="angle")
+        lt, = axes[i].plot([], [], label="Target Angle", linewidth=1.5)
+        la, = axes[i].plot([], [], label="Current Angle", linewidth=1.5)
         axes[i].legend(loc="upper right")
         lines_tgt.append(lt)
         lines_ang.append(la)
@@ -90,8 +97,8 @@ def main():
 
             motor_id[idx] = str(mid)
             t[idx].append(tt)
-            tgt[idx].append(_tgt)
-            ang[idx].append(_ang)
+            tgt[idx].append(_wrap_enc(_tgt))
+            ang[idx].append(_wrap_enc(float(_ang)))
 
         any_last = False
         for i in range(MAX_MOTORS):
