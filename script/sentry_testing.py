@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 # ================= CONFIG =================
-PORT = "/dev/tty.modem3088"
+PORT = "/dev/tty.usbmodem3088357D30341"
 BAUD = 115200
 BUFFER = 600
 MAX_MOTORS = 4          # set to your s_steer_motor_count
