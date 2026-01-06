@@ -13,6 +13,7 @@
 #include "printing.h"
 #include "remote_control.h"
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -55,27 +56,6 @@ static int16_t ComputeSingleMotorCurrent(PID_Controller *pid, float target,
   }
   float measured = feedback->speed; // drive: RPM
   return (int16_t)PID_Calculate(pid, target, measured);
-}
-
-static int16_t ComputeSingleSteerCurrent(PID_Controller *pid,
-                                         float target_angle,
-                                         Motor_Feedback *feedback,
-                                         uint32_t current_tick) {
-  if (current_tick - feedback->last_update_time > MOTOR_FEEDBACK_TIMEOUT_MS) {
-    return 0;
-  }
-
-  // Use encoder angle (0..8191) for steering position PID
-  float measured_angle = (float)feedback->angle;
-
-  // Shortest-path wrap in ticks
-  float err = target_angle - measured_angle;
-  if (err > 4096.0f)
-    err -= 8192.0f;
-  if (err < -4096.0f)
-    err += 8192.0f;
-
-  return (int16_t)PID_Calculate(pid, target_angle, measured_angle);
 }
 
 void ChassisController_Init(ChassisController *controller) {
@@ -140,34 +120,101 @@ void ChassisController_Update(ChassisController *controller,
 
   float vx_norm = s_last_cmd.vx;
   float vy_norm = s_last_cmd.vy;
-  float wz_norm = s_last_cmd.wz;
 
-  float scale = (float)CHASSIS_DEMO_TARGET_SPEED / 2.0f;
+  // Calculate joystick magnitude (speed) and direction (angle)
+  float magnitude = sqrtf(vx_norm * vx_norm + vy_norm * vy_norm);
 
-  // cmd_controller already did coordinate transform (per your comment in
-  // chassis_controller.c)
-  float vx = vx_norm * scale;
-  float vy = vy_norm * scale;
+  // Drive speed: proportional to joystick magnitude
+  float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;
+  float drive_speed = magnitude * max_speed;
 
-  // ===== Simple Drive Logic =====
-  // Drive motors: controlled by vy (left/right stick)
-  // Steer motors: controlled by vx (forward/backward stick)
+  float drive_direction = 1.0f;
 
-  // Drive targets: all wheels use vy speed only (left/right stick)
-  if (s_drive_motor_count >= 4) {
-    for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-      controller->target_speeds[i] = s_drive_motor_directions[i] * vy;
+  if (magnitude > 0.1f) {
+    float target_angle_rad = atan2f(vx_norm, -vy_norm);
+    float joystick_angle_ticks = target_angle_rad * (8192.0f / (2.0f * M_PI));
+
+    // Map joystick to ±90deg range (ensures forward/backward map to same angle)
+    float canonical_angle_ticks = joystick_angle_ticks;
+    if (canonical_angle_ticks > 2048.0f) {
+      canonical_angle_ticks -= 4096.0f;
+      drive_direction = -1.0f;
+    } else if (canonical_angle_ticks < -2048.0f) {
+      canonical_angle_ticks += 4096.0f;
+      drive_direction = -1.0f;
+    }
+
+    // Shortest path optimization
+    if (s_steer_motor_count > 0) {
+      MotorContext_t *ctx0 = MotorDriver_GetContext(s_steer_motor_ids[0]);
+      if (ctx0 && ctx0->config && ctx0->angle_initialized) {
+        float initial0 = (float)ctx0->config->limits.gm6020.initial_angle;
+        float last_target0 = controller->steer_target_angles[0];
+
+        float option1_angle = initial0 + canonical_angle_ticks;
+        while (option1_angle >= 8192.0f) option1_angle -= 8192.0f;
+        while (option1_angle < 0.0f) option1_angle += 8192.0f;
+
+        float option2_angle = initial0 + canonical_angle_ticks + 4096.0f;
+        while (option2_angle >= 8192.0f) option2_angle -= 8192.0f;
+        while (option2_angle < 0.0f) option2_angle += 8192.0f;
+
+        float diff1 = option1_angle - last_target0;
+        if (diff1 > 4096.0f) diff1 -= 8192.0f;
+        if (diff1 < -4096.0f) diff1 += 8192.0f;
+
+        float diff2 = option2_angle - last_target0;
+        if (diff2 > 4096.0f) diff2 -= 8192.0f;
+        if (diff2 < -4096.0f) diff2 += 8192.0f;
+
+        float final_angle_ticks;
+        if (fabsf(diff1) <= fabsf(diff2)) {
+          final_angle_ticks = canonical_angle_ticks;
+        } else {
+          final_angle_ticks = canonical_angle_ticks + 4096.0f;
+          while (final_angle_ticks >= 4096.0f) final_angle_ticks -= 8192.0f;
+          while (final_angle_ticks < -4096.0f) final_angle_ticks += 8192.0f;
+          drive_direction = -drive_direction;
+        }
+
+        for (uint8_t i = 0; i < s_steer_motor_count; i++) {
+          MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
+          if (ctx && ctx->config && ctx->angle_initialized) {
+            float initial = (float)ctx->config->limits.gm6020.initial_angle;
+            float target_angle = initial + final_angle_ticks;
+
+            while (target_angle >= 8192.0f)
+              target_angle -= 8192.0f;
+            while (target_angle < 0.0f)
+              target_angle += 8192.0f;
+
+            controller->steer_target_angles[i] = target_angle;
+          }
+        }
+      }
+    }
+
+    // Apply drive speed with direction to ALL drive motors
+    if (s_drive_motor_count >= 4) {
+      for (uint8_t i = 0; i < s_drive_motor_count; i++) {
+        controller->target_speeds[i] =
+            s_drive_motor_directions[i] * drive_speed * drive_direction;
+      }
+    }
+  } else {
+    // Joystick released, stop all drive motors
+    if (s_drive_motor_count >= 4) {
+      for (uint8_t i = 0; i < s_drive_motor_count; i++) {
+        controller->target_speeds[i] = 0.0f;
+      }
     }
   }
-
-  // Steer targets: not used (steer uses manual speed control via vx)
-  // No need to set steer_target_angles here
 
   controller->running = s_last_cmd.enabled;
 }
 
 static int16_t SteerController_CascadeControl(uint8_t motor_id,
-                                              float rate_normalized) {
+                                              float target_angle) {
   MotorContext_t *steer = MotorDriver_GetContext(motor_id);
   if (!steer || !steer->angle_initialized || !steer->config) {
     // DEBUG: Print why steer control is returning 0
@@ -181,27 +228,21 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
     return 0;
   }
 
-  // ==========================
-  // Joystick → angle target
-  // ==========================
-  const float sensitivity = 50.0f; // ticks per update (tune)
-  steer->angle_target +=
-      (float)steer->config->direction * sensitivity * rate_normalized;
+  // Use provided target angle
+  steer->angle_target = target_angle;
 
   // Encoder range
   float enc_max = (steer->config->limits.gm6020.angle_max > 0.0f)
                       ? steer->config->limits.gm6020.angle_max
                       : 8192.0f;
 
-  // Wrap target
+  // Wrap target (already wrapped in ChassisController_Update, but ensure here)
   if (steer->angle_target >= enc_max)
     steer->angle_target -= enc_max;
   else if (steer->angle_target < 0.0f)
     steer->angle_target += enc_max;
 
-  // ==========================
   // Angle error (shortest path)
-  // ==========================
   float current_angle = (float)steer->angle_raw;
   float angle_error = steer->angle_target - current_angle;
 
@@ -213,9 +254,7 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
   if (angle_error < -enc_max / 2.0f)
     angle_error += enc_max;
 
-  // ==========================
   // OUTER: angle → speed
-  // ==========================
   float cmd_angle_to_speed =
       PID_Calculate(&steer->pid_outer, 0.0f, -angle_error);
 
@@ -226,9 +265,7 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
   if (cmd_angle_to_speed < -rpm_limit)
     cmd_angle_to_speed = -rpm_limit;
 
-  // ==========================
   // INNER: speed → current
-  // ==========================
   float speed_feedback = (float)steer->speed_rpm;
 
   float cmd_speed_to_current =
@@ -288,11 +325,11 @@ void ChassisController_ComputeCurrents(ChassisController *controller,
   }
 
   // Steer currents
-  // ===== Steer currents (manual speed control) =====
+  // ===== Steer currents (angle position control) =====
   for (int i = 0; i < s_steer_motor_count; i++) {
     int16_t motor_current = SteerController_CascadeControl(
         s_steer_motor_ids[i],
-        s_last_cmd.vx // vx (forward/backward stick) controls steering speed
+        controller->steer_target_angles[i] // Use target angle from Update()
     );
 
     controller->steer_output_currents[i] = motor_current;
@@ -482,7 +519,7 @@ void Sentry_WaitForSteerAlignment(void) {
         float current = (float)steer->angle_raw;
         float error = fabsf(target - current);
 
-        // Handle wraparound (0-8192 encoder range)
+        // Handle wraparound (0-8191 encoder range, 8192 ticks per revolution)
         if (error > 4096.0f) {
           error = 8192.0f - error;
         }

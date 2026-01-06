@@ -65,8 +65,7 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         .can_tx_id = 0x2FF,           
         .tx_slot = 1,                 
         .direction = 1,
-        // 12-31标定: ID 6 初始 1623
-        .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 2354.0f}, 
+        .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 2434.0f}, 
         .pid_outer = {0.7f, 0.045f, 0.018f, 300.0f, 300.0f},                                                                
         .pid_inner = {22.0f, 0.01f, 3.0f, 30000.0f, 4000.0f}                                                                
     }};
