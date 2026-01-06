@@ -102,9 +102,6 @@ static uint8_t wt61c_rxbuf[RX_DMA_BUF_SZ];
 #define MSG_CENTER_QUEUE_LEN 128
 static MsgEvent g_msg_queue[MSG_CENTER_QUEUE_LEN];
 
-// USART6 periodic send timer
-static uint32_t last_usart6_send_tick = 0;
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
