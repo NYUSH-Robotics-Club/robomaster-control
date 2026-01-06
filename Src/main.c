@@ -398,12 +398,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     HAL_UARTEx_ReceiveToIdle_DMA(&WT61C_UART_HANDLE, wt61c_rxbuf, RX_DMA_BUF_SZ);
     __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
   }
-  else if (huart == &huart6) {
-    // Process vision communication data (USART6 for vision system)
-    extern void VisionComm_RxCallback(uint8_t *buf, uint32_t len);
-    extern uint8_t uart_recv_buff[18];
-    VisionComm_RxCallback(uart_recv_buff, Size);
-  }
+  // Note: Vision communication now uses USB CDC instead of USART6
+  // The CDC_Receive_FS callback in usbd_cdc_if.c handles vision data reception
 }
 
 

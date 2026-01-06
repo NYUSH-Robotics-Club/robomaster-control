@@ -2,11 +2,10 @@
 #define VISION_COMM_H
 
 #include "main.h"
-#include "usart.h"
 #include <stdint.h>
 
-// Vision communication UART handle
-#define VISION_UART_HANDLE huart6
+// Vision communication now uses USB CDC instead of UART
+// #define VISION_UART_HANDLE huart6  // Old UART method
 
 #define VISION_RECV_SIZE 18u
 #define VISION_SEND_SIZE 36u
@@ -95,7 +94,7 @@ typedef struct
 #pragma pack()
 
 /**
- * @brief Initialize vision communication module (using USART6)
+ * @brief Initialize vision communication module (using USB CDC)
  * @return Pointer to receive data structure
  */
 Vision_Recv_s *VisionComm_Init(void);
