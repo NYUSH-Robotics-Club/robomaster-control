@@ -10,8 +10,8 @@
 #include <stdlib.h>
 
 #define SAMPLE_COUNT 10
-#define REFRESH_HZ   200
-#define REFRESH_DT   (1.0 / REFRESH_HZ)
+#define REFRESH_HZ 200
+#define REFRESH_DT (1.0 / REFRESH_HZ)
 #define VISION_CMD_TIMEOUT_MS 80u
 
 // ==========================
@@ -23,12 +23,12 @@
 //  - Gimbal yaw: hold gimbal IMU absolute yaw steady (controlled by gimbal module's internal PID).
 //
 // NOTE: Tune these parameters on robot if needed.
-#define SPIN_WZ_NORM                 (0.33f)   // chassis spin rate command (normalized, 0-1)
-#define SPIN_TRANSLATE_LIMIT_NORM    (1.00f)   // max translation velocity in spin mode (normalized)
+#define SPIN_WZ_NORM (0.33f)                   // chassis spin rate command (normalized, 0-1)
+#define SPIN_TRANSLATE_LIMIT_NORM (1.00f)      // max translation velocity in spin mode (normalized)
 #define SPIN_GIMBAL_YAW_ADJ_DEG_PER_S (120.0f) // manual yaw adjustment rate when in spin mode (deg/s)
 
-static bool  s_spin_mode = false;
-static float s_spin_hold_yaw_deg = 0.0f;       // target absolute yaw (deg, gimbal IMU yaw_total_angle)
+static bool s_spin_mode = false;
+static float s_spin_hold_yaw_deg = 0.0f; // target absolute yaw (deg, gimbal IMU yaw_total_angle)
 
 // ==========================
 // Gimbal-oriented follow mode
@@ -40,11 +40,7 @@ static float s_spin_hold_yaw_deg = 0.0f;       // target absolute yaw (deg, gimb
 //  - Gimbal: normal manual control.
 static bool s_gimbal_follow_mode = false;
 
-
-
-
-
-static float yaw_storage=0.0f;
+static float yaw_storage = 0.0f;
 static uint32_t s_last_spin_dbg_tick = 0; // rate limiter for SPINDBG prints (tagged)
 
 // Local state storage
@@ -64,8 +60,10 @@ static GimbalCmd s_gimbal_cmd;
 // Normalize angle to [-180, 180] range
 static float normalize_angle_180(float angle_deg)
 {
-    while (angle_deg > 180.0f) angle_deg -= 360.0f;
-    while (angle_deg < -180.0f) angle_deg += 360.0f;
+    while (angle_deg > 180.0f)
+        angle_deg -= 360.0f;
+    while (angle_deg < -180.0f)
+        angle_deg += 360.0f;
     return angle_deg;
 }
 
@@ -84,40 +82,50 @@ static void gimbal_to_chassis_frame(float vx_g, float vy_g, float offset_angle_d
 }
 
 // Callback for RC update
-static void on_rc_update(const MsgEvent *ev, void *user_data) {
+static void on_rc_update(const MsgEvent *ev, void *user_data)
+{
     (void)user_data;
-    if (ev->size == sizeof(RC_ctrl_t)) {
+    if (ev->size == sizeof(RC_ctrl_t))
+    {
         memcpy(&s_last_rc, ev->data, sizeof(RC_ctrl_t));
     }
 }
 
 // Callback for IMU update
-static void on_imu_update(const MsgEvent *ev, void *user_data) {
+static void on_imu_update(const MsgEvent *ev, void *user_data)
+{
     (void)user_data;
-    if (ev->size == sizeof(SensorData)) {
+    if (ev->size == sizeof(SensorData))
+    {
         memcpy(&s_last_sensor, ev->data, sizeof(SensorData));
     }
 }
 
 // Callback for vision data update
-static void on_vision_update(const MsgEvent *ev, void *user_data) {
+static void on_vision_update(const MsgEvent *ev, void *user_data)
+{
     (void)user_data;
-    if (ev->size == sizeof(Vision_Recv_s)) {
+    if (ev->size == sizeof(Vision_Recv_s))
+    {
         memcpy(&s_last_vision, ev->data, sizeof(Vision_Recv_s));
     }
 }
 
 // Apply deadband to joystick input
-static int16_t apply_deadband(int16_t value, int16_t deadband) {
-    if (value > -deadband && value < deadband) {
+static int16_t apply_deadband(int16_t value, int16_t deadband)
+{
+    if (value > -deadband && value < deadband)
+    {
         return 0;
     }
     return value;
 }
 
 // Process chassis control commands
-static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *sensor, bool spin_mode, bool gimbal_follow_mode) {
-    if (rc == NULL) {
+static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *sensor, bool spin_mode, bool gimbal_follow_mode)
+{
+    if (rc == NULL)
+    {
         // RC disconnected, stop chassis
         s_chassis_cmd.vx = 0.0f;
         s_chassis_cmd.vy = 0.0f;
@@ -127,9 +135,10 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     }
 
     // Extract joystick values with deadband
+    // ch[3]: left stick X -> vx, ch[2]: left stick Y -> vy, ch[0]: right stick X -> wz
     int16_t vx_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
     int16_t vy_raw = apply_deadband((int16_t)(rc->rc.ch[2]), JOYSTICK_DEADBAND);
-    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[4]), JOYSTICK_DEADBAND);
+    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[0]), JOYSTICK_DEADBAND);
 
     // Convert to normalized values (-1.0 to 1.0)
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
@@ -137,7 +146,8 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     float vy_f = -(float)vy_raw / max_input;
     float wz_n = (float)wz_raw / max_input;
 
-    if ((spin_mode || gimbal_follow_mode) && sensor != NULL) {
+    if ((spin_mode || gimbal_follow_mode) && sensor != NULL)
+    {
         // Spin mode OR Gimbal-follow mode: joystick input is in gimbal frame.
         // Need to convert joystick input from gimbal frame to chassis frame.
 
@@ -151,14 +161,16 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
         float vx_c = 0.0f, vy_c = 0.0f;
         gimbal_to_chassis_frame(vx_f, vy_f, offset_angle, &vx_c, &vy_c);
 
-        if (spin_mode) {
+        if (spin_mode)
+        {
             // Spin mode: chassis auto-rotates at constant speed
             const float omega = SPIN_WZ_NORM;
 
             // Limit translation velocity to prevent wheel saturation
             // Use L2 norm (magnitude) instead of L1 norm for better control
             float mag = sqrtf(vx_c * vx_c + vy_c * vy_c);
-            if (mag > SPIN_TRANSLATE_LIMIT_NORM) {
+            if (mag > SPIN_TRANSLATE_LIMIT_NORM)
+            {
                 float scale = SPIN_TRANSLATE_LIMIT_NORM / mag;
                 vx_c *= scale;
                 vy_c *= scale;
@@ -170,7 +182,9 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
             s_chassis_cmd.wz = omega;
             // In spin mode we always enable chassis so it keeps rotating even with sticks centered.
             s_chassis_cmd.enabled = true;
-        } else {
+        }
+        else
+        {
             // Gimbal-follow mode: chassis does NOT auto-rotate, manual wz control
             // Swap vx_c and vy_c to match chassis coordinate system, negate vy for correct direction
             s_chassis_cmd.vx = vy_c;
@@ -179,7 +193,9 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
             // Enable chassis if any joystick is moved
             s_chassis_cmd.enabled = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
         }
-    } else {
+    }
+    else
+    {
         // Normal (original) behavior
         s_chassis_cmd.vx = vx_f;
         s_chassis_cmd.vy = vy_f;
@@ -190,8 +206,10 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
 }
 
 // Process shooter control commands
-static void process_shooter_command(const RC_ctrl_t *rc) {
-    if (rc == NULL) {
+static void process_shooter_command(const RC_ctrl_t *rc)
+{
+    if (rc == NULL)
+    {
         // RC disconnected, disable shooter
         s_shoot_cmd.friction_enabled = false;
         s_shoot_cmd.feed_enabled = false;
@@ -204,14 +222,16 @@ static void process_shooter_command(const RC_ctrl_t *rc) {
     // Down: all disabled
     bool right_switch_up = switch_is_up(rc->rc.s[0]);
     bool right_switch_mid = switch_is_mid(rc->rc.s[0]);
-    
+
     s_shoot_cmd.friction_enabled = (right_switch_up || right_switch_mid);
     s_shoot_cmd.feed_enabled = right_switch_up;
 }
 
 // Process gimbal control commands
-static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor, bool spin_mode) {
-    if (rc == NULL) {
+static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor, bool spin_mode)
+{
+    if (rc == NULL)
+    {
         // RC disconnected, disable gimbal
         s_gimbal_cmd.enabled = false;
         s_gimbal_cmd.pitch_rate = 0.0f;
@@ -222,17 +242,20 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
         s_gimbal_cmd.vision_ts_ms = 0;
         return;
     }
-    
+
     // Gimbal always enabled
     s_gimbal_cmd.enabled = true;
-    
-    // Right stick controls gimbal (ch0=yaw, ch1=pitch)
+
+    // Gimbal controls:
+    //   ch[4]: yaw via left dial
+    //   ch[1]: pitch via right stick Y
     // Apply deadband and normalize to -1.0 to 1.0
-    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
+    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[4]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
 
     // RC signal glitch filter: reject sudden jumps >1000 units (likely signal noise/interference)
-    if (abs(yaw_storage - yaw_raw) > 1000) {
+    if (abs(yaw_storage - yaw_raw) > 1000)
+    {
         yaw_raw = yaw_storage;
     }
 
@@ -240,7 +263,8 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
     float yaw_rate_manual = (float)yaw_raw / max_input;
     s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
 
-    if (spin_mode && sensor != NULL) {
+    if (spin_mode && sensor != NULL)
+    {
         // Allow manual yaw adjustment by shifting hold target (deg/s).
         s_spin_hold_yaw_deg += yaw_rate_manual * SPIN_GIMBAL_YAW_ADJ_DEG_PER_S * (float)REFRESH_DT;
 
@@ -253,36 +277,47 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
 
         // Keep yaw_rate at 0 in spin mode; gimbal controller will compute angle_target directly.
         s_gimbal_cmd.yaw_rate = 0.0f;
-    } else {
+    }
+    else
+    {
         // Normal (original) behavior
         s_gimbal_cmd.yaw_rate = yaw_rate_manual;
         s_gimbal_cmd.yaw_rate_memo = 0.0f;
         s_gimbal_cmd.yaw_target_memo = 0.0f;
     }
-    
-    if (s_last_vision.updated) {
+
+    if (s_last_vision.updated)
+    {
         s_last_vision.updated = 0;
         s_gimbal_cmd.vision_ts_ms = HAL_GetTick();
-        if (s_last_vision.target_state != NO_TARGET) {
+        if (s_last_vision.target_state != NO_TARGET)
+        {
             s_gimbal_cmd.vision_valid = true;
             s_gimbal_cmd.vision_yaw_err_rad = s_last_vision.yaw;
             s_gimbal_cmd.vision_pitch_err_rad = s_last_vision.pitch;
-        } else {
+        }
+        else
+        {
             s_gimbal_cmd.vision_valid = false;
             s_gimbal_cmd.vision_yaw_err_rad = 0.0f;
             s_gimbal_cmd.vision_pitch_err_rad = 0.0f;
         }
-    } else {
+    }
+    else
+    {
         uint32_t now = HAL_GetTick();
-        if (s_gimbal_cmd.vision_valid && (now - s_gimbal_cmd.vision_ts_ms > VISION_CMD_TIMEOUT_MS)) {
+        if (s_gimbal_cmd.vision_valid && (now - s_gimbal_cmd.vision_ts_ms > VISION_CMD_TIMEOUT_MS))
+        {
             s_gimbal_cmd.vision_valid = false;
         }
     }
     yaw_storage = yaw_raw;
 }
 
-void CmdController_Init(void) {
-    if (s_initialized) {
+void CmdController_Init(void)
+{
+    if (s_initialized)
+    {
         return;
     }
 
@@ -300,10 +335,12 @@ void CmdController_Init(void) {
     s_initialized = true;
 }
 
-void CmdController_Task(uint32_t current_tick) {
+void CmdController_Task(uint32_t current_tick)
+{
     (void)current_tick;
 
-    if (!s_initialized) {
+    if (!s_initialized)
+    {
         return;
     }
 
@@ -331,7 +368,8 @@ void CmdController_Task(uint32_t current_tick) {
     // Tagged debug prints for spin mode (10 Hz), to avoid mixing with other logs.
     // Format:
     // SPINDBG,ts_ms,spin,sw0,sw1,c_yaw_deg,g_yaw_total_deg,hold_yaw_deg,yaw_err_deg,yaw_rate_cmd,vx_cmd,vy_cmd,wz_cmd
-    if (HAL_GetTick() - s_last_spin_dbg_tick >= 100) {
+    if (HAL_GetTick() - s_last_spin_dbg_tick >= 100)
+    {
         s_last_spin_dbg_tick = HAL_GetTick();
 
         float yaw_err_deg = s_spin_hold_yaw_deg - s_last_sensor.yaw_total_angle;
@@ -354,7 +392,4 @@ void CmdController_Task(uint32_t current_tick) {
     (void)MsgCenter_Publish(TOPIC_CHASSIS_CMD, &s_chassis_cmd, sizeof(s_chassis_cmd));
     (void)MsgCenter_Publish(TOPIC_SHOOT_CMD, &s_shoot_cmd, sizeof(s_shoot_cmd));
     (void)MsgCenter_Publish(TOPIC_GIMBAL_CMD, &s_gimbal_cmd, sizeof(s_gimbal_cmd));
-
-    
 }
-
