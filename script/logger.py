@@ -60,7 +60,7 @@ TAG_COLORS = {
 
 # Known field headers
 TAG_HEADERS = {
-    'RC': ['frame_cnt', 'ch0', 'ch1', 'ch2', 'ch3', 'ch4', 'sw_L', 'sw_R'],
+    'RC': ['frame_cnt', 'ch0', 'ch1', 'ch2', 'ch3', 'ch4', 'sw_R', 'sw_L'],
     'CMD': ['spin', 'align', 'pid', 'yaw_err', 'c_vx', 'c_vy', 'c_wz', 'rc_ch2', 'yaw_tgt', 'yaw_cur', 'wz_cmd'],
     'IMU': ['g_yaw', 'g_pitch', 'g_roll', 'yaw_tot', 'rnd', 'g_gx', 'g_gy', 'g_gz',
             'c_yaw', 'c_pitch', 'c_roll', 'c_gx', 'c_gy', 'c_gz', 'c_ax', 'c_ay', 'c_az', 'c_temp', 'st'],

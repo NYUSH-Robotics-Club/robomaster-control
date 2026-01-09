@@ -135,10 +135,10 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     }
 
     // Extract joystick values with deadband
-    // ch[3]: left stick X -> vx, ch[2]: left stick Y -> vy, ch[0]: right stick X -> wz
+    // ch[2]: left stick X -> vy, ch[3]: left stick Y -> vx, ch[4]: dial/wheel -> wz
     int16_t vx_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
     int16_t vy_raw = apply_deadband((int16_t)(rc->rc.ch[2]), JOYSTICK_DEADBAND);
-    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[0]), JOYSTICK_DEADBAND);
+    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[4]), JOYSTICK_DEADBAND);
 
     // Convert to normalized values (-1.0 to 1.0)
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
@@ -216,7 +216,7 @@ static void process_shooter_command(const RC_ctrl_t *rc)
         return;
     }
 
-    // Right switch controls shooter
+    // Right switch (s[0]) controls shooter
     // Up: friction + feed enabled
     // Mid: friction enabled only
     // Down: all disabled
@@ -247,10 +247,10 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
     s_gimbal_cmd.enabled = true;
 
     // Gimbal controls:
-    //   ch[4]: yaw via left dial
+    //   ch[0]: yaw via right stick X
     //   ch[1]: pitch via right stick Y
     // Apply deadband and normalize to -1.0 to 1.0
-    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[4]), JOYSTICK_DEADBAND);
+    int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
     int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
 
     // RC signal glitch filter: reject sudden jumps >1000 units (likely signal noise/interference)
@@ -344,7 +344,7 @@ void CmdController_Task(uint32_t current_tick)
         return;
     }
 
-    // Mode selection based on left switch position:
+    // Mode selection based on left switch (s[1]) position:
     // UP   -> Small gyro mode (chassis auto-spins, gimbal holds yaw)
     // MID  -> Gimbal-follow mode (movement follows gimbal orientation, no auto-spin)
     // DOWN -> Normal mode (chassis frame movement)
