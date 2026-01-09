@@ -10,6 +10,7 @@ import argparse
 import sys
 import time
 import os
+from typing import Optional, Set, TextIO
 
 # ANSI Control Codes
 class ANSI:
@@ -75,13 +76,13 @@ class SmartLogger:
     def __init__(self, port, baudrate, tags, save_file=None, auto_save=False):
         self.port = port
         self.baudrate = baudrate
-        self.serial = None
+        self.serial: Optional[serial.Serial] = None
 
         # Tag filtering
         if tags == 'all':
-            self.active_tags = set(ALL_TAGS)
+            self.active_tags: Set[str] = set(ALL_TAGS)
         else:
-            self.active_tags = set(tags.split(','))
+            self.active_tags: Set[str] = set(tags.split(','))
 
         # File saving
         if auto_save:
@@ -97,7 +98,7 @@ class SmartLogger:
         else:
             self.save_file = save_file
 
-        self.csv_file = None
+        self.csv_file: Optional[TextIO] = None
 
         # Display state
         self.start_time = None
@@ -127,6 +128,67 @@ class SmartLogger:
         except Exception as e:
             print(f"{ANSI.RED}[ERROR] Failed to open {self.port}: {e}{ANSI.RESET}")
             return False
+
+    def reconnect(self, infinite_retry=False):
+        """Attempt to reconnect to serial port
+
+        Args:
+            infinite_retry: If True, keep trying until successful or Ctrl+C
+        """
+        if self.serial:
+            try:
+                self.serial.close()
+            except:
+                pass
+            self.serial = None
+
+        # Print reconnection message
+        sys.stdout.write('\033[r')  # Reset scroll region
+        print(f"\n{ANSI.YELLOW}[Serial port disconnected - Reconnecting...]{ANSI.RESET}", flush=True)
+        print(f"{ANSI.YELLOW}[Press Ctrl+C to exit]{ANSI.RESET}", flush=True)
+
+        # Try to reconnect
+        attempt = 0
+        max_attempts = None if infinite_retry else 5
+
+        try:
+            while True:
+                attempt += 1
+                if max_attempts:
+                    print(f"{ANSI.YELLOW}[Attempt {attempt}/{max_attempts}]{ANSI.RESET}", flush=True)
+                else:
+                    print(f"{ANSI.YELLOW}[Attempt {attempt}...]{ANSI.RESET}", flush=True)
+
+                if self.connect():
+                    print(f"{ANSI.GREEN}[Connected to {self.port}]{ANSI.RESET}", flush=True)
+                    time.sleep(1)  # Brief pause before resuming
+
+                    # Reinitialize terminal display
+                    sys.stdout.write(ANSI.CLEAR_SCREEN)
+                    sys.stdout.write(ANSI.HOME)
+                    sys.stdout.write(ANSI.HIDE_CURSOR)
+
+                    # Redraw header if we had one
+                    if self.current_tag:
+                        self.draw_header(self.current_tag)
+                        sys.stdout.write(f'\033[6;{self.term_height}r')
+                        sys.stdout.write(ANSI.move_to(6, 1))
+
+                    sys.stdout.flush()
+                    return True
+
+                # Check if we should stop trying
+                if max_attempts and attempt >= max_attempts:
+                    break
+
+                time.sleep(1)  # Wait before next attempt
+
+        except KeyboardInterrupt:
+            print(f"\n{ANSI.YELLOW}[Reconnection cancelled by user]{ANSI.RESET}")
+            raise
+
+        print(f"{ANSI.RED}[Failed to reconnect after {attempt} attempts]{ANSI.RESET}")
+        return False
 
     def parse_csv(self, line):
         """Parse CSV line: TAG,timestamp,field1,field2,..."""
@@ -242,7 +304,12 @@ class SmartLogger:
     def run(self):
         """Main loop"""
         if not self.connect():
-            return
+            # Initial connection failed, try reconnect
+            if not self.reconnect():
+                print(f"{ANSI.RED}[FATAL] Unable to connect to serial port{ANSI.RESET}")
+                return
+
+        assert self.serial is not None, "Serial port not connected"
 
         # Open save file if needed
         if self.save_file:
@@ -285,8 +352,22 @@ class SmartLogger:
 
                 except KeyboardInterrupt:
                     raise
+                except (serial.SerialException, OSError) as e:
+                    # Serial port disconnected, try to reconnect indefinitely
+                    try:
+                        if not self.reconnect(infinite_retry=True):
+                            # Should not reach here with infinite_retry=True
+                            # unless connect() keeps failing
+                            time.sleep(2)
+                            continue
+                    except KeyboardInterrupt:
+                        # User cancelled during reconnection
+                        raise
+                    # Successfully reconnected, continue loop
+                    assert self.serial is not None  # For type checker
+                    continue
                 except Exception:
-                    continue  # Ignore errors, keep going
+                    continue  # Ignore other errors, keep going
 
         except KeyboardInterrupt:
             print(f"\n{ANSI.YELLOW}Stopped by user{ANSI.RESET}")
