@@ -207,4 +207,125 @@ For GM6020 click  [**here**](docs/official-docs/RM_GM6020_Docs.pdf)
 
 For C620/M3508 click  [**here**](docs/official-docs/Robomaster_C620_Docs.pdf)
 
-Currently, 
+## Hardware / Official-Doc Notes (GM6020 + C620)
+
+### Common CAN bus facts for RoboMaster motors
+
+* **Bitrate:** Both **GM6020** and **C620** CAN bus use **1 Mbps**.  
+* **CAN cable wire colors (important):**
+
+  * **CAN_H = Red**, **CAN_L = Black** for GM6020. 
+  * **CAN_H = Red**, **CAN_L = Black** for C620 too (but the “A/B pin label” is reversed vs GM6020; follow the color). 
+* **Termination resistance (120Ω):**
+
+  * GM6020 enables/disables CAN terminal resistance via DIP **4th bit**. 
+  * C620 enables/disables termination via a dedicated **Termination Resistance Switch (120Ω)**. 
+  * Practical wiring rule (CAN best practice): only the **two physical ends** of a CAN bus should have termination ON; nodes in the middle should be OFF.
+
+---
+
+## GM6020 (Gimbal Motor) — Official ID / Termination / Protocol Details
+
+### 1) Motor ID setting (DIP switch)
+
+GM6020 motor ID is decided by DIP **Bit0–Bit2** (binary). Valid IDs are **1–7**; “000” is invalid. 
+
+| Bit[2:0] | Motor ID | Feedback CAN ID |
+| -------- | -------: | --------------- |
+| 001      |        1 | 0x205           |
+| 010      |        2 | 0x206           |
+| 011      |        3 | 0x207           |
+| 100      |        4 | 0x208           |
+| 101      |        5 | 0x209           |
+| 110      |        6 | 0x20A           |
+| 111      |        7 | 0x20B           |
+
+(From doc mapping) 
+
+### 2) CAN terminal resistance (DIP switch)
+
+DIP **4th bit** controls whether CAN terminal resistance is enabled. Toggle it **ON** to enable termination. 
+
+### 3) Control identifiers & ranges (what you send)
+
+GM6020 supports both CAN and PWM, and it can auto-switch based on the detected control signal. 
+
+**Voltage control mode (most common in RM examples):**
+
+* Control identifiers: **0x1FF** (motor IDs 1–4), **0x2FF** (motor IDs 5–7) 
+* One frame controls **up to 4 motors**, each motor uses **2 bytes** (high/low). 
+* Controllable “voltage value” range: **-25000 ~ 25000**. 
+
+**Torque current control (only after enabling Current Ring):**
+After firmware **v1.0.11.2+**, torque current can be controlled by enabling **Current Ring On/Off Switch** in RoboMaster Assistant (**v2.7+**). 
+Docs also describe current command ranges **-16384 ~ 16384**, and corresponding max torque current **-3A ~ 3A**, with identifiers **0x1FE / 0x2FE**. 
+Additionally, in “Current Control Mode” the receiving identifier is described as **0x204 + driver ID** (standard frame, DLC=8). 
+
+> Practical note: your README currently describes the -25000~25000 “current”, but per official doc this range corresponds to **voltage control value** (not torque current). 
+
+### 4) Feedback (what you receive)
+
+Motor feedback contains: rotor mechanical angle, rotational speed, current, temperature. 
+And the feedback identifier depends on the motor ID mapping (0x205–0x20B). 
+
+### 5) LED quick diagnosis (useful for debugging wiring / IDs)
+
+* Green blinks **N times** per second indicates current motor ID. 
+* Orange blinks **twice** per second indicates **duplicate ID on the CAN bus**. 
+* Driver cuts off output stream when in abnormal status (important when debugging “motor not moving”). 
+
+---
+
+## C620 + M3508 — Official ID / Termination / Protocol Details
+
+### 1) CAN port bitrate & termination
+
+* CAN bitrate: **1 Mbps**. 
+* Termination resistance: hardware switch to connect/disconnect **120Ω**. 
+
+### 2) Signal mode safety: DO NOT mix CAN + PWM
+
+* The input signal mode (PWM vs CAN) **cannot be changed while the product is in use**; power off to change mode and restart. 
+* **DO NOT plug CAN cable and PWM cable simultaneously**, or the motor may lose control; power off when switching modes. 
+
+### 3) Speed controller ID setting (SET button)
+
+C620 supports ID range **1–8**. 
+Two official ways:
+
+**A) Separate ID Setting (one-by-one)**
+
+1. Press SET once to enter separate ID assignment (LED off). 
+2. Press SET again **N times (≤8)** to set ID = N (LED blinks orange each successful press). 
+3. Idle 3 seconds → auto-save; power cycle to apply. 
+4. Multiple controllers on the same CAN bus **cannot share the same ID**. 
+
+**B) Quick ID Setting (assign 1–8 by rotating motors)**
+
+1. Press SET once on any controller, then press-and-hold until all status LEDs are solid green. 
+2. Manually rotate each M3508 rotor (≥180°) in your chosen order; the corresponding controller gets IDs **1..8** in that order. 
+3. Power cycle after assigning. 
+4. If a rotor isn’t rotated, it keeps its original ID after power-on. 
+5. Doc explicitly warns to connect/disconnect termination correctly or CAN may fail. 
+
+### 4) Control identifiers & ranges (what you send)
+
+C620 receiving message format: identifiers **0x200** and **0x1FF** control current outputs for groups of four controllers by ID. 
+
+* **0x200** controls ID **1–4**
+* **0x1FF** controls ID **5–8** 
+
+Command range: **-16384 ~ 16384**, corresponding output torque current **-20A ~ 20A**. 
+
+### 5) Feedback identifiers & payload (what you receive)
+
+C620 sends feedback to CAN bus:
+
+* Feedback identifier: **0x200 + speed controller ID** (e.g., ID=1 → 0x201). 
+* Data fields include: rotor mechanical angle, rotational speed, actual torque current, motor temperature. 
+* Default sending frequency: **1 kHz** (can be changed in RoboMaster Assistant). 
+
+### 6) LED quick diagnosis (debugging CAN issues)
+
+* Normal: green blinks **1–8 times** per second = current controller ID. 
+* Warning: orange blinks **twice** per second = **duplicate ID on CAN bus**, and output may be cut off.  
