@@ -12,18 +12,18 @@
 // Log Tag Enable/Disable (1 = enabled, 0 = disabled)
 // ============================================================================
 
-#define LOG_ENABLE_SYS    0  // System/boot messages (DISABLED for RC testing)
-#define LOG_ENABLE_CMD    0  // Command controller (DISABLED)
-#define LOG_ENABLE_CHA    0  // Chassis controller (DISABLED)
-#define LOG_ENABLE_GIM    0  // Gimbal controller (DISABLED)
-#define LOG_ENABLE_SHO    0  // Shooter controller (DISABLED)
-#define LOG_ENABLE_SEN    0  // Sentry controller (DISABLED)
-#define LOG_ENABLE_MOT    0  // Motor driver (DISABLED)
-#define LOG_ENABLE_IMU    0  // IMU sensors (DISABLED)
-#define LOG_ENABLE_CAN    0  // CAN communication (DISABLED)
-#define LOG_ENABLE_VIS    0  // Vision communication (DISABLED)
-#define LOG_ENABLE_RC     1  // Remote control (*** ONLY THIS ENABLED ***)
-#define LOG_ENABLE_DEBUG  0  // General debug (DISABLED)
+#define LOG_ENABLE_SYS    0  // System/boot messages
+#define LOG_ENABLE_CMD    0  // Command controller
+#define LOG_ENABLE_CHA    0  // Chassis controller
+#define LOG_ENABLE_GIM    1  // Gimbal controller
+#define LOG_ENABLE_SHO    0  // Shooter controller
+#define LOG_ENABLE_SEN    0  // Sentry controller
+#define LOG_ENABLE_MOT    0  // Motor driver
+#define LOG_ENABLE_IMU    0  // IMU sensors
+#define LOG_ENABLE_CAN    0  // CAN communication
+#define LOG_ENABLE_VIS    0  // Vision communication
+#define LOG_ENABLE_RC     1  // Remote control
+#define LOG_ENABLE_DEBUG  0  // General debug
 
 // ============================================================================
 // Default Rate Limits (milliseconds)

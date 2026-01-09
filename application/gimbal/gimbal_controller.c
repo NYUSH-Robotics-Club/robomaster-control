@@ -79,15 +79,15 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized,
   if (cmd < -max_abs)
     cmd = -max_abs;
 
-  // Pitch PID tuning CSV (20Hz rate limited in main.c)
+  // Pitch PID tuning CSV (20Hz rate limited in main.c) - DISABLED for clean output
   // Format: GIM,timestamp_ms,angle_target,angle_current,speed_rpm,cmd,error,rate_scaled
-  LOG_CSV(LOG_TAG_GIM, "PITCH,%.2f,%.2f,%d,%.2f,%.2f,%.2f",
-          c->angle_target,
-          current_angle,
-          c->speed_rpm,
-          cmd,
-          error,
-          rate_normalized * 300.0f);
+  // LOG_CSV(LOG_TAG_GIM, "PITCH,%.2f,%.2f,%d,%.2f,%.2f,%.2f",
+  //         c->angle_target,
+  //         current_angle,
+  //         c->speed_rpm,
+  //         cmd,
+  //         error,
+  //         rate_normalized * 300.0f);
 
   return (int16_t)cmd;
 }
@@ -177,19 +177,19 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   if (cmd_speed_to_current < -CURRENT_LIMIT)
     cmd_speed_to_current = -CURRENT_LIMIT;
 
-  // Yaw PID tuning CSV (20Hz rate limited in main.c)
+  // Yaw PID tuning CSV (20Hz rate limited in main.c) - DISABLED for clean output
   // Format: GIM,timestamp_ms,mode,angle_target,angle_current,speed_rpm,cmd_current,cmd_speed,rate,error,g_gz_filtered,c_gz
-  LOG_CSV(LOG_TAG_GIM, "YAW,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f",
-          yaw->angle_target,
-          current,
-          yaw->speed_rpm,
-          cmd_speed_to_current,
-          cmd_angle_to_speed,
-          rate_normalized * 300.0f,
-          angle_error,
-          sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
-              s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA),
-          sensor_data->c_gz);
+  // LOG_CSV(LOG_TAG_GIM, "YAW,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f",
+  //         yaw->angle_target,
+  //         current,
+  //         yaw->speed_rpm,
+  //         cmd_speed_to_current,
+  //         cmd_angle_to_speed,
+  //         rate_normalized * 300.0f,
+  //         angle_error,
+  //         sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
+  //             s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA),
+  //         sensor_data->c_gz);
 
   return (int16_t)cmd_speed_to_current;
 }
@@ -296,23 +296,24 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
       MotorDriver_SendCurrent(s_pitch_motor_id, pitch_current);
       MotorDriver_SendCurrent(s_yaw_motor_id, yaw_current);
       MotorDriver_FlushAll();
-
-      // Encoder position logging (20Hz rate limited in main.c)
-      // Format: GIM,timestamp_ms,mode,yaw_raw,pitch_raw,yaw_target,pitch_target
-      MotorContext_t *yaw_ctx = MotorDriver_GetContext(s_yaw_motor_id);
-      MotorContext_t *pitch_ctx = MotorDriver_GetContext(s_pitch_motor_id);
-      if (yaw_ctx && pitch_ctx) {
-        LOG_CSV(LOG_TAG_GIM, "ENCODER,%d,%d,%.2f,%.2f",
-                yaw_ctx->angle_raw,
-                pitch_ctx->angle_raw,
-                yaw_ctx->angle_target,
-                pitch_ctx->angle_target);
-      }
     } else {
       // Gimbal disabled, send zero current
       MotorDriver_SendCurrent(s_pitch_motor_id, 0);
       MotorDriver_SendCurrent(s_yaw_motor_id, 0);
       MotorDriver_FlushAll();
+    }
+
+    // Gimbal position logging (20Hz rate limited in main.c)
+    // Format: GIM,timestamp_ms,ENCODER,yaw_raw,pitch_raw,yaw_tgt,pitch_tgt
+    // Log regardless of enabled state to monitor motor positions
+    MotorContext_t *yaw_ctx = MotorDriver_GetContext(s_yaw_motor_id);
+    MotorContext_t *pitch_ctx = MotorDriver_GetContext(s_pitch_motor_id);
+    if (yaw_ctx && pitch_ctx) {
+      LOG_CSV(LOG_TAG_GIM, "ENCODER,%.2f,%.2f,%.2f,%.2f",
+              (float)yaw_ctx->angle_raw,
+              (float)pitch_ctx->angle_raw,
+              yaw_ctx->angle_target,
+              pitch_ctx->angle_target);
     }
   }
 }
