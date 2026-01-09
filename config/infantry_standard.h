@@ -99,14 +99,14 @@ static const MotorConfig_t g_motor_configs_infantry_standard[] = {
      .pid_outer = {5.0f, 0.5f, 0.1f, 15000.0f, 7500.0f},
      .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
 
-    // Friction wheel 2 (ID 8, CAN RX 0x207)
-    // Note: motor_id 8 != CAN RX mapping (0x207-0x201=6), but avoids conflict
+    // Friction wheel 2 (ID 8, CAN RX 0x208)
+    // Note: motor_id 8 != CAN RX mapping (0x208-0x201=7), but avoids conflict
     // with pitch motor_id 7
     {.motor_id = 8,
      .type = MOTOR_TYPE_M3508,
      .role = MOTOR_ROLE_SHOOTER_FRICTION,
      .can_channel = CAN_CHANNEL_2,
-     .can_rx_id = 0x207,
+     .can_rx_id = 0x208,
      .can_tx_id = 0x1FF,
      .tx_slot = 3, // Slot 3 in TX frame
      .direction = +1,

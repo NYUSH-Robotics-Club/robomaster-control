@@ -68,6 +68,8 @@ TAG_HEADERS = {
     'GIM_PITCH': ['ang_tgt', 'ang_cur', 'spd_rpm', 'cmd', 'error', 'rate'],
     'GIM_YAW': ['ang_tgt', 'ang_cur', 'spd_rpm', 'cmd_cur', 'cmd_spd', 'rate', 'error', 'g_gz', 'c_gz'],
     'GIM_ENCODER': ['yaw_raw', 'pitch_raw', 'yaw_tgt', 'pitch_tgt'],
+    'CAN': ['ch1', 'rx_total1', 'last_id1', 'rx_rate1', 'ch2', 'rx_total2', 'last_id2', 'rx_rate2'],
+    'MOT': ['motor_id', 'type', 'online', 'age_ms'],
 }
 
 class SmartLogger:

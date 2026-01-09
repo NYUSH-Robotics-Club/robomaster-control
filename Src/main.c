@@ -343,6 +343,11 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  // CAN statistics logging
+  static uint32_t can_log_timer = 0;
+  static uint32_t last_can1_rx = 0;
+  static uint32_t last_can2_rx = 0;
+
   while (1)
   {
     uint32_t current_tick = HAL_GetTick();
@@ -360,7 +365,22 @@ int main(void)
 
     LED_SetRGB(0, 1, 0);
 
+    // CAN health check (1Hz)
+    if (current_tick - can_log_timer >= 1000) {
+      can_log_timer = current_tick;
+      uint32_t can1_delta = can1_manager.rx_frames - last_can1_rx;
+      uint32_t can2_delta = can2_manager.rx_frames - last_can2_rx;
+      last_can1_rx = can1_manager.rx_frames;
+      last_can2_rx = can2_manager.rx_frames;
 
+      LOG_CSV(LOG_TAG_CAN, "1,%u,0x%03X,%u,2,%u,0x%03X,%u",
+              can1_manager.rx_frames,
+              (unsigned int)can1_manager.last_rx_id,
+              (unsigned int)can1_delta,
+              can2_manager.rx_frames,
+              (unsigned int)can2_manager.last_rx_id,
+              (unsigned int)can2_delta);
+    }
 
 	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE END WHILE */
