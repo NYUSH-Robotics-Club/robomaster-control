@@ -7,6 +7,7 @@
 #include "gyro_data.h"
 #include "can_comm.h"
 #include "printing.h"
+#include "logger.h"
 #include "cmd_controller.h"
 
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
@@ -93,25 +94,17 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
 {
     if (controller == NULL) return;
     
-    static uint32_t last = 0;
-    if (HAL_GetTick() - last > 200) {
-        last = HAL_GetTick();
-
-        USB_CDC_Printf("[CHASSIS_CUR] en=%d\r\n", (int)s_last_cmd.enabled);
-
-        for (uint8_t i = 0; i < s_chassis_motor_count; i++) {
-            uint32_t dt = HAL_GetTick() - controller->motor_feedbacks[i].last_update_time;
-
-            USB_CDC_Printf(
-                "  i=%d id=%d tgt=%.1f fb=%.1f dt=%lu out=%d\r\n",
-                i,
-                s_chassis_motor_ids[i],
-                controller->target_speeds[i],
-                controller->motor_feedbacks[i].speed,
-                (unsigned long)dt,
-                controller->output_currents[i]
-            );
-        }
+    // Chassis status logging (5Hz rate limited in main.c)
+    LOG_INFO(LOG_TAG_CHA, "enabled=%d", (int)s_last_cmd.enabled);
+    for (uint8_t i = 0; i < s_chassis_motor_count; i++) {
+        uint32_t dt = HAL_GetTick() - controller->motor_feedbacks[i].last_update_time;
+        LOG_DEBUG(LOG_TAG_CHA, "motor[%d] id=%d tgt=%.1f fb=%.1f dt=%lu out=%d",
+                  i,
+                  s_chassis_motor_ids[i],
+                  controller->target_speeds[i],
+                  controller->motor_feedbacks[i].speed,
+                  (unsigned long)dt,
+                  controller->output_currents[i]);
     }
 
 

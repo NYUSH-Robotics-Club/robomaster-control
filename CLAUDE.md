@@ -315,15 +315,88 @@ When adding new files:
 - **Editing outside USER CODE blocks**: Changes will be lost when regenerating from STM32CubeMX
 - **CAN ID conflicts**: Ensure motor IDs are set correctly on hardware (see docs/tutorials/can.md)
 
-## Python Scripts (script/)
+## Logger System (modules/logger/)
 
-- `plot_cmd.py` - Plot command signals
-- `plot_pitch_data.py` - Plot gimbal pitch PID tuning data
-- `plot_yaw_data.py` - Plot gimbal yaw PID tuning data
-- `plot_pitch.py` - Generic pitch plotting
-- `test_vision_comm.py` - Test vision communication protocol (Seasky)
+The firmware uses a unified logger module for all debug output with tag-based filtering and automatic rate limiting.
 
-These scripts read data via serial/USB and visualize control system behavior for PID tuning.
+### Log Tags (Subsystems)
+- `LOG_TAG_SYS` - System/boot messages
+- `LOG_TAG_CMD` - Command controller
+- `LOG_TAG_CHA` - Chassis controller
+- `LOG_TAG_GIM` - Gimbal controller
+- `LOG_TAG_SHO` - Shooter controller
+- `LOG_TAG_SEN` - Sentry controller (swerve chassis)
+- `LOG_TAG_MOT` - Motor driver
+- `LOG_TAG_IMU` - IMU sensors
+- `LOG_TAG_CAN` - CAN communication
+- `LOG_TAG_VIS` - Vision communication
+- `LOG_TAG_RC` - Remote control
+- `LOG_TAG_DEBUG` - General debug
+
+### API Usage
+
+```c
+// Text logging with levels
+LOG_INFO(LOG_TAG_SYS, "System initialized");
+LOG_WARN(LOG_TAG_MOT, "Motor %d timeout", motor_id);
+LOG_ERROR(LOG_TAG_CAN, "CAN bus error: 0x%X", error_code);
+LOG_DEBUG(LOG_TAG_GIM, "Angle: %.2f", angle);
+
+// CSV data logging (auto rate-limited)
+LOG_CSV(LOG_TAG_GIM, "PITCH,%.2f,%.2f,%d", target, current, speed);
+LOG_CSV(LOG_TAG_IMU, "%.2f,%.2f,%.2f", yaw, pitch, roll);
+```
+
+### Configuration (modules/logger/logger_config.h)
+
+Enable/disable tags at compile time:
+```c
+#define LOG_ENABLE_GIM    1  // Enable gimbal logs
+#define LOG_ENABLE_CAN    0  // Disable CAN logs (too verbose)
+```
+
+### CSV Format Standard
+
+All CSV data: `TAG,timestamp_ms,field1,field2,...`
+
+Example output:
+```
+GIM,123456,PITCH,45.20,44.80,150,12.50
+IMU,123500,45.20,30.10,0.00,45.20,0
+CMD,123600,1,2,3,45.20,30.10,15.50
+```
+
+## Python Debug Tools (script/)
+
+### smart_logger.py - Unified Debug Tool
+
+**Replaces all individual plotting scripts** with tag-based filtering and auto-detection.
+
+```bash
+# Monitor all subsystems
+python3 script/smart_logger.py
+
+# Monitor specific tags
+python3 script/smart_logger.py --tags GIM,IMU
+
+# Save data without plotting
+python3 script/smart_logger.py --save data.csv --no-plot
+
+# List available tags
+python3 script/smart_logger.py --list-tags
+```
+
+Features:
+- Tag subscription (filter which subsystems to monitor)
+- Auto-detect CSV formats (CMD, IMU, GIM sub-types)
+- Real-time plotting with auto-layout
+- Data recording/playback
+- Auto port detection
+
+### Other Tools
+
+- `test_vision_comm.py` - Test vision communication protocol (Seasky binary protocol)
+- `deprecated/` - Old plotting scripts (replaced by smart_logger.py)
 
 ## Documentation
 

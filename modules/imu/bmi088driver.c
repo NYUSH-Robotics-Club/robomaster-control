@@ -1,6 +1,7 @@
 #include "bmi088driver.h"
 #include "bmi088reg.h"
 #include "bmi088middleware.h"
+#include "logger.h"
 
 float BMI088_ACCEL_SEN = BMI088_ACCEL_6G_SEN;
 float BMI088_GYRO_SEN = BMI088_GYRO_2000_SEN;
@@ -104,55 +105,57 @@ uint8_t BMI088_InitWithDiagnostics(void)
     extern GPIO_PinState HAL_GPIO_ReadPin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
     extern void HAL_GPIO_WritePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, GPIO_PinState PinState);
 
-    USB_CDC_Printf("\r\n=== BMI088 Initialization ===\r\n");
+    LOG_INFO(LOG_TAG_IMU, "");
+    LOG_INFO(LOG_TAG_IMU, "=== BMI088 Initialization ===");
 
     // Test CS pins
-    USB_CDC_Printf("[BMI088] Testing CS pins...\r\n");
-    USB_CDC_Printf("[BMI088] Testing ACCEL CS (PA4)...\r\n");
+    LOG_INFO(LOG_TAG_IMU, "Testing CS pins...\r\n");
+    LOG_INFO(LOG_TAG_IMU, "Testing ACCEL CS (PA4)...\r\n");
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
     HAL_Delay(10);
     GPIO_PinState accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
-    USB_CDC_Printf("[BMI088] ACCEL CS HIGH: %s\r\n", accel_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
+    LOG_INFO(LOG_TAG_IMU, "ACCEL CS HIGH: %s\r\n", accel_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
 
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
     HAL_Delay(10);
     accel_cs_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
-    USB_CDC_Printf("[BMI088] ACCEL CS LOW: %s\r\n", accel_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
+    LOG_INFO(LOG_TAG_IMU, "ACCEL CS LOW: %s\r\n", accel_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
-    USB_CDC_Printf("[BMI088] Testing GYRO CS (PB0)...\r\n");
+    LOG_INFO(LOG_TAG_IMU, "Testing GYRO CS (PB0)...\r\n");
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
     HAL_Delay(10);
     GPIO_PinState gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
-    USB_CDC_Printf("[BMI088] GYRO CS HIGH: %s\r\n", gyro_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
+    LOG_INFO(LOG_TAG_IMU, "GYRO CS HIGH: %s\r\n", gyro_cs_state == GPIO_PIN_SET ? "OK" : "FAIL");
 
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
     HAL_Delay(10);
     gyro_cs_state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0);
-    USB_CDC_Printf("[BMI088] GYRO CS LOW: %s\r\n", gyro_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
+    LOG_INFO(LOG_TAG_IMU, "GYRO CS LOW: %s\r\n", gyro_cs_state == GPIO_PIN_RESET ? "OK" : "FAIL");
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
     // Initialize BMI088
     uint8_t bmi088_error = BMI088_init();
-    USB_CDC_Printf("[BMI088] BMI088_init() returned: 0x%02X\r\n", bmi088_error);
+    LOG_INFO(LOG_TAG_IMU, "BMI088_init() returned: 0x%02X\r\n", bmi088_error);
 
     // Detailed error reporting
     if (bmi088_error != 0) {
-        USB_CDC_Printf("[BMI088] *** ERROR: BMI088 initialization failed! Error code: 0x%02X ***\r\n", bmi088_error);
-        USB_CDC_Printf("[BMI088] Error details:\r\n");
-        if (bmi088_error & 0x01) USB_CDC_Printf("  - BMI088_ACC_PWR_CTRL_ERROR\r\n");
-        if (bmi088_error & 0x02) USB_CDC_Printf("  - BMI088_ACC_PWR_CONF_ERROR\r\n");
-        if (bmi088_error & 0x04) USB_CDC_Printf("  - BMI088_ACC_CONF_ERROR\r\n");
-        if (bmi088_error & 0x08) USB_CDC_Printf("  - BMI088_ACC_SELF_TEST_ERROR\r\n");
-        if (bmi088_error & 0x10) USB_CDC_Printf("  - BMI088_ACC_RANGE_ERROR\r\n");
-        if (bmi088_error & 0x20) USB_CDC_Printf("  - BMI088_INT1_IO_CTRL_ERROR\r\n");
-        if (bmi088_error & 0x40) USB_CDC_Printf("  - BMI088_INT_MAP_DATA_ERROR\r\n");
-        if (bmi088_error & 0x80) USB_CDC_Printf("  - GYRO initialization errors\r\n");
+        LOG_INFO(LOG_TAG_IMU, "*** ERROR: BMI088 initialization failed! Error code: 0x%02X ***\r\n", bmi088_error);
+        LOG_INFO(LOG_TAG_IMU, "Error details:\r\n");
+        if (bmi088_error & 0x01) LOG_INFO(LOG_TAG_IMU, "  BMI088_ACC_PWR_CTRL_ERROR\r\n");
+        if (bmi088_error & 0x02) LOG_INFO(LOG_TAG_IMU, "  BMI088_ACC_PWR_CONF_ERROR\r\n");
+        if (bmi088_error & 0x04) LOG_INFO(LOG_TAG_IMU, "  BMI088_ACC_CONF_ERROR\r\n");
+        if (bmi088_error & 0x08) LOG_INFO(LOG_TAG_IMU, "  BMI088_ACC_SELF_TEST_ERROR\r\n");
+        if (bmi088_error & 0x10) LOG_INFO(LOG_TAG_IMU, "  BMI088_ACC_RANGE_ERROR\r\n");
+        if (bmi088_error & 0x20) LOG_INFO(LOG_TAG_IMU, "  BMI088_INT1_IO_CTRL_ERROR\r\n");
+        if (bmi088_error & 0x40) LOG_INFO(LOG_TAG_IMU, "  BMI088_INT_MAP_DATA_ERROR\r\n");
+        if (bmi088_error & 0x80) LOG_INFO(LOG_TAG_IMU, "  GYRO initialization errors\r\n");
     } else {
-        USB_CDC_Printf("[BMI088] BMI088 initialization SUCCESS!\r\n");
+        LOG_INFO(LOG_TAG_IMU, "BMI088 initialization SUCCESS!\r\n");
     }
 
-    USB_CDC_Printf("=== BMI088 Init Complete ===\r\n\r\n");
+    LOG_INFO(LOG_TAG_IMU, "=== BMI088 Init Complete ===");
+    LOG_INFO(LOG_TAG_IMU, "");
 
     return bmi088_error;
 }
@@ -178,7 +181,7 @@ uint8_t bmi088_accel_init(void)
 
     // Debug: print CHIP_ID
     extern void USB_CDC_Printf(const char *format, ...);
-    USB_CDC_Printf("[BMI088_accel_init] CHIP_ID after reset: 0x%02X (expected 0x%02X)\r\n",
+    LOG_DEBUG(LOG_TAG_IMU, "accel_init] CHIP_ID after reset: 0x%02X (expected 0x%02X)\r\n",
                    res, BMI088_ACC_CHIP_ID_VALUE);
 
     if (res != BMI088_ACC_CHIP_ID_VALUE) {
@@ -201,7 +204,7 @@ uint8_t bmi088_accel_init(void)
 
         // Debug: print register verification
         extern void USB_CDC_Printf(const char *format, ...);
-        USB_CDC_Printf("[BMI088_accel_init] Reg 0x%02X: wrote 0x%02X, read 0x%02X %s\r\n",
+        LOG_DEBUG(LOG_TAG_IMU, "accel_init] Reg 0x%02X: wrote 0x%02X, read 0x%02X %s\r\n",
                        write_BMI088_accel_reg_data_error[write_reg_num][0],
                        write_BMI088_accel_reg_data_error[write_reg_num][1],
                        res,
@@ -261,7 +264,7 @@ void BMI088_read(float gyro[3], float accel[3], float *temperate)
     static uint8_t debug_count = 0;
     if (debug_count < 3) {
         extern void USB_CDC_Printf(const char *format, ...);
-        USB_CDC_Printf("[BMI088_read] Accel raw: %02X %02X %02X %02X %02X %02X\r\n",
+        LOG_DEBUG(LOG_TAG_IMU, "read] Accel raw: %02X %02X %02X %02X %02X %02X\r\n",
                        buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
         debug_count++;
     }

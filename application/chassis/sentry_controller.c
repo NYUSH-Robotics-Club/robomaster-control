@@ -11,6 +11,7 @@
 #include "message_center.h"
 #include "motor_driver.h"
 #include "printing.h"
+#include "logger.h"
 #include "remote_control.h"
 #include <math.h>
 #include <stdbool.h>
@@ -72,12 +73,11 @@ void ChassisController_Init(ChassisController *controller) {
   s_steer_motor_count = MotorDriver_FindByRole(
       MOTOR_ROLE_CHASSIS_STEER, s_steer_motor_ids, CHASSIS_STEER_COUNT);
 
-  // DEBUG: Print found steer motors
-  USB_CDC_Printf("[CHASSIS_INIT] Found %d steer motors: ", s_steer_motor_count);
+  // Log found steer motors
+  LOG_INFO(LOG_TAG_SEN, "Found %d steer motors", s_steer_motor_count);
   for (uint8_t i = 0; i < s_steer_motor_count; i++) {
-    USB_CDC_Printf("%d ", s_steer_motor_ids[i]);
+    LOG_DEBUG(LOG_TAG_SEN, "Steer motor[%d] = %d", i, s_steer_motor_ids[i]);
   }
-  USB_CDC_Printf("\r\n");
 
   // Init drive PIDs from motor contexts
   for (uint8_t i = 0; i < s_drive_motor_count; i++) {
@@ -217,14 +217,9 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
                                               float target_angle) {
   MotorContext_t *steer = MotorDriver_GetContext(motor_id);
   if (!steer || !steer->angle_initialized || !steer->config) {
-    // DEBUG: Print why steer control is returning 0
-    static uint32_t last_debug = 0;
-    if (HAL_GetTick() - last_debug > 500) {
-      USB_CDC_Printf("[STEER_CASCADE] Motor %d: steer=%p init=%d cfg=%p\r\n",
-                     motor_id, steer, (steer ? steer->angle_initialized : -1),
-                     (steer ? steer->config : NULL));
-      last_debug = HAL_GetTick();
-    }
+    // Debug: Steer motor not initialized
+    LOG_WARN(LOG_TAG_SEN, "Steer motor %d not initialized (ptr=%p init=%d)",
+             motor_id, (void*)steer, (steer ? steer->angle_initialized : -1));
     return 0;
   }
 
@@ -290,28 +285,28 @@ void ChassisController_ComputeCurrents(ChassisController *controller,
   if (HAL_GetTick() - last > 200) {
     last = HAL_GetTick();
 
-    USB_CDC_Printf("[CHASSIS_CUR:SENTRY] en=%d\r\n", (int)s_last_cmd.enabled);
+    // Sentry chassis status logging (5Hz rate limited in main.c)
+    LOG_INFO(LOG_TAG_SEN, "enabled=%d", (int)s_last_cmd.enabled);
 
-    // Drive debug
+    // Drive motor debug
     for (uint8_t i = 0; i < s_drive_motor_count; i++) {
       uint32_t dt =
           HAL_GetTick() - controller->motor_feedbacks[i].last_update_time;
-      USB_CDC_Printf("  [DRV] i=%d id=%d tgt=%.1f fb=%.1f dt=%lu out=%d\r\n", i,
-                     s_drive_motor_ids[i], controller->target_speeds[i],
-                     controller->motor_feedbacks[i].speed, (unsigned long)dt,
-                     controller->output_currents[i]);
+      LOG_DEBUG(LOG_TAG_SEN, "drive[%d] id=%d tgt=%.1f fb=%.1f dt=%lu out=%d", i,
+                s_drive_motor_ids[i], controller->target_speeds[i],
+                controller->motor_feedbacks[i].speed, (unsigned long)dt,
+                controller->output_currents[i]);
     }
 
-    // Steer debug
+    // Steer motor debug
     for (uint8_t i = 0; i < s_steer_motor_count; i++) {
       uint32_t dt =
           HAL_GetTick() - controller->steer_feedbacks[i].last_update_time;
-      USB_CDC_Printf(
-          "  [STR] i=%d id=%d tgt=%.1f ang=%u spd=%.1f dt=%lu out=%d\r\n", i,
-          s_steer_motor_ids[i], controller->steer_target_angles[i],
-          controller->steer_feedbacks[i].angle,
-          controller->steer_feedbacks[i].speed, (unsigned long)dt,
-          controller->steer_output_currents[i]);
+      LOG_DEBUG(LOG_TAG_SEN, "steer[%d] id=%d tgt=%.1f ang=%u spd=%.1f dt=%lu out=%d", i,
+                s_steer_motor_ids[i], controller->steer_target_angles[i],
+                controller->steer_feedbacks[i].angle,
+                controller->steer_feedbacks[i].speed, (unsigned long)dt,
+                controller->steer_output_currents[i]);
     }
   }
 
@@ -494,8 +489,7 @@ void Sentry_WaitForSteerAlignment(void) {
   const uint32_t TIMEOUT_MS = 5000;         // 5 seconds timeout
   const uint32_t CHECK_INTERVAL_MS = 50;
 
-  USB_CDC_Printf(
-      "[Sentry] Waiting for steer motors to align to initial position...\r\n");
+  LOG_INFO(LOG_TAG_SEN, "Waiting for steer motors to align to initial position...");
 
   uint32_t start_time = HAL_GetTick();
   bool all_aligned = false;
@@ -524,9 +518,8 @@ void Sentry_WaitForSteerAlignment(void) {
           error = 8192.0f - error;
         }
 
-        USB_CDC_Printf(
-            "[Sentry] Steer motor %d: target=%.1f current=%.1f error=%.1f\r\n",
-            s_steer_motor_ids[i], target, current, error);
+        LOG_DEBUG(LOG_TAG_SEN, "Steer motor %d: target=%.1f current=%.1f error=%.1f",
+                  s_steer_motor_ids[i], target, current, error);
 
         if (error > ALIGNMENT_THRESHOLD) {
           all_aligned = false;
@@ -538,9 +531,8 @@ void Sentry_WaitForSteerAlignment(void) {
   }
 
   if (all_aligned) {
-    USB_CDC_Printf("[Sentry] Steer alignment complete!\r\n");
+    LOG_INFO(LOG_TAG_SEN, "Steer alignment complete!");
   } else {
-    USB_CDC_Printf(
-        "[Sentry] Warning: Steer alignment timeout, continuing anyway...\r\n");
+    LOG_WARN(LOG_TAG_SEN, "Steer alignment timeout, continuing anyway...");
   }
 }

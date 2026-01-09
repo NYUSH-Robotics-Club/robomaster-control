@@ -29,6 +29,7 @@ Release/
 # Logs and temporary files
 *.log
 *.tmp
+logs/
 
 # Generated files
 *.generated.*

@@ -131,6 +131,7 @@ add_library(modules STATIC
     modules/can_comm/can_manager.c
     modules/can_comm/motor_registry.c
     modules/debug_print/printing.c
+    modules/logger/logger.c
     modules/vision_comm/crc8.c
     modules/vision_comm/crc16.c
     modules/vision_comm/seasky_protocol.c
@@ -147,6 +148,7 @@ target_include_directories(modules PUBLIC
     modules/motor
     modules/remote
     modules/imu
+    modules/logger
     modules/vision_comm
     Inc
     Drivers/CMSIS/Include

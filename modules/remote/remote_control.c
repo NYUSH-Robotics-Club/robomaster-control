@@ -4,6 +4,7 @@
 
 #include "remote_control.h"
 #include "message_center.h"
+#include "logger.h"
 
 #include "main.h"
 #include <string.h>
@@ -31,6 +32,7 @@ uint32_t RC_GetFrameCount(void)
 void remote_control_init(void)
 {
     RC_init(sbus_rx_buf[0], sbus_rx_buf[1], SBUS_RX_BUF_NUM);
+    LOG_INFO(LOG_TAG_RC, "Remote control initialized, waiting for SBUS data on USART3...");
 }
 
 void RC_GetLastFrame(uint8_t out[RC_FRAME_LENGTH])
@@ -46,6 +48,9 @@ const RC_ctrl_t *get_remote_control_point(void)
 
 void REMOTE_USART3_IDLE_IRQHandler(void)
 {
+    static uint32_t irq_count = 0;
+    static uint32_t last_log = 0;
+
     if(huart3.Instance->SR & UART_FLAG_RXNE)
     {
         __HAL_UART_CLEAR_PEFLAG(&huart3);
@@ -55,6 +60,15 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
         static uint16_t this_time_rx_len = 0;
 
         __HAL_UART_CLEAR_PEFLAG(&huart3);
+
+        irq_count++;
+
+        // Log every 500 interrupts (reduce spam)
+        uint32_t now = HAL_GetTick();
+        if (irq_count % 500 == 1 && (now - last_log) > 2000) {
+            LOG_DEBUG(LOG_TAG_RC, "USART3 IRQ triggered %lu times", (unsigned long)irq_count);
+            last_log = now;
+        }
 
         if ((hdma_usart3_rx.Instance->CR & DMA_SxCR_CT) == RESET)
         {
@@ -72,6 +86,18 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
                 memcpy(last_sbus_frame, (const void*)sbus_rx_buf[0], RC_FRAME_LENGTH);
                 rc_frame_count++;
                 (void)MsgCenter_Publish(TOPIC_RC_UPDATE, &rc_ctrl, sizeof(rc_ctrl));
+
+                // Log first frame reception (simple INFO message OK in ISR)
+                if (rc_frame_count == 1) {
+                    LOG_INFO(LOG_TAG_RC, "First SBUS frame received! RC link active.");
+                }
+                // NOTE: Don't log CSV data in ISR - let main loop handle it via subscription
+            }
+            else if (irq_count % 500 == 1 && (now - last_log) > 2000)
+            {
+                // Log unexpected frame length
+                LOG_DEBUG(LOG_TAG_RC, "Wrong frame length: %u (expected %u)",
+                          (unsigned int)this_time_rx_len, (unsigned int)RC_FRAME_LENGTH);
             }
         }
         else
@@ -90,6 +116,18 @@ void REMOTE_USART3_IDLE_IRQHandler(void)
                 memcpy(last_sbus_frame, (const void*)sbus_rx_buf[1], RC_FRAME_LENGTH);
                 rc_frame_count++;
                 (void)MsgCenter_Publish(TOPIC_RC_UPDATE, &rc_ctrl, sizeof(rc_ctrl));
+
+                // Log first frame reception (simple INFO message OK in ISR)
+                if (rc_frame_count == 1) {
+                    LOG_INFO(LOG_TAG_RC, "First SBUS frame received! RC link active.");
+                }
+                // NOTE: Don't log CSV data in ISR - let main loop handle it via subscription
+            }
+            else if (irq_count % 500 == 1 && (now - last_log) > 2000)
+            {
+                // Log unexpected frame length
+                LOG_DEBUG(LOG_TAG_RC, "Wrong frame length: %u (expected %u)",
+                          (unsigned int)this_time_rx_len, (unsigned int)RC_FRAME_LENGTH);
             }
         }
     }

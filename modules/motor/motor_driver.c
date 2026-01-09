@@ -4,6 +4,7 @@
 #include "can_manager.h"
 #include "robot_config.h"
 #include "printing.h"
+#include "logger.h"
 #include <math.h>
 #include <string.h>
 
@@ -41,23 +42,23 @@ void MotorDriver_ModuleInit(void)
 
     // Initialize all motors from configuration
     if (g_robot_config != NULL) {
-        USB_CDC_Printf("[MotorDriver] Initializing %d motors from config '%s'...\r\n",
-                      g_robot_config->total_motor_count, g_robot_config->name);
+        LOG_INFO(LOG_TAG_MOT, "Initializing %d motors from config '%s'",
+                 g_robot_config->total_motor_count, g_robot_config->name);
 
         for (uint8_t i = 0; i < g_robot_config->total_motor_count; i++) {
             const MotorConfig_t *motor_cfg = &g_robot_config->motor_configs[i];
             MotorDriver_Init(motor_cfg->motor_id, motor_cfg);
 
-            USB_CDC_Printf("[MotorDriver]   Motor %d: type=%d role=%d CAN=%d init=%d\r\n",
-                          motor_cfg->motor_id,
-                          motor_cfg->type,
-                          motor_cfg->role,
-                          motor_cfg->can_channel,
-                          g_motor_contexts[motor_cfg->motor_id].initialized);
+            LOG_DEBUG(LOG_TAG_MOT, "Motor %d: type=%d role=%d CAN=%d init=%d",
+                      motor_cfg->motor_id,
+                      motor_cfg->type,
+                      motor_cfg->role,
+                      motor_cfg->can_channel,
+                      g_motor_contexts[motor_cfg->motor_id].initialized);
         }
-        USB_CDC_Printf("[MotorDriver] All motors initialized.\r\n");
+        LOG_INFO(LOG_TAG_MOT, "All motors initialized");
     } else {
-        USB_CDC_Printf("[MotorDriver] ERROR: g_robot_config is NULL!\r\n");
+        LOG_ERROR(LOG_TAG_MOT, "ERROR: g_robot_config is NULL!");
     }
 
     // Subscribe to CAN feedback topics
@@ -345,11 +346,11 @@ void MotorDriver_SendCurrent(uint8_t motor_id, int16_t current)
 
     MotorContext_t *ctx = &g_motor_contexts[motor_id];
     if (!ctx->initialized || ctx->config == NULL) {
-        // DEBUG: Print warning if motor not initialized
+        // Warning: Motor not initialized (rate limited)
         static uint32_t last_warn = 0;
         if (HAL_GetTick() - last_warn > 1000) {
-            USB_CDC_Printf("[MotorDriver] ERROR: Motor %d not initialized (init=%d, cfg=%p)\r\n",
-                          motor_id, ctx->initialized, ctx->config);
+            LOG_ERROR(LOG_TAG_MOT, "Motor %d not initialized (init=%d, cfg=%p)",
+                      motor_id, ctx->initialized, (void*)ctx->config);
             last_warn = HAL_GetTick();
         }
         return;

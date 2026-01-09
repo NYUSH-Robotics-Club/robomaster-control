@@ -52,6 +52,7 @@
 #include "app_subscriptions.h"
 #include "cmd_controller.h"
 #include "vision_comm.h"
+#include "logger.h"
 
 /* USER CODE END Includes */
 
@@ -102,6 +103,9 @@ static uint8_t wt61c_rxbuf[RX_DMA_BUF_SZ];
 #define MSG_CENTER_QUEUE_LEN 128
 static MsgEvent g_msg_queue[MSG_CENTER_QUEUE_LEN];
 
+// RC logging
+static uint32_t s_rc_frame_counter = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -110,6 +114,7 @@ void SystemClock_Config(void);
 
 static void LED_SetRGB(uint8_t r, uint8_t g, uint8_t b);
 static void Gimbal_HoldPosition_Callback(void);
+static void on_rc_update(const MsgEvent *ev, void *user);
 
 SensorData sensor_data;
 
@@ -124,6 +129,26 @@ CAN receive callback - delegate to CAN manager
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
   CAN_Manager_GlobalCallback(hcan);
+}
+
+/**
+ * @brief RC update callback for logging (runs in main loop context, not ISR)
+ */
+static void on_rc_update(const MsgEvent *ev, void *user)
+{
+  (void)user;
+  if (ev->size == sizeof(RC_ctrl_t)) {
+    const RC_ctrl_t *rc = (const RC_ctrl_t *)ev->data;
+    s_rc_frame_counter++;
+
+    // Log RC data (safe to call in main loop context)
+    LOG_CSV(LOG_TAG_RC, "%lu,%d,%d,%d,%d,%d,%u,%u",
+            (unsigned long)s_rc_frame_counter,
+            (int)rc->rc.ch[0], (int)rc->rc.ch[1],
+            (int)rc->rc.ch[2], (int)rc->rc.ch[3],
+            (int)rc->rc.ch[4],
+            (unsigned int)rc->rc.s[0], (unsigned int)rc->rc.s[1]);
+  }
 }
 
 /**
@@ -201,10 +226,9 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Print boot message
-  USB_CDC_Printf("\r\n");
-  USB_CDC_Printf("========================================\r\n");
-  USB_CDC_Printf("   RoboMaster Control System Boot\r\n");
-  USB_CDC_Printf("========================================\r\n");
+  LOG_INFO(LOG_TAG_SYS, "\r\n========================================");
+  LOG_INFO(LOG_TAG_SYS, "   RoboMaster Control System Boot");
+  LOG_INFO(LOG_TAG_SYS, "========================================");
 
   // Initialize buzzer
   Buzzer_Init();
@@ -214,6 +238,18 @@ int main(void)
 
   // Initialize message center (needed for gimbal communication)
   MsgCenter_Init(g_msg_queue, MSG_CENTER_QUEUE_LEN);
+
+  // Initialize logger module
+  Logger_Init();
+  // Configure logger rates for different subsystems
+  Logger_SetRate(LOG_TAG_CMD, 100);   // 10Hz for command controller CSV (SPINDBG)
+  Logger_SetRate(LOG_TAG_IMU, 100);   // 10Hz for IMU CSV data
+  Logger_SetRate(LOG_TAG_GIM, 50);    // 20Hz for gimbal PID tuning (PITCH/YAW_CSV)
+  Logger_SetRate(LOG_TAG_RC, 0);      // No rate limit for RC (full 100Hz+ output)
+  Logger_SetRate(LOG_TAG_CHA, 200);   // 5Hz for chassis status
+  Logger_SetRate(LOG_TAG_SEN, 200);   // 5Hz for sentry status
+  Logger_SetRate(LOG_TAG_SYS, 0);     // No rate limit for system messages
+  Logger_SetRate(LOG_TAG_MOT, 0);     // No rate limit for motor init messages
 
   // Initialize CAN managers early (needed for gimbal motors)
   const RobotConfig_t *robot_cfg = RobotConfig_Get();
@@ -229,7 +265,7 @@ int main(void)
   GimbalApp_Init();
 
   // Wait for CAN bus to stabilize and gimbal to receive initial feedback
-  USB_CDC_Printf("[Init] Waiting for CAN bus to stabilize...\r\n");
+  LOG_INFO(LOG_TAG_SYS, "Waiting for CAN bus to stabilize...");
   HAL_Delay(200);
 
   // Wait for gimbal to reach initial alignment position (if gimbal exists)
@@ -240,8 +276,9 @@ int main(void)
   // Perform IMU calibration if enabled in robot configuration
   if (robot_cfg->enable_imu_calibration) {
     // Now start IMU calibration with gimbal in position
-    USB_CDC_Printf("\r\n=== Starting IMU Calibration ===\r\n");
-    USB_CDC_Printf("[Calibration] Keep the robot still!\r\n");
+    LOG_INFO(LOG_TAG_SYS, "");
+    LOG_INFO(LOG_TAG_SYS, "=== Starting IMU Calibration ===");
+    LOG_INFO(LOG_TAG_SYS, "Keep the robot still!");
 
     // Set LED to blue during calibration
     LED_SetRGB(0, 0, 1);
@@ -257,12 +294,13 @@ int main(void)
     // Set LED to green
     LED_SetRGB(0, 1, 0);
 
-    USB_CDC_Printf("=== IMU Calibration Complete ===\r\n\r\n");
+    LOG_INFO(LOG_TAG_SYS, "=== IMU Calibration Complete ===");
+    LOG_INFO(LOG_TAG_SYS, "");
 
     // Clear the callback since CmdController will take over
     gyro_calibrate_set_callback(NULL);
   } else {
-    USB_CDC_Printf("[Init] IMU calibration disabled for this robot type\r\n");
+    LOG_INFO(LOG_TAG_SYS, "IMU calibration disabled for this robot type");
   }
 
   // Continue with remaining initialization
@@ -281,6 +319,9 @@ int main(void)
   // Initialize remote control
   remote_control_init();
 
+  // Subscribe to RC updates for logging (in main loop context, not ISR)
+  MsgCenter_Subscribe(TOPIC_RC_UPDATE, on_rc_update, NULL);
+
   // Initialize Vision Communication
   VisionComm_Init();
 
@@ -294,7 +335,9 @@ int main(void)
   // Disable half-transfer interrupt to reduce callback overhead
   __HAL_DMA_DISABLE_IT(WT61C_UART_HANDLE.hdmarx, DMA_IT_HT);
 
-  USB_CDC_Printf("\r\n=== System Ready ===\r\n\r\n");
+  LOG_INFO(LOG_TAG_SYS, "");
+  LOG_INFO(LOG_TAG_SYS, "=== System Ready ===");
+  LOG_INFO(LOG_TAG_SYS, "");
 
   /* USER CODE END 2 */
 

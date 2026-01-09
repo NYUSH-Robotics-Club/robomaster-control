@@ -2,6 +2,7 @@
 #include "bmi088driver.h"
 #include "wt61c.h"
 #include "printing.h"
+#include "logger.h"
 #include "message_center.h"
 #include "QuaternionEKF.h"
 #include "buzzer.h"
@@ -344,41 +345,30 @@ void gyro_data_update(SensorData *sensor_data)
     // 兼容旧代码
     sensor_data->absolute_angle = sensor_data->yaw_total_angle;
 
-    // === CDC串口输出IMU姿态数据（10Hz） ===
-    static uint32_t last_imu_print = 0;
-    static uint32_t imu_print_count = 0;
-    uint32_t now = HAL_GetTick();
-    if (now - last_imu_print >= 100) {  // 每100ms输出一次
-        last_imu_print = now;
-
-        // 调试：前3次输出时打印提示
-        if (imu_print_count < 3) {
-            USB_CDC_Printf("[DEBUG] About to print IMU data #%lu\r\n", imu_print_count);
-        }
-        imu_print_count++;
-
-        // Gimbal (BMI088): yaw, pitch, roll, yaw_total, round_count, gx, gy, gz (rad/s)
-        // Chassis (WT61C): yaw, pitch, roll, gx, gy, gz (rad/s), ax, ay, az (m/s²)
-        USB_CDC_Printf("IMU,%lu,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
-                       now,
-                       sensor_data->yaw,
-                       sensor_data->pitch,
-                       sensor_data->roll,
-                       sensor_data->yaw_total_angle,
-                       sensor_data->yaw_round_count,
-                       sensor_data->g_gx,
-                       sensor_data->g_gy,
-                       sensor_data->g_gz,
-                       sensor_data->c_yaw,
-                       sensor_data->c_pitch,
-                       sensor_data->c_roll,
-                       sensor_data->c_gx,
-                       sensor_data->c_gy,
-                       sensor_data->c_gz,
-                       sensor_data->c_ax,
-                       sensor_data->c_ay,
-                       sensor_data->c_az);
-    }
+    // === Log IMU data via logger (10Hz rate limited in main.c) ===
+    // Format: IMU,timestamp_ms,gimbal_yaw,gimbal_pitch,gimbal_roll,gimbal_yaw_total,
+    //         yaw_round_count,g_gx,g_gy,g_gz,chassis_yaw,chassis_pitch,chassis_roll,
+    //         c_gx,c_gy,c_gz,c_ax,c_ay,c_az
+    // Gimbal (BMI088): yaw, pitch, roll, yaw_total, round_count, gx, gy, gz (rad/s)
+    // Chassis (WT61C): yaw, pitch, roll, gx, gy, gz (rad/s), ax, ay, az (m/s²)
+    LOG_CSV(LOG_TAG_IMU, "%.2f,%.2f,%.2f,%.2f,%d,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+            sensor_data->yaw,
+            sensor_data->pitch,
+            sensor_data->roll,
+            sensor_data->yaw_total_angle,
+            sensor_data->yaw_round_count,
+            sensor_data->g_gx,
+            sensor_data->g_gy,
+            sensor_data->g_gz,
+            sensor_data->c_yaw,
+            sensor_data->c_pitch,
+            sensor_data->c_roll,
+            sensor_data->c_gx,
+            sensor_data->c_gy,
+            sensor_data->c_gz,
+            sensor_data->c_ax,
+            sensor_data->c_ay,
+            sensor_data->c_az);
 
     WT61C_Data const* d = WT61C_GetData();
 
