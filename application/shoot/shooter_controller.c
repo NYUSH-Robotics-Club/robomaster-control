@@ -132,9 +132,6 @@ void ShooterController_ComputeCurrents(ShooterController *controller, uint32_t c
     if (s_friction2_motor_id != 0xFF) {
         MotorDriver_SendCurrent(s_friction2_motor_id, controller->output_currents[3]);
     }
-
-    // Flush all pending motor commands
-    MotorDriver_FlushAll();
 }
 
 void ShooterController_SetTurntableSpeed(ShooterController *controller, float speed)

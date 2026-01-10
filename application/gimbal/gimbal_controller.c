@@ -292,15 +292,13 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
           use_spin_hold // Use IMU feedback only in spin mode
       );
 
-      // Send motor currents (module layer handles CAN)
+      // Send motor currents (buffered, will be flushed by message center)
       MotorDriver_SendCurrent(s_pitch_motor_id, pitch_current);
       MotorDriver_SendCurrent(s_yaw_motor_id, yaw_current);
-      MotorDriver_FlushAll();
     } else {
       // Gimbal disabled, send zero current
       MotorDriver_SendCurrent(s_pitch_motor_id, 0);
       MotorDriver_SendCurrent(s_yaw_motor_id, 0);
-      MotorDriver_FlushAll();
     }
 
     // Gimbal position logging (20Hz rate limited in main.c)
@@ -308,11 +306,24 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
     // Log regardless of enabled state to monitor motor positions
     MotorContext_t *yaw_ctx = MotorDriver_GetContext(s_yaw_motor_id);
     MotorContext_t *pitch_ctx = MotorDriver_GetContext(s_pitch_motor_id);
+
+    // Support both full gimbal (yaw+pitch) and yaw-only configurations
     if (yaw_ctx && pitch_ctx) {
+      // Both yaw and pitch exist
       LOG_CSV(LOG_TAG_GIM, "ENCODER,%.2f,%.2f,%.2f,%.2f",
               (float)yaw_ctx->angle_raw,
               (float)pitch_ctx->angle_raw,
               yaw_ctx->angle_target,
+              pitch_ctx->angle_target);
+    } else if (yaw_ctx) {
+      // Yaw-only configuration (e.g., sentry)
+      LOG_CSV(LOG_TAG_GIM, "ENCODER,%.2f,0.0,%.2f,0.0",
+              (float)yaw_ctx->angle_raw,
+              yaw_ctx->angle_target);
+    } else if (pitch_ctx) {
+      // Pitch-only configuration (unlikely but handle it)
+      LOG_CSV(LOG_TAG_GIM, "ENCODER,0.0,%.2f,0.0,%.2f",
+              (float)pitch_ctx->angle_raw,
               pitch_ctx->angle_target);
     }
   }
@@ -333,22 +344,31 @@ void GimbalApp_Init(void) {
   memset(&s_last_cmd, 0, sizeof(s_last_cmd));
   memset(&s_last_sensor, 0, sizeof(s_last_sensor));
 
+  LOG_INFO(LOG_TAG_GIM, "Gimbal init: searching for motors...");
+
   // Find gimbal motors by role (module layer handles config)
   uint8_t pitch_motors[1];
   uint8_t yaw_motors[1];
 
   if (MotorDriver_FindByRole(MOTOR_ROLE_GIMBAL_PITCH, pitch_motors, 1) > 0) {
     s_pitch_motor_id = pitch_motors[0];
+    LOG_INFO(LOG_TAG_GIM, "Found pitch motor: id=%d", s_pitch_motor_id);
+  } else {
+    LOG_INFO(LOG_TAG_GIM, "No pitch motor configured");
   }
 
   if (MotorDriver_FindByRole(MOTOR_ROLE_GIMBAL_YAW, yaw_motors, 1) > 0) {
     s_yaw_motor_id = yaw_motors[0];
+    LOG_INFO(LOG_TAG_GIM, "Found yaw motor: id=%d", s_yaw_motor_id);
+  } else {
+    LOG_ERROR(LOG_TAG_GIM, "ERROR: No yaw motor found!");
   }
 
   // Subscribe to messages
   (void)MsgCenter_Subscribe(TOPIC_GIMBAL_CMD, on_gimbal_cmd, NULL);
   (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
 
+  LOG_INFO(LOG_TAG_GIM, "Gimbal init complete: yaw=%d pitch=%d", s_yaw_motor_id, s_pitch_motor_id);
   s_initialized = true;
 }
 
@@ -388,23 +408,37 @@ void Gimbal_WaitForAlignment(void) {
     MotorContext_t *yaw = MotorDriver_GetContext(s_yaw_motor_id);
     MotorContext_t *pitch = MotorDriver_GetContext(s_pitch_motor_id);
 
-    if (yaw && pitch && yaw->angle_initialized && pitch->angle_initialized) {
-      float yaw_error = fabsf(yaw->angle_target - (float)yaw->angle_raw);
-      float pitch_error = fabsf(pitch->angle_target - (float)pitch->angle_raw);
+    bool yaw_ready = false;
+    bool pitch_ready = false;
 
+    // Check yaw alignment (if yaw motor exists)
+    if (yaw && yaw->angle_initialized) {
+      float yaw_error = fabsf(yaw->angle_target - (float)yaw->angle_raw);
       // Handle yaw wraparound (0-8192 encoder range)
       if (yaw_error > 4096.0f) {
         yaw_error = 8192.0f - yaw_error;
       }
+      yaw_ready = (yaw_error < ALIGNMENT_THRESHOLD);
+      USB_CDC_Printf("[Gimbal] Yaw error: %.1f\r\n", yaw_error);
+    } else {
+      // If no yaw motor configured, consider it ready
+      yaw_ready = (s_yaw_motor_id == 0xFF);
+    }
 
-      USB_CDC_Printf("[Gimbal] Yaw error: %.1f, Pitch error: %.1f\r\n",
-                     yaw_error, pitch_error);
+    // Check pitch alignment (if pitch motor exists)
+    if (pitch && pitch->angle_initialized) {
+      float pitch_error = fabsf(pitch->angle_target - (float)pitch->angle_raw);
+      pitch_ready = (pitch_error < ALIGNMENT_THRESHOLD);
+      USB_CDC_Printf("[Gimbal] Pitch error: %.1f\r\n", pitch_error);
+    } else {
+      // If no pitch motor configured, consider it ready
+      pitch_ready = (s_pitch_motor_id == 0xFF);
+    }
 
-      if (yaw_error < ALIGNMENT_THRESHOLD &&
-          pitch_error < ALIGNMENT_THRESHOLD) {
-        USB_CDC_Printf("[Gimbal] Alignment complete!\r\n");
-        return;
-      }
+    // Both axes ready (or don't exist)
+    if (yaw_ready && pitch_ready) {
+      USB_CDC_Printf("[Gimbal] Alignment complete!\r\n");
+      return;
     }
   }
 

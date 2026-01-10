@@ -46,3 +46,5 @@ Thumbs.db
 
 c_cpp_properties.json
 settings.json
+
+.cache

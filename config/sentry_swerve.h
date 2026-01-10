@@ -60,24 +60,47 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
     // Steer motor B (GM6020 ID 6 => RX 0x20A)
     {
         .motor_id = 6, .type = MOTOR_TYPE_GM6020, .role = MOTOR_ROLE_CHASSIS_STEER,
-        .can_channel = CAN_CHANNEL_1, 
+        .can_channel = CAN_CHANNEL_1,
         .can_rx_id = 0x20A,           // 0x204 + 6
-        .can_tx_id = 0x2FF,           
-        .tx_slot = 1,                 
+        .can_tx_id = 0x2FF,
+        .tx_slot = 1,
         .direction = 1,
-        .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 2434.0f}, 
-        .pid_outer = {0.7f, 0.045f, 0.018f, 300.0f, 300.0f},                                                                
-        .pid_inner = {22.0f, 0.01f, 3.0f, 30000.0f, 4000.0f}                                                                
+        .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 2434.0f},
+        .pid_outer = {0.7f, 0.045f, 0.018f, 300.0f, 300.0f},
+        .pid_inner = {22.0f, 0.01f, 3.0f, 30000.0f, 4000.0f}
+    },
+
+    // --------------------------
+    // GIMBAL YAW (GM6020) — CAN1
+    // --------------------------
+    // Yaw gimbal motor (GM6020 ID 7 => RX 0x20B)
+    {
+        .motor_id = 7,
+        .type = MOTOR_TYPE_GM6020,
+        .role = MOTOR_ROLE_GIMBAL_YAW,
+        .can_channel = CAN_CHANNEL_1,
+        .can_rx_id = 0x20B,               // 0x204 + 7
+        .can_tx_id = 0x2FF,               // GM6020 ID 5-7 use 0x2FF
+        .tx_slot = 2,                     // motor_id - 5 = 7 - 5 = 2
+        .direction = 1,
+        .limits.gm6020 = {
+            .angle_min = 0.0f,
+            .angle_max = 8192.0f,
+            .gravity_compensation = 0.0f,
+            .initial_angle = 0.0f         // TODO: Calibrate and update this value
+        },
+        .pid_outer = {0.70f, 0.045f, 0.04f, 300.0f, 300.0f},   // Yaw angle PID
+        .pid_inner = {30.0f, 0.01f, 3.0f, 30000.0f, 4000.0f}   // Yaw speed PID
     }};
 
 // ========== ROBOT CONFIG ==========
 static const RobotConfig_t g_robot_config_sentry_swerve = {
     .name = "Sentry Swerve Standard",
     .chassis_motor_count = 6, // 4 drive + 2 steer
-    .gimbal_motor_count = 0,
+    .gimbal_motor_count = 1,  // 1 yaw motor
     .shooter_motor_count = 0,
     .motor_configs = g_motor_configs_sentry_swerve,
-    .total_motor_count = 6,
+    .total_motor_count = 7,   // 6 chassis + 1 gimbal
     .enable_imu_calibration = 0 // Sentry does not need IMU calibration
 };
 

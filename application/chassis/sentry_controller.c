@@ -330,8 +330,6 @@ void ChassisController_ComputeCurrents(ChassisController *controller,
     controller->steer_output_currents[i] = motor_current;
     MotorDriver_SendCurrent(s_steer_motor_ids[i], motor_current);
   }
-
-  MotorDriver_FlushAll();
 }
 
 void ChassisController_SetTargetSpeeds(

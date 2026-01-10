@@ -2,6 +2,7 @@
 #include "motor_driver.h"
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
 #include "message_center.h"
 #include "remote_control.h"
 #include "gyro_data.h"
@@ -118,12 +119,9 @@ void ChassisController_ComputeCurrents(ChassisController *controller, uint32_t c
         );
         controller->output_currents[i] = motor_current;
 
-        // Send motor current (module layer handles CAN)
+        // Send motor current (buffered, will be flushed in main loop)
         MotorDriver_SendCurrent(s_chassis_motor_ids[i], motor_current);
     }
-
-    // Flush all pending motor commands
-    MotorDriver_FlushAll();
 }
 
 void ChassisController_SetTargetSpeeds(ChassisController *controller, const float speeds[CHASSIS_MOTOR_COUNT])

@@ -1,4 +1,5 @@
 #include "message_center.h"
+#include "motor_driver.h"
 #include "printing.h"
 #include <string.h>
 
@@ -128,6 +129,7 @@ void MsgCenter_Dispatch(void) {
             }
         }
     }
+    MotorDriver_FlushAll();
 }
 
 
