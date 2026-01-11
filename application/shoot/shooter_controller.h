@@ -15,7 +15,7 @@
 // Shooter system parameters
 #define MOTOR5_CONST_SPEED 3000      // Turntable speed
 #define SHOOTER_CONST_SPEED 7500     // Shooter wheel speed
-#define SHOOTER_RAMP_STEP 50.0f      // Acceleration step
+#define SHOOTER_RAMP_STEP 500.0f      // Acceleration step
 
 
 // Shooter controller structure
