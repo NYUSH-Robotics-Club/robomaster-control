@@ -132,8 +132,8 @@ static const MotorConfig_t g_motor_configs_infantry_standard[] = {
                 .gravity_compensation = 0.0f,
                 .initial_angle = 2183.0f // Calibration value from 2025-12-25
             },
-        .pid_outer = {0.70f, 0.045f, 0.04f, 300.0f, 300.0f}, // Yaw angle PID
-        .pid_inner = {30.0f, 0.01f, 3.0f, 30000.0f, 4000.0f} // Yaw speed PID
+        .pid_outer = {1.0f, 0.06f, 0.0f, 600.0f, 450.0f}, // Yaw angle PID (increased Kp, removed Kd for fastest response)
+        .pid_inner = {45.0f, 0.03f, 0.5f, 30000.0f, 6000.0f} // Yaw speed PID (aggressive: high Kp, low Kd for fast response)
     },
 
     // Pitch gimbal motor (ID 7)
@@ -154,7 +154,7 @@ static const MotorConfig_t g_motor_configs_infantry_standard[] = {
                     5000.0f,             // Gravity compensation for pitch
                 .initial_angle = 3370.0f // Calibration value from 2025-12-25
             },
-        .pid_outer = {20.0f, 0.0f, 2.0f, 30000.0f, 25000.0f}, // Pitch PID
+        .pid_outer = {28.0f, 0.0f, 0.5f, 30000.0f, 25000.0f}, // Pitch PID (aggressive: high Kp, low Kd for fast tracking)
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f} // Not used for pitch
     }};
 

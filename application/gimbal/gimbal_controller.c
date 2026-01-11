@@ -14,7 +14,7 @@ static uint8_t s_yaw_motor_id = 0xFF;
 
 // Yaw control parameters
 #define YAW_CONTROL_ENC_MAX (8192.0f)
-#define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
+#define YAW_CONTROL_GYRO_LPF_ALPHA (0.5f)  // Reduced filtering for faster response (was 0.3)
 #define CURRENT_LIMIT (30000.0f)
 
 // Legacy defines (not used anymore - values from config)
@@ -35,7 +35,7 @@ int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized,
   }
 
   // Joystick control with sensitivity scaling
-  float sensitivity = 40.0f;
+  float sensitivity = 60.0f; // Increased for more responsive tracking
   c->angle_target += c->config->direction * sensitivity * rate_normalized;
 
   // Determine if this is pitch motor (has angle limits)
@@ -117,8 +117,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   }
   yaw->angle_target = (float)test_target;
 #else
-  // Joystick control
-  yaw->angle_target += 50.0f * rate_normalized;
+  // Joystick control (increased sensitivity for more responsive tracking)
+  yaw->angle_target += 70.0f * rate_normalized;
 #endif
 
   // Wrap target into encoder range
@@ -130,8 +130,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   float current = yaw->angle_raw;
   float angle_error = yaw->angle_target - current;
 
-  // small deadband
-  if (fabsf(angle_error) < 1.0f)
+  // Ultra-minimal deadband for maximum tracking precision (reduced from 1.0 → 0.1)
+  if (fabsf(angle_error) < 0.1f)
     angle_error = 0.0f;
 
   // wrap error into [-ENC_MAX/2, ENC_MAX/2]
@@ -145,8 +145,17 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   // ==========================
   float cmd_angle_to_speed = PID_Calculate(&yaw->pid_outer, 0.0f, -angle_error);
 
-  // Speed limit for yaw control stability (from working commit 22e9ff0e7a)
-  float rpm_limit = 440.0f;
+  // Dynamic speed limit based on control mode
+  // Auto-aim mode (rate_normalized == 0.0f): Higher speed for fast target tracking
+  // Manual joystick mode: Standard speed for smooth control
+  float rpm_limit;
+  if (rate_normalized == 0.0f) {
+    // Auto-aim/Spin-hold mode: High-speed tracking (2778°/s ≈ 7.72 rot/s)
+    rpm_limit = 500.0f;
+  } else {
+    // Manual joystick mode: Standard speed (1667°/s ≈ 4.63 rot/s)
+    rpm_limit = 300.0f;
+  }
 
   // Apply signed clamp
   if (cmd_angle_to_speed > rpm_limit)
@@ -179,17 +188,17 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
 
   // Yaw PID tuning CSV (20Hz rate limited)
   // Format: YAW_CSV,timestamp_ms,target_angle,current_angle,speed_rpm,cmd_current,cmd_speed,rate,error,g_gz_filtered,c_gz
-  LOG_CSV(LOG_TAG_GIM, "YAW_CSV,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f",
-          yaw->angle_target,
-          current,
-          yaw->speed_rpm,
-          cmd_speed_to_current,
-          cmd_angle_to_speed,
-          rate_normalized * 300.0f,
-          angle_error,
-          sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
-              s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA),
-          sensor_data->c_gz);
+  // LOG_CSV(LOG_TAG_GIM, "YAW_CSV,%.2f,%.2f,%d,%.2f,%.4f,%.4f,%.4f,%.2f,%.4f,%.4f",
+  //         yaw->angle_target,
+  //         current,
+  //         yaw->speed_rpm,
+  //         cmd_speed_to_current,
+  //         cmd_angle_to_speed,
+  //         rate_normalized * 300.0f,
+  //         angle_error,
+  //         sensor_data->g_gz * YAW_CONTROL_GYRO_LPF_ALPHA +
+  //             s_last_sensor.g_gz * (1.0f - YAW_CONTROL_GYRO_LPF_ALPHA),
+  //         sensor_data->c_gz);
 
   return (int16_t)cmd_speed_to_current;
 }

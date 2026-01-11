@@ -46,9 +46,9 @@ void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float output_ma
   pid->dt = 0.001f;  // Default 1ms
   pid->last_time_us = get_time_us();
   
-  // Default filter RC values
-  pid->output_lpf_rc = 0.01f;
-  pid->derivative_lpf_rc = 0.01f;
+  // Reduced filter RC values for faster response (trades smoothness for speed)
+  pid->output_lpf_rc = 0.002f;     // Reduced from 0.01 → 5x faster response
+  pid->derivative_lpf_rc = 0.005f; // Reduced from 0.01 → 2x faster response
 }
 
 /**

@@ -13,7 +13,7 @@
 #define SAMPLE_COUNT 10
 #define REFRESH_HZ 200
 #define REFRESH_DT (1.0 / REFRESH_HZ)
-#define VISION_CMD_TIMEOUT_MS 80u
+#define VISION_CMD_TIMEOUT_MS 30u  // Reduced from 80ms → faster loss detection
 
 // ==========================
 // Small gyro (spinning) mode
@@ -54,8 +54,8 @@ static ChassisCmd s_chassis_cmd;
 static ShootCmd s_shoot_cmd;
 static GimbalCmd s_gimbal_cmd;
 
-// Deadband for joystick input
-#define JOYSTICK_DEADBAND 10
+// Reduced deadband for more sensitive control (from 10 → 3)
+#define JOYSTICK_DEADBAND 3
 
 // Normalize angle to [-180, 180] range
 static float normalize_angle_180(float angle_deg)

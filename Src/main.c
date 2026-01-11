@@ -66,8 +66,8 @@
 
 // Wait for ESC boot
 #define WAIT_ESC_BOOT_MS                (500U)
-// Main loop refresh interval
-#define CMD_REFRESH_INTERVAL_MS         (5U)
+// Main loop refresh interval (reduced for faster tracking response)
+#define CMD_REFRESH_INTERVAL_MS         (2U)  // 500Hz loop (was 200Hz)
 // RC loss timeout for health gating
 #define RC_LOSS_TIMEOUT_MS              (200U)
 // USART6 hello message send interval
