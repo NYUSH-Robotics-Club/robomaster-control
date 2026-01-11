@@ -76,14 +76,14 @@ static void on_imu_update(const MsgEvent *ev, void *user_data)
     if (ev->size == sizeof(SensorData)) {
         const SensorData *sensor_data = (const SensorData *)ev->data;
         uint32_t current_time = HAL_GetTick();
-        
+
         // Control send frequency (100Hz)
         if (current_time - last_send_time >= VISION_SEND_INTERVAL_MS) {
             // Set attitude data from gimbal IMU
             VisionComm_SetAltitude(sensor_data->g_gz, sensor_data->g_gx, sensor_data->g_gy);
             VisionComm_SetFlag(COLOR_BLUE, VISION_MODE_AIM, SMALL_AMU_15);
             VisionComm_Send();
-            
+
             last_send_time = current_time;
         }
     }

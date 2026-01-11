@@ -97,26 +97,40 @@ class YawDataPlotter:
             return False
 
     def parse_csv_line(self, line):
-        if not line.startswith('YAW_CSV'):
+        # Format: GIM,timestamp,YAW_CSV,target_angle,current_angle,speed_rpm,cmd_current,cmd_speed,rate,error,g_gz,c_gz
+        if 'YAW_CSV' not in line:
             return None
-        try:
-            parts = line.strip().split(',')
-            if len(parts) < 11:
-                return None
 
+        # Clean up line: find "GIM" and extract from there (removes binary garbage prefix)
+        gim_idx = line.find('GIM')
+        if gim_idx == -1:
+            return None
+
+        clean_line = line[gim_idx:]
+        parts = clean_line.split(',')
+
+        if len(parts) < 12:  # GIM + timestamp + YAW_CSV + at least 9 data fields
+            return None
+
+        # Check if this is the correct format (parts[0]='GIM', parts[2]='YAW_CSV')
+        if parts[0] != 'GIM' or parts[2] != 'YAW_CSV':
+            return None
+
+        try:
             return {
                 'timestamp': int(parts[1]),
-                'target_angle': float(parts[2]),
-                'current_angle': float(parts[3]),
-                'speed_rpm': int(parts[4]),
-                'cmd_speed_to_current': float(parts[5]),
-                'cmd_angle_to_speed': float(parts[6]),
-                'rate_input': float(parts[7]),
-                'error': float(parts[8]),
-                'g_gz': float(parts[9]),
-                'c_gz': float(parts[10]),
+                'target_angle': float(parts[3]),
+                'current_angle': float(parts[4]),
+                'speed_rpm': int(parts[5]),
+                'cmd_speed_to_current': float(parts[6]),
+                'cmd_angle_to_speed': float(parts[7]),
+                'rate_input': float(parts[8]),
+                'error': float(parts[9]),
+                'g_gz': float(parts[10]),
+                'c_gz': float(parts[11]),
             }
         except (ValueError, IndexError):
+            # Parsing failed (likely truncated or malformed data)
             return None
 
     def read_serial_data(self):
@@ -124,7 +138,10 @@ class YawDataPlotter:
             return
         try:
             while self.ser.in_waiting > 0:
-                line = self.ser.readline().decode('utf-8', errors='ignore')
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                if not line:
+                    continue
+                # Try to parse, skip if it fails (e.g., binary vision data)
                 data = self.parse_csv_line(line)
                 if data:
                     if self.start_time is None:
@@ -251,7 +268,7 @@ def main():
 
     print(f"\nYaw Motor Data Plotter")
     print(f"Port: {port}, Baudrate: {baudrate}")
-    print(f"Looking for CSV data with prefix 'YAW_CSV'\n")
+    print(f"Looking for CSV data with format: GIM,timestamp,YAW_CSV,...\n")
 
     plotter = YawDataPlotter(port, baudrate)
     plotter.run()
