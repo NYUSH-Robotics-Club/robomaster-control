@@ -64,10 +64,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-// Wait for ESC boot
-#define WAIT_ESC_BOOT_MS                (500U)
-// Main loop refresh interval (reduced for faster tracking response)
-#define CMD_REFRESH_INTERVAL_MS         (2U)  // 500Hz loop (was 200Hz)
+// Minimized delays for maximum response speed
+#define WAIT_ESC_BOOT_MS                (200U)  // Reduced from 500ms → 200ms
+#define CMD_REFRESH_INTERVAL_MS         (DAC_CR_MAMP1_2)    // Removed delay → max speed loop
 // RC loss timeout for health gating
 #define RC_LOSS_TIMEOUT_MS              (200U)
 // USART6 hello message send interval
@@ -264,9 +263,9 @@ int main(void)
   // Initialize gimbal early (before calibration)
   GimbalApp_Init();
 
-  // Wait for CAN bus to stabilize and gimbal to receive initial feedback
-  LOG_INFO(LOG_TAG_SYS, "Waiting for CAN bus to stabilize...");
-  HAL_Delay(200);
+  // CAN bus stabilization (removed delay for faster boot)
+  LOG_INFO(LOG_TAG_SYS, "Starting system...");
+  // HAL_Delay(200);  // Removed - CAN bus starts immediately
 
   // Wait for gimbal to reach initial alignment position (if gimbal exists)
   if (robot_cfg->gimbal_motor_count > 0) {

@@ -388,8 +388,8 @@ void GimbalApp_Init(void) {
  */
 void Gimbal_WaitForAlignment(void) {
   const float ALIGNMENT_THRESHOLD = 50.0f; // encoder ticks
-  const uint32_t TIMEOUT_MS = 10000;       // 10 seconds timeout
-  const uint32_t CHECK_INTERVAL_MS = 100;
+  const uint32_t TIMEOUT_MS = 5000;        // 5 seconds timeout (reduced from 10s)
+  const uint32_t CHECK_INTERVAL_MS = 5;    // 5ms check (reduced from 100ms → 20x faster)
 
   USB_CDC_Printf("[Gimbal] Waiting for gimbal alignment...\r\n");
 
