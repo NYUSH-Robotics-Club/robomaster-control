@@ -114,6 +114,10 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
     test_target += 8192 / 18;
     if (test_target >= 8192)
       test_target = 0;
+
+    // Reset PID on target jump to prevent integral windup
+    PID_Reset(&yaw->pid_outer);
+    PID_Reset(&yaw->pid_inner);
   }
   yaw->angle_target = (float)test_target;
 #else

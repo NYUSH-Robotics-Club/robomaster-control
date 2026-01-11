@@ -224,6 +224,9 @@ int main(void)
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  // === LED: RED - Hardware initialized, starting software init ===
+  LED_SetRGB(1, 0, 0);
+
   // Print boot message
   LOG_INFO(LOG_TAG_SYS, "\r\n========================================");
   LOG_INFO(LOG_TAG_SYS, "   RoboMaster Control System Boot");
@@ -250,6 +253,9 @@ int main(void)
   Logger_SetRate(LOG_TAG_SYS, 0);     // No rate limit for system messages
   Logger_SetRate(LOG_TAG_MOT, 0);     // No rate limit for motor init messages
 
+  // === LED: YELLOW - CAN and motor initialization ===
+  LED_SetRGB(1, 1, 0);
+
   // Initialize CAN managers early (needed for gimbal motors)
   const RobotConfig_t *robot_cfg = RobotConfig_Get();
   CAN_Manager_Init(&can1_manager, CAN_CHANNEL_1, &hcan1, robot_cfg, &can1_registry);
@@ -266,6 +272,9 @@ int main(void)
   // CAN bus stabilization (removed delay for faster boot)
   LOG_INFO(LOG_TAG_SYS, "Starting system...");
   // HAL_Delay(200);  // Removed - CAN bus starts immediately
+
+  // === LED: CYAN - Gimbal alignment ===
+  LED_SetRGB(0, 1, 1);
 
   // Wait for gimbal to reach initial alignment position (if gimbal exists)
   if (robot_cfg->gimbal_motor_count > 0) {
@@ -290,9 +299,6 @@ int main(void)
     // Perform gyro calibration
     gyro_calibrate();
 
-    // Set LED to green
-    LED_SetRGB(0, 1, 0);
-
     LOG_INFO(LOG_TAG_SYS, "=== IMU Calibration Complete ===");
     LOG_INFO(LOG_TAG_SYS, "");
 
@@ -301,6 +307,9 @@ int main(void)
   } else {
     LOG_INFO(LOG_TAG_SYS, "IMU calibration disabled for this robot type");
   }
+
+  // === LED: MAGENTA - Application controllers initialization ===
+  LED_SetRGB(1, 0, 1);
 
   // Continue with remaining initialization
   // Initialize command controller (central control)
@@ -312,8 +321,13 @@ int main(void)
 
   // Align swerve steer motors to initial position (sentry_swerve only)
   #if defined(ROBOT_TYPE_sentry_swerve)
+  // LED: PURPLE (dimmer magenta) - Swerve steer alignment
+  LED_SetRGB(1, 0, 1);
   Sentry_WaitForSteerAlignment();
   #endif
+
+  // === LED: WHITE - Final peripherals initialization ===
+  LED_SetRGB(1, 1, 1);
 
   // Initialize remote control
   remote_control_init();
@@ -337,6 +351,9 @@ int main(void)
   LOG_INFO(LOG_TAG_SYS, "");
   LOG_INFO(LOG_TAG_SYS, "=== System Ready ===");
   LOG_INFO(LOG_TAG_SYS, "");
+
+  // === LED: GREEN - System ready, entering main loop ===
+  LED_SetRGB(0, 1, 0);
 
   /* USER CODE END 2 */
 
