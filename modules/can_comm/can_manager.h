@@ -81,6 +81,16 @@ HAL_StatusTypeDef CAN_Manager_SendMotorCurrents4(CAN_HandleTypeDef *hcan, uint16
 HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t motor_id, int16_t current);
 
 /**
+ * @brief Send DM10010L current by motor id (1..7) using StdId 0x1FF/0x2FF layout
+ * @param hcan CAN handle (typically hcan1)
+ * @param motor_id DM10010L id in 1..7
+ * @param position_des desired position
+ * @param velocity_des desired velocity
+ * @return HAL status
+ */
+HAL_StatusTypeDef CAN_Manager_SendDM10010LPOSVES(CAN_HandleTypeDef *hcan, uint8_t motor_id, float position_des, float velocity_des);
+
+/**
  * @brief Process CAN receive callback
  * @param manager CAN manager pointer
  * @param hcan CAN handle that triggered the callback

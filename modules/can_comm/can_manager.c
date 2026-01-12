@@ -115,6 +115,22 @@ void CAN_Manager_ProcessCallback(CAN_Manager_t *manager, CAN_HandleTypeDef *hcan
             (void)MsgCenter_Publish(TOPIC_GM6020_FEEDBACK, &gev, sizeof(gev));
         }
     }
+
+    // Process DM10010L motor feedback (Master ID default 0)
+    // DM10010L feedback format: MST_ID, ID|ERR<<4, POS[15:8], POS[7:0], VEL[11:4], VEL[3:0]|T[11:8], T[7:0], T_MOS，T_ROTOR
+    if (rx.IDE==CAN_ID_STD && rx.DLC==8 && rx.StdId==0) {
+        uint8_t id_err = d[0];
+        uint8_t motor_id = id_err & 0x0F;
+        uint8_t err = (id_err >> 4) & 0x0F;
+        int16_t pos = (int16_t)((d[1] << 8) | d[2]);
+        int16_t vel = (int16_t)((d[3] << 4) | (d[4] & 0x0F));
+        int16_t torque = (int16_t)((((d[4] >> 4) & 0x0F) << 8) | d[5]);
+        uint8_t t_mos = d[6];
+        uint8_t t_rotor = d[7];
+        DM10010LFeedbackEvent ev = { motor_id, err, pos, vel, torque, t_mos, current_tick };
+        (void)MsgCenter_Publish(TOPIC_DM10010L_FEEDBACK, &ev, sizeof(ev));
+    }
+    
 }
 
 extern CAN_Manager_t can1_manager;
@@ -181,6 +197,37 @@ HAL_StatusTypeDef CAN_Manager_SendGM6020Current(CAN_HandleTypeDef *hcan, uint8_t
     tx.DLC   = 8;
     d[slot*2 + 0] = (uint8_t)((current >> 8) & 0xFF);
     d[slot*2 + 1] = (uint8_t)( current       & 0xFF);
+    HAL_StatusTypeDef st = HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
+    CAN_Manager_t *m = NULL;
+    if (hcan == can1_manager.hcan) m = &can1_manager; else if (hcan == can2_manager.hcan) m = &can2_manager;
+    if (m) {
+        if (st == HAL_OK) m->tx_ok++; else m->tx_err++;
+        m->last_tx_time = HAL_GetTick();
+    }
+    return st;
+}
+
+HAL_StatusTypeDef CAN_Manager_SendDM10010LPOSVES(CAN_HandleTypeDef *hcan, uint8_t motor_id, float position_des, float velocity_des)
+{
+    if (hcan == NULL) return HAL_ERROR;
+    static uint32_t last_tx_tick = 0;   
+    uint32_t now = HAL_GetTick();
+    if (now - last_tx_tick < 1.5) {
+        return HAL_OK;
+    }    
+    if (motor_id < 1 || motor_id > 7) return HAL_ERROR;
+    uint16_t stdId = 0x100 + motor_id;  // CAN ID = 0x100 + motor_id
+    CAN_TxHeaderTypeDef tx = (CAN_TxHeaderTypeDef){0};
+    uint8_t d[8] = {0};
+    uint32_t mb;
+    // 打包位置（float，低位在前）
+    memcpy(&d[0], &position_des, 4);
+    // 打包速度（float，低位在前）
+    memcpy(&d[4], &velocity_des, 4);
+    tx.StdId = stdId;
+    tx.IDE   = CAN_ID_STD;
+    tx.RTR   = CAN_RTR_DATA;
+    tx.DLC   = 8;
     HAL_StatusTypeDef st = HAL_CAN_AddTxMessage(hcan, &tx, d, &mb);
     CAN_Manager_t *m = NULL;
     if (hcan == can1_manager.hcan) m = &can1_manager; else if (hcan == can2_manager.hcan) m = &can2_manager;

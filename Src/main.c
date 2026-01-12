@@ -296,6 +296,13 @@ int main(void)
 
     LED_SetRGB(0, 1, 0);
 
+    // Send DM10010L motor command for slow rotation (example: motor ID 1, position 0, velocity 1.0 rad/s)
+    static uint32_t last_dm_send_tick = 0;
+    if (current_tick - last_dm_send_tick > 10) {  // Send every 10ms
+      CAN_Manager_SendDM10010LPOSVEL(&hcan1, 1, 0.0f, 1.0f);  // Position: 0, Velocity: 1.0 (slow rotation)
+      last_dm_send_tick = current_tick;
+    }
+
 	  HAL_Delay(CMD_REFRESH_INTERVAL_MS);
     /* USER CODE END WHILE */
   }

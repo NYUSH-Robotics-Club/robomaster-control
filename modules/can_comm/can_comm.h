@@ -28,6 +28,18 @@ typedef struct {
     int16_t   current; 
 } GM6020FeedbackEvent;
 
+// DM10010L feedback: position, velocity, torque, temperatures
+typedef struct {
+    uint8_t motor_id;  // Motor ID (from D[0] low 4 bits)
+    uint8_t err;       // Error status (from D[0] high 4 bits)
+    int16_t pos;       // Position (16-bit, D[1-2])
+    int16_t vel;       // Velocity (12-bit, D[3-4] bits 11:0)
+    int16_t torque;    // Torque (12-bit, D[4-5] bits 15:4 and 3:0)
+    uint8_t t_mos;     // MOS temperature (D[6])
+    uint8_t t_rotor;   // Rotor temperature (D[7])
+    uint32_t timestamp;
+} DM10010LFeedbackEvent;
+
 #endif // CAN_COMM_H
 
 
