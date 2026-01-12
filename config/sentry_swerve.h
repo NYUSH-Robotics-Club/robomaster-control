@@ -14,6 +14,7 @@
  * CAN2:
  * - 1x M3508 (ID 1): shooter feed motor
  * - 1x GM6020 (ID 5): gimbal pitch motor
+ * - 2x M3508 (ID 6, 8): friction wheels
  */
 
 // ========== MOTOR LIST ==========
@@ -135,6 +136,39 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         },
         .pid_outer = {20.0f, 0.0f, 2.0f, 30000.0f, 25000.0f}, // Pitch angle PID
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f} // Not used for pitch (single-loop control)
+    },
+
+    // --------------------------
+    // SHOOTER FRICTION WHEELS (M3508) — CAN2
+    // --------------------------
+    // Friction wheel 1 (M3508 hardware ID 6 => RX 0x206) - Left/Upper wheel
+    {
+        .motor_id = 9,  // FIXED: Use motor_id 9 (was 5, conflicted with Steer A)
+        .type = MOTOR_TYPE_M3508,
+        .role = MOTOR_ROLE_SHOOTER_FRICTION,
+        .can_channel = CAN_CHANNEL_2,
+        .can_rx_id = 0x206, // Hardware ID 6
+        .can_tx_id = 0x1FF, // M3508 ID 5-8 use 0x1FF
+        .tx_slot = 1,       // Slot 1 in 0x1FF frame (hardware_id - 5 = 6 - 5 = 1)
+        .direction = +1,
+        .limits.m3508 = {.speed_limit = 10000.0f},
+        .pid_outer = {5.0f, 0.5f, 0.1f, 15000.0f, 7500.0f}, // Friction wheel PID
+        .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
+    },
+
+    // Friction wheel 2 (M3508 hardware ID 8 => RX 0x208) - Right/Lower wheel
+    {
+        .motor_id = 10,  // Use motor_id 10 (next available)
+        .type = MOTOR_TYPE_M3508,
+        .role = MOTOR_ROLE_SHOOTER_FRICTION,
+        .can_channel = CAN_CHANNEL_2,
+        .can_rx_id = 0x208, // Hardware ID 8
+        .can_tx_id = 0x1FF, // M3508 ID 5-8 use 0x1FF
+        .tx_slot = 3,       // Slot 3 in 0x1FF frame (hardware_id - 5 = 8 - 5 = 3)
+        .direction = +1,
+        .limits.m3508 = {.speed_limit = 10000.0f},
+        .pid_outer = {5.0f, 0.5f, 0.1f, 15000.0f, 7500.0f}, // Friction wheel PID
+        .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
     }};
 
 // ========== ROBOT CONFIG ==========
@@ -142,9 +176,9 @@ static const RobotConfig_t g_robot_config_sentry_swerve = {
     .name = "Sentry Swerve Standard",
     .chassis_motor_count = 6, // 4 drive + 2 steer
     .gimbal_motor_count = 2,  // 1 yaw motor (CAN1) + 1 pitch motor (CAN2)
-    .shooter_motor_count = 1, // 1 feed motor (CAN2)
+    .shooter_motor_count = 3, // 1 feed motor + 2 friction wheels (CAN2)
     .motor_configs = g_motor_configs_sentry_swerve,
-    .total_motor_count = 9,   // 6 chassis + 2 gimbal + 1 shooter
+    .total_motor_count = 11,  // 6 chassis + 2 gimbal + 3 shooter
     .enable_imu_calibration = 0 // Sentry does not need IMU calibration
 };
 
