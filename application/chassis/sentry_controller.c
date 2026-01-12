@@ -144,12 +144,15 @@ void ChassisController_Update(ChassisController *controller,
       drive_direction = -1.0f;
     }
 
-    // Shortest path optimization
+    // Shortest path optimization (FIXED: use initial_angle as reference, not last_target)
     if (s_steer_motor_count > 0) {
       MotorContext_t *ctx0 = MotorDriver_GetContext(s_steer_motor_ids[0]);
       if (ctx0 && ctx0->config && ctx0->angle_initialized) {
         float initial0 = (float)ctx0->config->limits.gm6020.initial_angle;
-        float last_target0 = controller->steer_target_angles[0];
+
+        // CRITICAL FIX: Compare against initial_angle (zero position), not last_target
+        // This prevents accumulated drift over multiple movements
+        float current_angle0 = (float)ctx0->angle_raw;
 
         float option1_angle = initial0 + canonical_angle_ticks;
         while (option1_angle >= 8192.0f) option1_angle -= 8192.0f;
@@ -159,11 +162,12 @@ void ChassisController_Update(ChassisController *controller,
         while (option2_angle >= 8192.0f) option2_angle -= 8192.0f;
         while (option2_angle < 0.0f) option2_angle += 8192.0f;
 
-        float diff1 = option1_angle - last_target0;
+        // Calculate shortest path from CURRENT position (not last_target)
+        float diff1 = option1_angle - current_angle0;
         if (diff1 > 4096.0f) diff1 -= 8192.0f;
         if (diff1 < -4096.0f) diff1 += 8192.0f;
 
-        float diff2 = option2_angle - last_target0;
+        float diff2 = option2_angle - current_angle0;
         if (diff2 > 4096.0f) diff2 -= 8192.0f;
         if (diff2 < -4096.0f) diff2 += 8192.0f;
 
@@ -202,10 +206,19 @@ void ChassisController_Update(ChassisController *controller,
       }
     }
   } else {
-    // Joystick released, stop all drive motors
+    // Joystick released: stop drive motors AND reset steer to zero position
+    // CRITICAL FIX: Reset to initial_angle to prevent accumulated drift
     if (s_drive_motor_count >= 4) {
       for (uint8_t i = 0; i < s_drive_motor_count; i++) {
         controller->target_speeds[i] = 0.0f;
+      }
+    }
+
+    // Reset steer motors to initial_angle (zero position memory)
+    for (uint8_t i = 0; i < s_steer_motor_count; i++) {
+      MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
+      if (ctx && ctx->config && ctx->angle_initialized) {
+        controller->steer_target_angles[i] = (float)ctx->config->limits.gm6020.initial_angle;
       }
     }
   }
