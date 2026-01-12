@@ -5,10 +5,10 @@
 
 /**
  * Sentry / Swerve Chassis Config
- * - 4x M3508: wheel drive motors
- * - 2x GM6020: wheel rotator / steering motors
- *
- * NOTE: Shooter/gimbal counts are set to 0 in RobotConfig_t.
+ * - 4x M3508: wheel drive motors (CAN1)
+ * - 2x GM6020: wheel rotator / steering motors (CAN1)
+ * - 1x GM6020: gimbal yaw motor (CAN1)
+ * - 1x M3508: shooter feed motor (CAN2, ID 1 to avoid GM6020 conflict)
  */
 
 // ========== MOTOR LIST ==========
@@ -88,6 +88,25 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         },
         .pid_outer = {3.0f, 0.06f, 0.055f, 500.0f, 400.0f},  // Angle → Speed (aggressive)
         .pid_inner = {35.0f, 0.7f, 7.0f, 30000.0f, 8000.0f} // Speed → Current (very aggressive)
+    },
+
+    // --------------------------
+    // SHOOTER FEED (M3508) — CAN2
+    // --------------------------
+    // Feed/turntable motor (M3508 ID 1 => RX 0x201)
+    // Uses CAN2 to avoid conflict with future GM6020 Pitch motor
+    {
+        .motor_id = 4,
+        .type = MOTOR_TYPE_M3508,
+        .role = MOTOR_ROLE_SHOOTER_FEED,
+        .can_channel = CAN_CHANNEL_2,
+        .can_rx_id = 0x201, // Hardware ID 1 (avoids GM6020 ID 1-4 conflict on 0x205-0x208)
+        .can_tx_id = 0x200, // M3508 ID 1-4 use 0x200
+        .tx_slot = 0,
+        .direction = +1,
+        .limits.m3508 = {.speed_limit = 10000.0f},
+        .pid_outer = {1.0f, 0.0f, 0.0f, 15000.0f, 7500.0f},
+        .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
     }};
 
 // ========== ROBOT CONFIG ==========
@@ -95,9 +114,9 @@ static const RobotConfig_t g_robot_config_sentry_swerve = {
     .name = "Sentry Swerve Standard",
     .chassis_motor_count = 6, // 4 drive + 2 steer
     .gimbal_motor_count = 1,  // 1 yaw motor
-    .shooter_motor_count = 0,
+    .shooter_motor_count = 1, // 1 feed motor
     .motor_configs = g_motor_configs_sentry_swerve,
-    .total_motor_count = 7,   // 6 chassis + 1 gimbal
+    .total_motor_count = 8,   // 6 chassis + 1 gimbal + 1 shooter
     .enable_imu_calibration = 0 // Sentry does not need IMU calibration
 };
 
