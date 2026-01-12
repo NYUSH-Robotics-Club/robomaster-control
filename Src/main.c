@@ -66,7 +66,7 @@
 
 // Minimized delays for maximum response speed
 #define WAIT_ESC_BOOT_MS                (200U)  // Reduced from 500ms → 200ms
-#define CMD_REFRESH_INTERVAL_MS         (2U)    // Removed delay → max speed loop
+#define CMD_REFRESH_INTERVAL_MS         (1U)    // 1000Hz main loop (reduced from 2ms for lower latency)
 // RC loss timeout for health gating
 #define RC_LOSS_TIMEOUT_MS              (200U)
 // USART6 hello message send interval

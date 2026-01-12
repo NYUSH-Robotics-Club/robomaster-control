@@ -13,7 +13,7 @@
 #define SAMPLE_COUNT 10
 #define REFRESH_HZ 200
 #define REFRESH_DT (1.0 / REFRESH_HZ)
-#define VISION_CMD_TIMEOUT_MS 30u  // Reduced from 80ms → faster loss detection
+#define VISION_CMD_TIMEOUT_MS 20u  // Reduced from 30ms → faster loss detection (150Hz vision = 6.67ms, 3 frames = 20ms)
 
 // ==========================
 // Small gyro (spinning) mode

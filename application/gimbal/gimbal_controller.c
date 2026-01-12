@@ -17,6 +17,10 @@ static uint8_t s_yaw_motor_id = 0xFF;
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.5f)  // Reduced filtering for faster response (was 0.3)
 #define CURRENT_LIMIT (30000.0f)
 
+// Gimbal tilt compensation parameters
+#define GIMBAL_HEIGHT_CM (30.0f)  // 云台距地面高度 30cm
+#define COMPENSATION_UPDATE_RATE_MS (100) // 更新补偿值的频率 100ms
+
 // Legacy defines (not used anymore - values from config)
 #define YAW_RPM_MAX (220.0f) * 2.0f
 #define YAW_RPM_MIN 0.0f
@@ -27,16 +31,62 @@ static SensorData s_last_sensor;
 static bool s_initialized = false;
 
 int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized,
-                                      SensorData *sensor_data) {
+                                      SensorData *sensor_data, bool disable_yaw_pitch_compensation) {
   (void)sensor_data; // Not used for pitch
   MotorContext_t *c = MotorDriver_GetContext(id);
+  MotorContext_t *yaw = MotorDriver_GetContext(s_yaw_motor_id);
   if (!c || !c->angle_initialized) {
     return 0;
   }
 
+  // 保存上一次的yaw角度用于计算yaw速度
+  static float last_yaw_angle = 0.0f;
+  static uint32_t last_yaw_time = 0;
+
   // Joystick control with sensitivity scaling
   float sensitivity = 60.0f; // Increased for more responsive tracking
   c->angle_target += c->config->direction * sensitivity * rate_normalized;
+
+  // === Pitch补偿：补偿yaw旋转带来的pitch耦合效应 ===
+  // 当yaw旋转时，如果pitch有角度，会产生pitch方向的视觉偏移
+  // 补偿公式：Δpitch = sin(Δyaw) * tan(pitch)
+  // 自瞄时禁用此补偿，因为视觉系统不控制pitch，避免干扰
+  if (!disable_yaw_pitch_compensation && yaw && yaw->angle_initialized && c->angle_initialized) {
+    uint32_t current_time = HAL_GetTick();
+    float current_yaw_angle = (float)yaw->angle_raw;
+
+    // 计算yaw角度变化（处理0-8192的环绕）
+    float yaw_delta = current_yaw_angle - last_yaw_angle;
+    if (yaw_delta > 4096.0f) {
+      yaw_delta -= 8192.0f;
+    } else if (yaw_delta < -4096.0f) {
+      yaw_delta += 8192.0f;
+    }
+
+    // 只有当yaw有显著变化且时间间隔合理时才计算补偿
+    if (fabsf(yaw_delta) > 1.0f && (current_time - last_yaw_time) > 0) {
+      // 获取当前pitch角度
+      float max_encoder = (c->config->limits.gm6020.angle_max > 0.0f)
+                              ? c->config->limits.gm6020.angle_max
+                              : 8192.0f;
+      float current_angle = (float)c->angle_raw;
+      float pitch_angle_rad = (current_angle / max_encoder) * (2.0f * (float)M_PI);
+
+      // 将yaw变化转换为弧度
+      float yaw_delta_rad = (yaw_delta / 8192.0f) * (2.0f * (float)M_PI);
+
+      // 计算pitch补偿（编码器刻度）
+      // Δpitch = sin(Δyaw) * tan(pitch_current)
+      float pitch_compensation_rad = sinf(yaw_delta_rad) * tanf(pitch_angle_rad);
+      float pitch_compensation_ticks = pitch_compensation_rad * (max_encoder / (2.0f * (float)M_PI));
+
+      // 应用补偿到pitch目标角度（反向补偿以抵消耦合效应）
+      c->angle_target -= pitch_compensation_ticks;
+    }
+
+    last_yaw_angle = current_yaw_angle;
+    last_yaw_time = current_time;
+  }
 
   // Determine if this is pitch motor (has angle limits)
   bool is_pitch_motor = (c->role == MOTOR_ROLE_GIMBAL_PITCH);
@@ -207,6 +257,119 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   return (int16_t)cmd_speed_to_current;
 }
 
+/**
+ * @brief 计算并显示云台倾斜角度补偿值
+ *
+ * 当云台pitch轴倾斜时，为了锁定地面目标，需要计算yaw角度补偿
+ * 补偿量 = atan(sin(yaw_delta) * tan(pitch))
+ *
+ * 物理模型：
+ * - 云台高度：30cm
+ * - pitch角度：θ_p (正值向上)
+ * - yaw旋转：θ_y
+ * - 当yaw旋转时，由于pitch不为0，会产生垂直方向的指向偏移
+ */
+void GimbalController_CalculateAndDisplayCompensation(void) {
+  static uint32_t last_update_time = 0;
+  uint32_t current_time = HAL_GetTick();
+
+  // 限制更新频率，避免刷屏
+  if (current_time - last_update_time < COMPENSATION_UPDATE_RATE_MS) {
+    return;
+  }
+  last_update_time = current_time;
+
+  // 获取pitch和yaw电机上下文
+  MotorContext_t *pitch = MotorDriver_GetContext(s_pitch_motor_id);
+  MotorContext_t *yaw = MotorDriver_GetContext(s_yaw_motor_id);
+
+  if (!pitch || !pitch->angle_initialized || !yaw || !yaw->angle_initialized) {
+    return;
+  }
+
+  // 计算当前pitch角度（弧度）
+  float max_encoder_pitch = (pitch->config->limits.gm6020.angle_max > 0.0f)
+                              ? pitch->config->limits.gm6020.angle_max
+                              : 8192.0f;
+  float pitch_angle_normalized = (float)pitch->angle_raw / max_encoder_pitch;
+  float pitch_angle_rad = pitch_angle_normalized * (2.0f * (float)M_PI);
+  float pitch_angle_deg = pitch_angle_rad * 180.0f / (float)M_PI;
+
+  // 计算当前yaw角度（度）
+  float max_encoder_yaw = (yaw->config->limits.gm6020.angle_max > 0.0f)
+                            ? yaw->config->limits.gm6020.angle_max
+                            : 8192.0f;
+  float yaw_angle_deg = ((float)yaw->angle_raw / max_encoder_yaw) * 360.0f;
+
+  // 计算目标水平距离（假设目标在地面上）
+  // tan(pitch) = height / distance
+  // distance = height / tan(pitch)
+  float target_distance_cm = 0.0f;
+  float pitch_for_distance = pitch_angle_rad;
+
+  if (fabsf(pitch_for_distance) > 0.01f) { // 避免除零
+    target_distance_cm = GIMBAL_HEIGHT_CM / tanf(pitch_for_distance);
+  }
+
+  // 计算yaw旋转1度时的补偿量
+  // 当pitch不为0时，yaw旋转会导致俯仰角度的视觉偏移
+  // 补偿公式：Δpitch ≈ sin(Δyaw) * tan(pitch)
+  float yaw_delta_rad = 1.0f * (float)M_PI / 180.0f; // 1度
+  float pitch_compensation_rad = sinf(yaw_delta_rad) * tanf(pitch_angle_rad);
+  float pitch_compensation_deg = pitch_compensation_rad * 180.0f / (float)M_PI;
+
+  // 计算yaw补偿（用于保持指向同一目标）
+  // 当pitch角度改变时，如果要保持指向相同水平距离的点
+  // yaw角度需要微调
+  float yaw_compensation_per_pitch_deg = 0.0f;
+  if (fabsf(cosf(pitch_angle_rad)) > 0.01f) {
+    // Δyaw ≈ sin(pitch) * Δpitch / cos(pitch)
+    yaw_compensation_per_pitch_deg = sinf(pitch_angle_rad) / cosf(pitch_angle_rad);
+  }
+
+  // 显示补偿信息
+  USB_CDC_Printf("\r\n=== 云台角度补偿计算 ===\r\n");
+  USB_CDC_Printf("云台高度: %.1f cm\r\n", GIMBAL_HEIGHT_CM);
+  USB_CDC_Printf("当前Pitch角度: %.2f° (%.4f rad)\r\n", pitch_angle_deg, pitch_angle_rad);
+  USB_CDC_Printf("当前Yaw角度: %.2f°\r\n", yaw_angle_deg);
+
+  // 显示pitch控制模式
+  if (s_last_cmd.vision_valid) {
+    USB_CDC_Printf("Pitch控制: 遥控器手动 (自瞄时视觉不控制pitch)\r\n");
+  } else {
+    USB_CDC_Printf("Pitch控制: 遥控器手动 + Yaw-Pitch耦合补偿\r\n");
+  }
+
+  if (fabsf(pitch_for_distance) > 0.01f && target_distance_cm > 0.0f) {
+    USB_CDC_Printf("目标水平距离: %.1f cm\r\n", target_distance_cm);
+  } else if (target_distance_cm < 0.0f) {
+    USB_CDC_Printf("目标水平距离: %.1f cm (目标在云台后方)\r\n", -target_distance_cm);
+  } else {
+    USB_CDC_Printf("目标水平距离: 无穷远 (pitch≈0°)\r\n");
+  }
+
+  USB_CDC_Printf("\r\n补偿值:\r\n");
+  USB_CDC_Printf("- Yaw旋转1°时的Pitch耦合: %.4f° (%.6f rad)\r\n",
+                 pitch_compensation_deg, pitch_compensation_rad);
+  USB_CDC_Printf("- Pitch变化1°时需要的Yaw补偿系数: %.4f\r\n",
+                 yaw_compensation_per_pitch_deg);
+
+  // 计算实际补偿到编码器刻度
+  float pitch_comp_ticks = pitch_compensation_rad * (max_encoder_pitch / (2.0f * (float)M_PI));
+  USB_CDC_Printf("- Yaw旋转1°的Pitch补偿(编码器刻度): %.2f ticks\r\n", pitch_comp_ticks);
+
+  USB_CDC_Printf("========================\r\n\r\n");
+
+  // 记录到日志（CSV格式，便于后续分析）
+  LOG_CSV(LOG_TAG_GIM, "COMPENSATION,%.2f,%.2f,%.1f,%.4f,%.4f,%.2f",
+          pitch_angle_deg,
+          yaw_angle_deg,
+          target_distance_cm,
+          pitch_compensation_deg,
+          yaw_compensation_per_pitch_deg,
+          pitch_comp_ticks);
+}
+
 // Application layer: Message subscription callbacks
 static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
   (void)user;
@@ -297,13 +460,19 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
       }
 
       int16_t pitch_current = GimbalController_PitchControl(
-          s_pitch_motor_id, use_vision_target ? 0.0f : s_last_cmd.pitch_rate,
-          &s_last_sensor);
+          s_pitch_motor_id,
+          s_last_cmd.pitch_rate,  // 遥控器始终可以控制pitch
+          &s_last_sensor,
+          use_vision_target  // 自瞄时禁用yaw-pitch耦合补偿
+      );
       int16_t yaw_current = GimbalController_YawControlWithCompensation(
           (use_vision_target || use_spin_hold) ? 0.0f : s_last_cmd.yaw_rate,
           &s_last_sensor,
           use_spin_hold // Use IMU feedback only in spin mode
       );
+
+      // 计算并显示云台倾斜角度补偿（每100ms更新一次）
+      GimbalController_CalculateAndDisplayCompensation();
 
       // Send motor currents (buffered, will be flushed by message center)
       MotorDriver_SendCurrent(s_pitch_motor_id, pitch_current);

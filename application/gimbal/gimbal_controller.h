@@ -27,12 +27,13 @@ void last_data(float last_yaw_rate, float last_yaw_target);
 /**
  * @brief Pitch control with normalized rate command
  * @param id Motor ID (7=Pitch)
- * @param rate_normalized Normalized pitch rate (-1.0 to 1.0)
+ * @param rate_normalized Normalized pitch rate (-1.0 to 1.0, always responds to joystick)
  * @param sensor_data Sensor data pointer
+ * @param disable_yaw_pitch_compensation Disable yaw-pitch coupling compensation (true in auto-aim mode)
  * @return Motor current command
  */
 
-int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data);
+int16_t GimbalController_PitchControl(uint8_t id, float rate_normalized, SensorData* sensor_data, bool disable_yaw_pitch_compensation);
 
 /**
  * @brief Yaw control with compensation (chassis rotation + gyro feedback)
@@ -61,6 +62,14 @@ void GimbalApp_Init(void);
  *       Timeout: 10 seconds
  */
 void Gimbal_WaitForAlignment(void);
+
+/**
+ * @brief Calculate and display gimbal tilt angle compensation
+ * @note Calculates yaw-pitch coupling compensation when gimbal is tilted
+ *       Updates every 100ms, displays via USB CDC and logs to CSV
+ *       Compensation model assumes 30cm gimbal height above ground
+ */
+void GimbalController_CalculateAndDisplayCompensation(void);
 
 
 #ifdef __cplusplus
