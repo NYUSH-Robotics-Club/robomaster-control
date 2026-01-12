@@ -23,6 +23,7 @@
 
 /* USER CODE BEGIN INCLUDE */
 #include "vision_comm.h"
+#include "radar_comm.h"
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -261,8 +262,11 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-  // Vision communication uses USB CDC
+  // Vision communication uses USB CDC (18 bytes)
+  // Radar communication also uses USB CDC (15 bytes: 0xA5 0x5A + 12 data + CRC)
+  // Both can coexist: Vision checks length >= 18, Radar uses frame sync (0xA5 0x5A)
   VisionComm_RxCallback(Buf, *Len);
+  RadarComm_RxCallback(Buf, *Len);
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);

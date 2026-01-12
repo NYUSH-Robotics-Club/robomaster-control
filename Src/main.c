@@ -52,6 +52,7 @@
 #include "app_subscriptions.h"
 #include "cmd_controller.h"
 #include "vision_comm.h"
+#include "radar_comm.h"
 #include "logger.h"
 
 /* USER CODE END Includes */
@@ -338,6 +339,8 @@ int main(void)
 
   // Initialize Vision Communication
   VisionComm_Init();
+  // Initialize Radar communication (USB CDC from NUC)
+  RadarComm_Init();
 
   // Wait for ESC boot
   HAL_Delay(WAIT_ESC_BOOT_MS);
@@ -372,10 +375,14 @@ int main(void)
     // Update sensor data and publishes IMU topic
     gyro_data_update(&sensor_data);
 
-    CmdController_Task(current_tick);
+    // Process radar serial data and publish radar messages
+    RadarComm_Task();
 
-    // Dispatch message center events
+    // Dispatch message center events so subscribers receive latest data
     MsgCenter_Dispatch();
+
+    // Run command controller after dispatch so it sees latest messages
+    CmdController_Task(current_tick);
 
     // Update buzzer music playback (feature for fun :D)
     Buzzer_Update();

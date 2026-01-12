@@ -3,6 +3,9 @@
 #include "remote_control.h"
 #include "gyro_data.h"
 #include "vision_comm.h"
+#include "radar_comm.h"
+#include "chassis_controller.h"
+#include "motor_driver.h"
 #include "printing.h"
 #include "logger.h"
 #include "stm32f4xx_hal.h"
@@ -14,6 +17,11 @@
 #define REFRESH_HZ 200
 #define REFRESH_DT (1.0 / REFRESH_HZ)
 #define VISION_CMD_TIMEOUT_MS 80u
+
+// Radar smoothing parameters
+#define RADAR_SMOOTH_ALPHA 0.20f    // one-pole low-pass alpha (0..1)
+#define RADAR_MAX_DELTA_V 0.05f     // max m/s change per cycle for vx,vy
+#define RADAR_MAX_DELTA_W 0.10f     // max rad/s change per cycle for wz
 
 // ==========================
 // Small gyro (spinning) mode
@@ -47,7 +55,18 @@ static float yaw_storage = 0.0f;
 static RC_ctrl_t s_last_rc;
 static SensorData s_last_sensor;
 static Vision_Recv_s s_last_vision;
+static Radar_Recv_s s_last_radar;
 static bool s_initialized = false;
+
+// Filtered radar outputs (internal state)
+static float s_filtered_vx = 0.0f;
+static float s_filtered_vy = 0.0f;
+static float s_filtered_wz = 0.0f;
+
+// Control mode flags
+#define CONTROL_MODE_RC 0      // Remote control (RC)
+#define CONTROL_MODE_RADAR 1   // Radar/NUC autonomous
+static uint8_t s_control_mode = CONTROL_MODE_RC;  // Default to RC
 
 // Command messages to publish
 static ChassisCmd s_chassis_cmd;
@@ -81,6 +100,217 @@ static void gimbal_to_chassis_frame(float vx_g, float vy_g, float offset_angle_d
     *vy_c = s * vx_g + c * vy_g;
 }
 
+/**
+ * @brief Map radar velocity (vx, vy, wz) to swerve/mecanum wheel speeds
+ * 
+ * NOTE: This function is sentry_swerve specific.
+ * For infantry mecanum, use different mapping (TODO if needed).
+ */
+#ifdef ROBOT_TYPE_sentry_swerve
+static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
+{
+    // Timeout protection: if radar data is stale (>500ms), fall back to RC or stop
+    if (!s_last_radar.valid || (now - s_last_radar.ts_ms > 500u)) {
+        // Data invalid, switch back to RC or stop
+        s_control_mode = CONTROL_MODE_RC;
+        return;
+    }
+    
+    // Radar data valid, use it
+    s_control_mode = CONTROL_MODE_RADAR;
+    
+    // Swerve wheel mapping (simplified)
+    // Wheel positions relative to chassis center:
+    //  Front-Left: (-L, -W),  Front-Right: (-L, W)
+    //  Rear-Left:  (L, -W),   Rear-Right:  (L, W)
+    // For 2-module swerve (front & rear): use average positions
+    
+    const float L = 0.15f;  // Front-to-rear half-length
+    const float W = 0.15f;  // Left-to-right half-width
+    const float r = 0.05f;  // Wheel radius
+    
+    // Module 0 (front): position (-L, 0) -> average of front wheels
+    float v0_x = vx - wz * 0.0f;  // wz * (-y_pos) = wz * 0
+    float v0_y = vy + wz * (-L);
+    float theta0 = atan2f(v0_y, v0_x);
+    float speed0 = sqrtf(v0_x * v0_x + v0_y * v0_y) / r;
+    
+    // Module 1 (rear): position (L, 0) -> average of rear wheels
+    float v1_x = vx - wz * 0.0f;
+    float v1_y = vy + wz * L;
+    float theta1 = atan2f(v1_y, v1_x);
+    float speed1 = sqrtf(v1_x * v1_x + v1_y * v1_y) / r;
+    
+    // Dispatch: set steer target angles and drive target speeds
+    // Convert theta (rad) -> encoder ticks as used by GM6020 (8192 ticks/rev)
+    extern ChassisController* ChassisApp_GetController(void);
+    extern void ChassisController_SetSteerTargetAngles(ChassisController *controller, const float angles[CHASSIS_STEER_COUNT]);
+
+    ChassisController *ctrl = ChassisApp_GetController();
+    if (ctrl) {
+        // Compute canonical tick value from radians
+        float ticks_per_rev = 8192.0f;
+        float rad_to_ticks = ticks_per_rev / (2.0f * (float)M_PI);
+
+        float tick0 = theta0 * rad_to_ticks;
+        float tick1 = theta1 * rad_to_ticks;
+
+        // Normalize to [-4096,4096) then canonicalize to +/-90deg logic similar to sentry
+        float canonical0 = tick0;
+        if (canonical0 > 2048.0f) canonical0 -= 4096.0f;
+        if (canonical0 < -2048.0f) canonical0 += 4096.0f;
+
+        float canonical1 = tick1;
+        if (canonical1 > 2048.0f) canonical1 -= 4096.0f;
+        if (canonical1 < -2048.0f) canonical1 += 4096.0f;
+
+        // Find steer motors and drive motors
+        uint8_t steer_ids[CHASSIS_STEER_COUNT] = {0};
+        uint8_t drive_ids[CHASSIS_MOTOR_COUNT] = {0};
+        uint8_t steer_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_STEER, steer_ids, CHASSIS_STEER_COUNT);
+        uint8_t drive_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE, drive_ids, CHASSIS_MOTOR_COUNT);
+
+        // Determine final angle ticks using initial offset and shortest-path heuristics
+        float final_ticks = canonical0; // default
+        if (steer_count > 0) {
+            MotorContext_t *ctx0 = MotorDriver_GetContext(steer_ids[0]);
+            if (ctx0 && ctx0->config && ctx0->angle_initialized) {
+                float initial0 = (float)ctx0->config->limits.gm6020.initial_angle;
+                float last_target0 = ctrl->steer_target_angles[0];
+
+                float option1 = initial0 + canonical0;
+                while (option1 >= ticks_per_rev) option1 -= ticks_per_rev;
+                while (option1 < 0.0f) option1 += ticks_per_rev;
+
+                float option2 = initial0 + canonical0 + 4096.0f;
+                while (option2 >= ticks_per_rev) option2 -= ticks_per_rev;
+                while (option2 < 0.0f) option2 += ticks_per_rev;
+
+                float diff1 = option1 - last_target0;
+                if (diff1 > 4096.0f) diff1 -= 8192.0f;
+                if (diff1 < -4096.0f) diff1 += 8192.0f;
+
+                float diff2 = option2 - last_target0;
+                if (diff2 > 4096.0f) diff2 -= 8192.0f;
+                if (diff2 < -4096.0f) diff2 += 8192.0f;
+
+                if (fabsf(diff1) <= fabsf(diff2)) {
+                    final_ticks = canonical0;
+                } else {
+                    final_ticks = canonical0 + 4096.0f;
+                    while (final_ticks >= 4096.0f) final_ticks -= 8192.0f;
+                    while (final_ticks < -4096.0f) final_ticks += 8192.0f;
+                }
+            }
+        }
+
+        // Prepare steer angles array (ticks + initial offsets)
+        float steer_angles[CHASSIS_STEER_COUNT] = {0};
+        for (uint8_t i = 0; i < CHASSIS_STEER_COUNT; i++) {
+            MotorContext_t *ctx = MotorDriver_GetContext(steer_ids[i]);
+            if (ctx && ctx->config) {
+                float initial = (float)ctx->config->limits.gm6020.initial_angle;
+                float target_angle = initial + final_ticks;
+                while (target_angle >= ticks_per_rev) target_angle -= ticks_per_rev;
+                while (target_angle < 0.0f) target_angle += ticks_per_rev;
+                steer_angles[i] = target_angle;
+            }
+        }
+
+        // Drive speeds: assign module speeds to front (0,1) and rear (2,3)
+        float drive_speeds[CHASSIS_MOTOR_COUNT] = {0};
+        for (uint8_t i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
+            if (i < 2) {
+                // front module
+                MotorContext_t *dctx = MotorDriver_GetContext(drive_ids[i]);
+                int8_t dir = (dctx && dctx->config) ? dctx->config->direction : 1;
+                drive_speeds[i] = dir * speed0;
+            } else {
+                // rear module
+                MotorContext_t *dctx = MotorDriver_GetContext(drive_ids[i]);
+                int8_t dir = (dctx && dctx->config) ? dctx->config->direction : 1;
+                drive_speeds[i] = dir * speed1;
+            }
+        }
+
+        // Commit to controller state and compute currents immediately
+        ChassisController_SetSteerTargetAngles(ctrl, steer_angles);
+        ChassisController_SetTargetSpeeds(ctrl, drive_speeds);
+        ChassisController_ComputeCurrents(ctrl, HAL_GetTick());
+    }
+    // Safety checks: discard obviously-bad values
+    if (!isfinite(vx) || !isfinite(vy) || !isfinite(wz)) {
+        s_control_mode = CONTROL_MODE_RC;
+        return;
+    }
+
+    // Simple sanity limits (prevent absurd commands)
+    const float MAX_REASONABLE_V = 10.0f; // m/s
+    const float MAX_REASONABLE_W = 10.0f; // rad/s
+    if (fabsf(vx) > MAX_REASONABLE_V || fabsf(vy) > MAX_REASONABLE_V || fabsf(wz) > MAX_REASONABLE_W) {
+        s_control_mode = CONTROL_MODE_RC;
+        return;
+    }
+
+    // One-pole low-pass filter then per-cycle delta cap
+    float prev_vx = s_filtered_vx;
+    float prev_vy = s_filtered_vy;
+    float prev_wz = s_filtered_wz;
+
+    // Low-pass
+    float lp_vx = prev_vx + RADAR_SMOOTH_ALPHA * (vx - prev_vx);
+    float lp_vy = prev_vy + RADAR_SMOOTH_ALPHA * (vy - prev_vy);
+    float lp_wz = prev_wz + RADAR_SMOOTH_ALPHA * (wz - prev_wz);
+
+    // Delta cap
+    float dvx = lp_vx - prev_vx;
+    if (dvx > RADAR_MAX_DELTA_V) dvx = RADAR_MAX_DELTA_V;
+    if (dvx < -RADAR_MAX_DELTA_V) dvx = -RADAR_MAX_DELTA_V;
+    s_filtered_vx = prev_vx + dvx;
+
+    float dvy = lp_vy - prev_vy;
+    if (dvy > RADAR_MAX_DELTA_V) dvy = RADAR_MAX_DELTA_V;
+    
+    if (dvy < -RADAR_MAX_DELTA_V) dvy = -RADAR_MAX_DELTA_V;
+    s_filtered_vy = prev_vy + dvy;
+
+    float dwz = lp_wz - prev_wz;
+    if (dwz > RADAR_MAX_DELTA_W) dwz = RADAR_MAX_DELTA_W;
+    if (dwz < -RADAR_MAX_DELTA_W) dwz = -RADAR_MAX_DELTA_W;
+    s_filtered_wz = prev_wz + dwz;
+
+    // Apply filtered values to chassis command (safe to publish)
+    s_chassis_cmd.vx = s_filtered_vx;
+    s_chassis_cmd.vy = s_filtered_vy;
+    s_chassis_cmd.wz = s_filtered_wz;
+    s_chassis_cmd.enabled = true;
+
+    // Debug log: original vs filtered speeds
+    LOG_CSV(LOG_TAG_CMD, "RADAR,IN:%.3f,%.3f,%.3f,OUT:%.3f,%.3f,%.3f,sp0:%.2f,sp1:%.2f",
+            vx, vy, wz, s_filtered_vx, s_filtered_vy, s_filtered_wz, speed0, speed1);
+}
+#else
+// Infantry (mecanum/2WD) radar mapping - placeholder for future implementation
+static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
+{
+    // Timeout protection
+    if (!s_last_radar.valid || (now - s_last_radar.ts_ms > 500u)) {
+        s_control_mode = CONTROL_MODE_RC;
+        return;
+    }
+    
+    s_control_mode = CONTROL_MODE_RADAR;
+    
+    // For infantry: direct velocity pass-through (chassis_controller handles mapping)
+    s_chassis_cmd.vx = vx;
+    s_chassis_cmd.vy = vy;
+    s_chassis_cmd.wz = wz;
+    s_chassis_cmd.enabled = true;
+    
+    LOG_CSV(LOG_TAG_CMD, "RADAR,%.3f,%.3f,%.3f", vx, vy, wz);
+}
+#endif
+
 // Callback for RC update
 static void on_rc_update(const MsgEvent *ev, void *user_data)
 {
@@ -108,6 +338,16 @@ static void on_vision_update(const MsgEvent *ev, void *user_data)
     if (ev->size == sizeof(Vision_Recv_s))
     {
         memcpy(&s_last_vision, ev->data, sizeof(Vision_Recv_s));
+    }
+}
+
+// Callback for radar data update
+static void on_radar_update(const MsgEvent *ev, void *user_data)
+{
+    (void)user_data;
+    if (ev->size == sizeof(Radar_Recv_s))
+    {
+        memcpy(&s_last_radar, ev->data, sizeof(Radar_Recv_s));
     }
 }
 
@@ -324,13 +564,20 @@ void CmdController_Init(void)
     memset(&s_last_rc, 0, sizeof(s_last_rc));
     memset(&s_last_sensor, 0, sizeof(s_last_sensor));
     memset(&s_last_vision, 0, sizeof(s_last_vision));
+    memset(&s_last_radar, 0, sizeof(s_last_radar));
     memset(&s_chassis_cmd, 0, sizeof(s_chassis_cmd));
     memset(&s_shoot_cmd, 0, sizeof(s_shoot_cmd));
     memset(&s_gimbal_cmd, 0, sizeof(s_gimbal_cmd));
 
+    /* Initialize radar filter state to zero (or last known) */
+    s_filtered_vx = 0.0f;
+    s_filtered_vy = 0.0f;
+    s_filtered_wz = 0.0f;
+
     (void)MsgCenter_Subscribe(TOPIC_RC_UPDATE, on_rc_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_IMU_UPDATE, on_imu_update, NULL);
     (void)MsgCenter_Subscribe(TOPIC_VISION_DATA, on_vision_update, NULL);
+    (void)MsgCenter_Subscribe(TOPIC_RADAR_CMD, on_radar_update, NULL);
 
     s_initialized = true;
 }
@@ -344,40 +591,74 @@ void CmdController_Task(uint32_t current_tick)
         return;
     }
 
-    // Mode selection based on left switch (s[1]) position:
-    // UP   -> Small gyro mode (chassis auto-spins, gimbal holds yaw)
-    // MID  -> Gimbal-follow mode (movement follows gimbal orientation, no auto-spin)
-    // DOWN -> Normal mode (chassis frame movement)
-    bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[1]);
-    bool spin_now = switch_is_up(s_last_rc.rc.s[1]);
+    // ===== CONTROL MODE PRIORITY =====
+    // 1. If radar data is valid and fresh, use radar autonomous mode (sentry only for now)
+    // 2. Otherwise, fall back to RC manual control
+    
+    uint32_t now = HAL_GetTick();
+    
+#ifdef ROBOT_TYPE_sentry_swerve
+    // Sentry: support radar autonomous mode
+    if (s_last_radar.valid && (now - s_last_radar.ts_ms <= 500u)) {
+        // Radar mode: autonomous motion from external controller
+        radar_cmd_to_wheel_speeds(s_last_radar.vx, s_last_radar.vy, s_last_radar.wz, now);
+        // Still process gimbal and shooter from RC/other sources
+        process_shooter_command(&s_last_rc);
+        process_gimbal_command(&s_last_rc, &s_last_sensor, false);  // No spin mode in radar autonomous
+    } else {
+        // RC mode (fallback)
+        bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[1]);
+        bool spin_now = switch_is_up(s_last_rc.rc.s[1]);
 
-    // Spin mode rising edge: latch current gimbal absolute yaw as hold target
-    if (spin_now && !s_spin_mode)
-    {
-        s_spin_hold_yaw_deg = s_last_sensor.yaw_total_angle;
+        // Spin mode rising edge: latch current gimbal absolute yaw as hold target
+        if (spin_now && !s_spin_mode)
+        {
+            s_spin_hold_yaw_deg = s_last_sensor.yaw_total_angle;
+        }
+
+        s_gimbal_follow_mode = gimbal_follow_now;
+        s_spin_mode = spin_now;
+
+        // Process control input (RC mode)
+        process_chassis_command(&s_last_rc, &s_last_sensor, s_spin_mode, s_gimbal_follow_mode);
+        process_shooter_command(&s_last_rc);
+        process_gimbal_command(&s_last_rc, &s_last_sensor, s_spin_mode);
     }
+#else
+    // Infantry: support both RC and radar control
+    // Priority: radar (if valid and fresh) > RC (fallback)
+    if (s_last_radar.valid && (now - s_last_radar.ts_ms <= 500u)) {
+        // Radar mode: autonomous motion from external controller (ROS2/Jetson)
+        radar_cmd_to_wheel_speeds(s_last_radar.vx, s_last_radar.vy, s_last_radar.wz, now);
+        // Still process gimbal and shooter from RC
+        process_shooter_command(&s_last_rc);
+        process_gimbal_command(&s_last_rc, &s_last_sensor, false);  // No spin mode in radar autonomous
+    } else {
+        // RC mode (fallback when radar not available)
+        bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[1]);
+        bool spin_now = switch_is_up(s_last_rc.rc.s[1]);
 
-    s_gimbal_follow_mode = gimbal_follow_now;
-    s_spin_mode = spin_now;
+        // Spin mode rising edge: latch current gimbal absolute yaw as hold target
+        if (spin_now && !s_spin_mode)
+        {
+            s_spin_hold_yaw_deg = s_last_sensor.yaw_total_angle;
+        }
 
-    // Process control input
-    process_chassis_command(&s_last_rc, &s_last_sensor, s_spin_mode, s_gimbal_follow_mode);
-    process_shooter_command(&s_last_rc);
-    process_gimbal_command(&s_last_rc, &s_last_sensor, s_spin_mode);
+        s_gimbal_follow_mode = gimbal_follow_now;
+        s_spin_mode = spin_now;
 
-    // Tagged debug prints for spin mode (10 Hz), to avoid mixing with other logs.
-    // Format: CMD,timestamp_ms,spin,sw0,sw1,c_yaw_deg,g_yaw_total_deg,hold_yaw_deg,yaw_err_deg,yaw_rate_cmd,vx_cmd,vy_cmd,wz_cmd
-    // Note: timestamp is added automatically by logger (rate limited to 10Hz in main.c)
-    float yaw_err_deg = s_spin_hold_yaw_deg - s_last_sensor.yaw_total_angle;
-    LOG_CSV(LOG_TAG_CMD, "%u,%u,%u,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f",
-            (unsigned int)(s_spin_mode ? 1U : 0U),
-            (unsigned int)((uint8_t)s_last_rc.rc.s[0]),
-            (unsigned int)((uint8_t)s_last_rc.rc.s[1]),
-            s_last_sensor.c_yaw,
-            s_last_sensor.yaw_total_angle,
-            s_spin_hold_yaw_deg,
-            yaw_err_deg,
-            s_gimbal_cmd.yaw_rate,
+        // Process control input (RC mode)
+        process_chassis_command(&s_last_rc, &s_last_sensor, s_spin_mode, s_gimbal_follow_mode);
+        process_shooter_command(&s_last_rc);
+        process_gimbal_command(&s_last_rc, &s_last_sensor, s_spin_mode);
+    }
+#endif
+
+    // Tagged debug prints for control mode (10 Hz)
+    // Format: CMD,ctrl_mode(RC/RADAR),vx_cmd,vy_cmd,wz_cmd
+    const char *mode_str = (s_control_mode == CONTROL_MODE_RADAR) ? "RADAR" : "RC";
+    LOG_CSV(LOG_TAG_CMD, "%s,%.3f,%.3f,%.3f",
+            mode_str,
             s_chassis_cmd.vx,
             s_chassis_cmd.vy,
             s_chassis_cmd.wz);

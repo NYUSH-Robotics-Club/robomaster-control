@@ -13,7 +13,7 @@
 // ============================================================================
 
 #define LOG_ENABLE_SYS    0  // System/boot messages
-#define LOG_ENABLE_CMD    0  // Command controller
+#define LOG_ENABLE_CMD    1  // Command controller - ENABLED for radar debug
 #define LOG_ENABLE_CHA    0  // Chassis controller
 #define LOG_ENABLE_GIM    1  // Gimbal controller - ENABLED for YAW plotting
 #define LOG_ENABLE_SHO    0  // Shooter controller
@@ -23,7 +23,7 @@
 #define LOG_ENABLE_CAN    0  // CAN communication
 #define LOG_ENABLE_VIS    0  // Vision communication
 #define LOG_ENABLE_RC     0  // Remote control
-#define LOG_ENABLE_DEBUG  0  // General debug
+#define LOG_ENABLE_DEBUG  1  // General debug - ENABLED for radar debug
 
 // ============================================================================
 // Default Rate Limits (milliseconds)

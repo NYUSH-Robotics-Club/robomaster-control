@@ -19,6 +19,7 @@ typedef enum {
     TOPIC_SHOOT_CMD,
     TOPIC_GIMBAL_CMD,
     TOPIC_VISION_DATA,     // Vision data from upper computer
+    TOPIC_RADAR_CMD,       // Radar velocity command (vx,vy,wz)
     TOPIC_NUM_TOPICS
 } MsgTopic;
 

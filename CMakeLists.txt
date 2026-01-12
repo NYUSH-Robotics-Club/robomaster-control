@@ -136,6 +136,7 @@ add_library(modules STATIC
     modules/vision_comm/crc16.c
     modules/vision_comm/seasky_protocol.c
     modules/vision_comm/vision_comm.c
+    modules/radar_comm/radar_comm.c
 )
 
 target_include_directories(modules PUBLIC
@@ -143,6 +144,7 @@ target_include_directories(modules PUBLIC
     modules
     modules/message_center
     modules/can_comm
+    modules/radar_comm
     modules/debug_print
     modules/algorithm
     modules/motor
@@ -209,6 +211,7 @@ target_include_directories(application PUBLIC
     modules/remote
     modules/imu
     modules/vision_comm
+    modules/radar_comm
     Inc
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F4xx/Include
