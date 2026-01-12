@@ -5,10 +5,15 @@
 
 /**
  * Sentry / Swerve Chassis Config
- * - 4x M3508: wheel drive motors (CAN1)
- * - 2x GM6020: wheel rotator / steering motors (CAN1)
- * - 1x GM6020: gimbal yaw motor (CAN1)
- * - 1x M3508: shooter feed motor (CAN2, ID 1 to avoid GM6020 conflict)
+ *
+ * CAN1:
+ * - 4x M3508 (ID 1-4): wheel drive motors
+ * - 2x GM6020 (ID 5-6): wheel steering motors
+ * - 1x GM6020 (ID 7): gimbal yaw motor
+ *
+ * CAN2:
+ * - 1x M3508 (ID 1): shooter feed motor
+ * - 1x GM6020 (ID 5): gimbal pitch motor
  */
 
 // ========== MOTOR LIST ==========
@@ -94,29 +99,52 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
     // SHOOTER FEED (M3508) — CAN2
     // --------------------------
     // Feed/turntable motor (M3508 ID 1 => RX 0x201)
-    // Uses CAN2 to avoid conflict with future GM6020 Pitch motor
     {
         .motor_id = 4,
         .type = MOTOR_TYPE_M3508,
         .role = MOTOR_ROLE_SHOOTER_FEED,
         .can_channel = CAN_CHANNEL_2,
-        .can_rx_id = 0x201, // Hardware ID 1 (avoids GM6020 ID 1-4 conflict on 0x205-0x208)
+        .can_rx_id = 0x201, // Hardware ID 1
         .can_tx_id = 0x200, // M3508 ID 1-4 use 0x200
         .tx_slot = 0,
         .direction = +1,
         .limits.m3508 = {.speed_limit = 10000.0f},
         .pid_outer = {1.0f, 0.0f, 0.0f, 15000.0f, 7500.0f},
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
+    },
+
+    // --------------------------
+    // GIMBAL PITCH (GM6020) — CAN2
+    // --------------------------
+    // Pitch gimbal motor (GM6020 ID 5 => RX 0x209)
+    // Uses CAN2 with ID 5 to avoid confusion with Yaw (CAN1 ID 7)
+    {
+        .motor_id = 8,
+        .type = MOTOR_TYPE_GM6020,
+        .role = MOTOR_ROLE_GIMBAL_PITCH,
+        .can_channel = CAN_CHANNEL_2,
+        .can_rx_id = 0x209, // GM6020: 0x204 + 5
+        .can_tx_id = 0x2FF, // GM6020 ID 5-7 use 0x2FF
+        .tx_slot = 0,       // Motor 5 -> slot 0 (motor_id - 5)
+        .direction = -1,    // Pitch direction correction
+        .limits.gm6020 = {
+            .angle_min = 1000.0f,
+            .angle_max = 4000.0f,
+            .gravity_compensation = 5000.0f, // Gravity compensation for pitch
+            .initial_angle = -1.0f // Auto-init: use current angle on first feedback
+        },
+        .pid_outer = {20.0f, 0.0f, 2.0f, 30000.0f, 25000.0f}, // Pitch angle PID
+        .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f} // Not used for pitch (single-loop control)
     }};
 
 // ========== ROBOT CONFIG ==========
 static const RobotConfig_t g_robot_config_sentry_swerve = {
     .name = "Sentry Swerve Standard",
     .chassis_motor_count = 6, // 4 drive + 2 steer
-    .gimbal_motor_count = 1,  // 1 yaw motor
-    .shooter_motor_count = 1, // 1 feed motor
+    .gimbal_motor_count = 2,  // 1 yaw motor (CAN1) + 1 pitch motor (CAN2)
+    .shooter_motor_count = 1, // 1 feed motor (CAN2)
     .motor_configs = g_motor_configs_sentry_swerve,
-    .total_motor_count = 8,   // 6 chassis + 1 gimbal + 1 shooter
+    .total_motor_count = 9,   // 6 chassis + 2 gimbal + 1 shooter
     .enable_imu_calibration = 0 // Sentry does not need IMU calibration
 };
 
