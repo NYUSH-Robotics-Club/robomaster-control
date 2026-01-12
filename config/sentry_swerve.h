@@ -87,7 +87,7 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
             .initial_angle = -1.0f // Auto-init: use current angle on first feedback
         },
         .pid_outer = {1.5f, 0.06f, 0.025f, 500.0f, 400.0f},  // Angle → Speed (aggressive)
-        .pid_inner = {60.0f, 0.02f, 5.0f, 30000.0f, 8000.0f} // Speed → Current (very aggressive)
+        .pid_inner = {30.0f, 0.02f, 2.5f, 30000.0f, 8000.0f} // Speed → Current (very aggressive)
     }};
 
 // ========== ROBOT CONFIG ==========
