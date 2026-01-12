@@ -52,29 +52,55 @@ class SerialForwarder:
         self.baud = baud
         self.timeout = timeout
         self.ser = None
+        self.lock = threading.Lock()  # 线程锁
+        self.last_reconnect_attempt = 0
+        self.reconnect_interval = 2.0  # 2秒重连冷却
 
     def open(self):
-        self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
-        time.sleep(0.2)
-        # Start background reader to print incoming STM32 logs
-        self._reader_run = True
-        self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
-        self._reader_thread.start()
-
-    def close(self):
-        if self.ser and self.ser.is_open:
-            self._reader_run = False
+        with self.lock:
+            if self.ser and self.ser.is_open:
+                return
             try:
-                self.ser.close()
-            except Exception:
-                pass
+                self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
+                time.sleep(0.2)
+                # 启动读取线程（避免重复启动）
+                if not getattr(self, '_reader_run', False):
+                    self._reader_run = True
+                    self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
+                    self._reader_thread.start()
+                print(f"Serial port {self.port} opened.")
+            except Exception as e:
+                print(f"Error opening serial port: {e}")
+                self.ser = None
 
     def send(self, vx: float, vy: float, wz: float):
         frame = encode_radar_cmd(vx, vy, wz)
+        
+        # 检查是否连接，带有冷却机制
         if not self.ser or not self.ser.is_open:
-            self.open()
-        self.ser.write(frame)
-        # Note: flush() removed - let OS handle buffering for better performance
+            now = time.time()
+            if now - self.last_reconnect_attempt > self.reconnect_interval:
+                self.last_reconnect_attempt = now
+                self.open()
+            return  # 如果还在冷却期或打开失败，直接丢弃这帧数据，不要阻塞
+
+        try:
+            with self.lock:
+                self.ser.write(frame)
+                # Note: flush() removed - let OS handle buffering for better performance
+        except Exception as e:
+            print(f"Serial write error: {e}")
+            self.close()  # 出错时关闭，等待下次重连
+
+    def close(self):
+        with self.lock:
+            self._reader_run = False
+            if self.ser:
+                try:
+                    self.ser.close()
+                except Exception:
+                    pass
+                self.ser = None
 
     def _reader_loop(self):
         # Read lines from STM32 and print to stdout
@@ -153,7 +179,6 @@ def main():
     parser.add_argument('--vy', type=float, default=0.0)
     parser.add_argument('--wz', type=float, default=0.0)
     parser.add_argument('--rate', type=float, default=20.0, help='Send rate (Hz) for periodic sends')
-    parser.add_argument('--count', type=int, default=0, help='Number of frames to send (0 = infinite)')
     args = parser.parse_args()
 
     fwd = SerialForwarder(args.port, args.baud)
@@ -178,28 +203,13 @@ def main():
 
     interval = 1.0 / max(1.0, args.rate)
     print('Sending frames at %.1f Hz to %s' % (1.0/interval, args.port))
-    if args.count > 0:
-        print(f'Will send {args.count} frames, then stop')
     try:
-        count = 0
         while True:
             fwd.send(args.vx, args.vy, args.wz)
             print('Sent vx=%.3f vy=%.3f wz=%.3f' % (args.vx, args.vy, args.wz))
-            count += 1
-            if args.count > 0 and count >= args.count:
-                # 发送停止命令
-                print(f'\nSent {count} frames, sending stop command...')
-                for _ in range(int(0.2 * args.rate)):  # 发送0.2秒的停止命令
-                    fwd.send(0.0, 0.0, 0.0)
-                    time.sleep(interval)
-                print('Done!')
-                break
             time.sleep(interval)
     except KeyboardInterrupt:
-        print('\nInterrupted by user, sending stop command...')
-        for _ in range(int(0.2 * args.rate)):
-            fwd.send(0.0, 0.0, 0.0)
-            time.sleep(interval)
+        print('\nInterrupted by user')
     finally:
         fwd.close()
 

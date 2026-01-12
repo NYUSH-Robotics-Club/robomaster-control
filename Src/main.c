@@ -375,14 +375,16 @@ int main(void)
     // Update sensor data and publishes IMU topic
     gyro_data_update(&sensor_data);
 
+    // Run command controller after dispatch so it sees latest messages
+    CmdController_Task(current_tick);
+
     // Process radar serial data and publish radar messages
     RadarComm_Task();
 
     // Dispatch message center events so subscribers receive latest data
     MsgCenter_Dispatch();
 
-    // Run command controller after dispatch so it sees latest messages
-    CmdController_Task(current_tick);
+  
 
     // Update buzzer music playback (feature for fun :D)
     Buzzer_Update();
