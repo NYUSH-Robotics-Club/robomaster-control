@@ -329,8 +329,8 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     else
     {
         // Normal (original) behavior
-        s_chassis_cmd.vx = vx_f;
-        s_chassis_cmd.vy = vy_f;
+        s_chassis_cmd.vx = vy_f;
+        s_chassis_cmd.vy = vx_f;
         s_chassis_cmd.wz = wz_n;
         // Enable chassis if any joystick is moved
         s_chassis_cmd.enabled = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
