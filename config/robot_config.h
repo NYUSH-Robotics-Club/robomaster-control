@@ -11,6 +11,7 @@
  *
  *   cmake -S . -B build -DROBOT_TYPE=infantry_standard
  *   cmake -S . -B build -DROBOT_TYPE=infantry_swerve
+ *   cmake -S . -B build -DROBOT_TYPE=hero_standard
  *   cmake -S . -B build -DROBOT_TYPE=sentry_swerve
  *   cmake -S . -B build -DROBOT_TYPE=sentry_standard   (if you still use it)
  */
@@ -23,6 +24,10 @@
   #include "infantry_standard.h"
   #define ACTIVE_ROBOT_CONFIG g_robot_config_infantry_standard
 
+#elif defined(ROBOT_TYPE_hero_standard)
+  #include "hero_standard.h"
+  #define ACTIVE_ROBOT_CONFIG g_robot_config_hero_standard
+
 #elif defined(ROBOT_TYPE_sentry_swerve)
   #include "sentry_swerve.h"
   #define ACTIVE_ROBOT_CONFIG g_robot_config_sentry_swerve
@@ -33,7 +38,7 @@
   #define ACTIVE_ROBOT_CONFIG g_robot_config_sentry_standard
 
 #else
-  #error "Unknown or missing ROBOT_TYPE_*. Set -DROBOT_TYPE=infantry_standard|infantry_swerve|sentry_swerve|sentry_standard"
+  #error "Unknown or missing ROBOT_TYPE_*. Set -DROBOT_TYPE=infantry_standard|infantry_swerve|hero_standard|sentry_swerve|sentry_standard"
 #endif
 
 /**

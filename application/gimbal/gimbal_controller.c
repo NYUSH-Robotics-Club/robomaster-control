@@ -16,6 +16,23 @@ static uint8_t s_yaw_motor_id = 0xFF;
 #define YAW_CONTROL_ENC_MAX (8192.0f)
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
 #define CURRENT_LIMIT (30000.0f)
+#define YAW_BOOT_OFFSET_DEG (10.0f)
+#define YAW_BOOT_OFFSET_TIMEOUT_MS (5000U)
+#define YAW_BOOT_SWEEP_ENABLE (1)
+#define YAW_BOOT_SWEEP_DEG (90.0f)
+#define YAW_BOOT_SWEEP_TIMEOUT_MS (5000U)
+#define YAW_BOOT_JOG_ENABLE (0)
+#define YAW_BOOT_JOG_CURRENT (6000)
+#define YAW_BOOT_JOG_MS (800U)
+#define YAW_BOOT_JOG_INTERVAL_MS (10U)
+#define FEED_BOOT_JOG_ENABLE (0)
+#define FEED_BOOT_JOG_CURRENT (6000)
+#define FEED_BOOT_JOG_MS (800U)
+#define FEED_BOOT_JOG_INTERVAL_MS (10U)
+#define CHASSIS_BOOT_JOG_ENABLE (0)
+#define CHASSIS_BOOT_JOG_CURRENT (6000)
+#define CHASSIS_BOOT_JOG_MS (800U)
+#define CHASSIS_BOOT_JOG_INTERVAL_MS (10U)
 
 // Legacy defines (not used anymore - values from config)
 #define YAW_RPM_MAX (220.0f) * 2.0f
@@ -150,7 +167,7 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   float cmd_angle_to_speed = PID_Calculate(&yaw->pid_outer, 0.0f, -angle_error);
 
   // Speed limit for yaw control stability (from working commit 22e9ff0e7a)
-  float rpm_limit = 440.0f;
+  float rpm_limit = 260.0f;
 
   // Apply signed clamp
   if (cmd_angle_to_speed > rpm_limit)
@@ -384,7 +401,8 @@ void GimbalApp_Init(void) {
 void Gimbal_WaitForAlignment(void) {
   const float ALIGNMENT_THRESHOLD = 50.0f; // encoder ticks
   const uint32_t TIMEOUT_MS = 10000;       // 10 seconds timeout
-  const uint32_t CHECK_INTERVAL_MS = 100;
+  const uint32_t CHECK_INTERVAL_MS = 10;
+  bool aligned = false;
 
   USB_CDC_Printf("[Gimbal] Waiting for gimbal alignment...\r\n");
 
@@ -442,10 +460,100 @@ void Gimbal_WaitForAlignment(void) {
     // Both axes ready (or don't exist)
     if (yaw_ready && pitch_ready) {
       USB_CDC_Printf("[Gimbal] Alignment complete!\r\n");
-      return;
+      aligned = true;
+      break;
     }
   }
 
-  USB_CDC_Printf(
-      "[Gimbal] Warning: Alignment timeout, continuing anyway...\r\n");
+  // Apply boot yaw offset (optional one-time step after alignment)
+  MotorContext_t *yaw = MotorDriver_GetContext(s_yaw_motor_id);
+  if (CHASSIS_BOOT_JOG_ENABLE) {
+    uint8_t chassis_ids[1];
+    if (MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE, chassis_ids, 1) > 0) {
+      USB_CDC_Printf("[Gimbal] Jogging chassis motor...\r\n");
+      uint32_t jog_start = HAL_GetTick();
+      while (HAL_GetTick() - jog_start < CHASSIS_BOOT_JOG_MS) {
+        MotorDriver_SendCurrent(chassis_ids[0], CHASSIS_BOOT_JOG_CURRENT);
+        MotorDriver_FlushAll();
+        HAL_Delay(CHASSIS_BOOT_JOG_INTERVAL_MS);
+      }
+      MotorDriver_SendCurrent(chassis_ids[0], 0);
+      MotorDriver_FlushAll();
+    }
+  }
+  if (yaw && !yaw->angle_initialized && YAW_BOOT_JOG_ENABLE) {
+    USB_CDC_Printf("[Gimbal] No yaw feedback, jogging motor...\r\n");
+    uint32_t jog_start = HAL_GetTick();
+    while (HAL_GetTick() - jog_start < YAW_BOOT_JOG_MS) {
+      MotorDriver_SendCurrent(s_yaw_motor_id, YAW_BOOT_JOG_CURRENT);
+      MotorDriver_FlushAll();
+      HAL_Delay(YAW_BOOT_JOG_INTERVAL_MS);
+    }
+    MotorDriver_SendCurrent(s_yaw_motor_id, 0);
+    MotorDriver_FlushAll();
+  }
+  if (yaw && yaw->angle_initialized) {
+    float max_encoder = (yaw->config->limits.gm6020.angle_max > 0.0f)
+                            ? yaw->config->limits.gm6020.angle_max
+                            : 8192.0f;
+    float ticks_per_deg = max_encoder / 360.0f;
+    float target = (float)yaw->angle_raw + (YAW_BOOT_OFFSET_DEG * ticks_per_deg);
+    while (target >= max_encoder) target -= max_encoder;
+    while (target < 0.0f) target += max_encoder;
+
+    yaw->angle_target = target;
+    PID_Reset(&yaw->pid_outer);
+    PID_Reset(&yaw->pid_inner);
+
+    USB_CDC_Printf("[Gimbal] Boot yaw offset: %.1f deg\r\n", (double)YAW_BOOT_OFFSET_DEG);
+
+    uint32_t offset_start = HAL_GetTick();
+    while (HAL_GetTick() - offset_start < YAW_BOOT_OFFSET_TIMEOUT_MS) {
+      MsgCenter_Publish(TOPIC_GIMBAL_CMD, &cmd, sizeof(cmd));
+      MsgCenter_Dispatch();
+      HAL_Delay(CHECK_INTERVAL_MS);
+
+      float yaw_error = fabsf(yaw->angle_target - (float)yaw->angle_raw);
+      if (yaw_error > max_encoder / 2.0f) {
+        yaw_error = max_encoder - yaw_error;
+      }
+      if (yaw_error < ALIGNMENT_THRESHOLD) {
+        USB_CDC_Printf("[Gimbal] Boot yaw offset complete\r\n");
+        break;
+      }
+    }
+
+    if (YAW_BOOT_SWEEP_ENABLE) {
+      float base = (float)yaw->angle_raw;
+      float delta = YAW_BOOT_SWEEP_DEG * ticks_per_deg;
+      float targets[2] = {base + delta, base - delta};
+      for (int i = 0; i < 2; ++i) {
+        float t = targets[i];
+        while (t >= max_encoder) t -= max_encoder;
+        while (t < 0.0f) t += max_encoder;
+        yaw->angle_target = t;
+        PID_Reset(&yaw->pid_outer);
+        PID_Reset(&yaw->pid_inner);
+
+        uint32_t sweep_start = HAL_GetTick();
+        while (HAL_GetTick() - sweep_start < YAW_BOOT_SWEEP_TIMEOUT_MS) {
+          MsgCenter_Publish(TOPIC_GIMBAL_CMD, &cmd, sizeof(cmd));
+          MsgCenter_Dispatch();
+          HAL_Delay(CHECK_INTERVAL_MS);
+
+          float yaw_error = fabsf(yaw->angle_target - (float)yaw->angle_raw);
+          if (yaw_error > max_encoder / 2.0f) {
+            yaw_error = max_encoder - yaw_error;
+          }
+          if (yaw_error < ALIGNMENT_THRESHOLD) {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (!aligned) {
+    USB_CDC_Printf("[Gimbal] Alignment timeout, continuing anyway...\r\n");
+  }
 }

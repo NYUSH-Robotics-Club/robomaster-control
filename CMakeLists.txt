@@ -29,12 +29,13 @@ set(ROBOT_TYPE "infantry_standard" CACHE STRING "Robot configuration type")
 # Optional: show available values in GUIs (ccmake/cmake-gui)
 set_property(CACHE ROBOT_TYPE PROPERTY STRINGS
     infantry_standard
+    hero_standard
     sentry_swerve
     some_other_robot
 )
 
 # Optional: validate to fail fast on typos
-set(_valid_robot_types infantry_standard sentry_swerve some_other_robot)
+set(_valid_robot_types infantry_standard hero_standard sentry_swerve some_other_robot)
 list(FIND _valid_robot_types "${ROBOT_TYPE}" _robot_type_idx)
 if(_robot_type_idx EQUAL -1)
     message(FATAL_ERROR "Invalid ROBOT_TYPE='${ROBOT_TYPE}'. Valid: ${_valid_robot_types}")
