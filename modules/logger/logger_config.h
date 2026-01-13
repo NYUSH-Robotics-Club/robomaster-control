@@ -22,7 +22,7 @@
 #define LOG_ENABLE_IMU    0  // IMU sensors
 #define LOG_ENABLE_CAN    0  // CAN communication
 #define LOG_ENABLE_VIS    0  // Vision communication
-#define LOG_ENABLE_RC     0  // Remote control
+#define LOG_ENABLE_RC     1  // Remote control
 #define LOG_ENABLE_DEBUG  1  // General debug - ENABLED for radar debug
 
 // ============================================================================
