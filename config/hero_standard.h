@@ -17,7 +17,11 @@
 // Motor configuration array
 static const MotorConfig_t g_motor_configs_hero_standard[] = {
     // ========== CHASSIS MOTORS (4x M3508) - CAN2 ==========
-    // Front-left chassis motor (ID 1)
+    // CRITICAL: Array order MUST match kinematics [FL, FR, BL, BR]
+    // Motor positions: FL=ID1, FR=ID3, BL=ID4, BR=ID2
+    // Direction pattern: Diagonal motors have same direction (FL+BR, FR+BL)
+
+    // [0] Front-left chassis motor (CAN ID 1)
     {
         .motor_id = 1,
         .type = MOTOR_TYPE_M3508,
@@ -26,28 +30,13 @@ static const MotorConfig_t g_motor_configs_hero_standard[] = {
         .can_rx_id = 0x201,
         .can_tx_id = 0x200,
         .tx_slot = 0,
-        .direction = -1, // Mecanum kinematics correction
-        .limits.m3508 = {.speed_limit = 10000.0f},
-        .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f}, // Speed PID
-        .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}          // Not used
-    },
-
-    // Front-right chassis motor (ID 2)
-    {
-        .motor_id = 2,
-        .type = MOTOR_TYPE_M3508,
-        .role = MOTOR_ROLE_CHASSIS_DRIVE,
-        .can_channel = CAN_CHANNEL_2,
-        .can_rx_id = 0x202,
-        .can_tx_id = 0x200,
-        .tx_slot = 1,
-        .direction = +1,
+        .direction = +1,  // Inverted - diagonal with BR
         .limits.m3508 = {.speed_limit = 10000.0f},
         .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f},
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
     },
 
-    // Back-left chassis motor (ID 3)
+    // [1] Front-right chassis motor (CAN ID 3)
     {
         .motor_id = 3,
         .type = MOTOR_TYPE_M3508,
@@ -56,13 +45,13 @@ static const MotorConfig_t g_motor_configs_hero_standard[] = {
         .can_rx_id = 0x203,
         .can_tx_id = 0x200,
         .tx_slot = 2,
-        .direction = +1,
+        .direction = -1,  // Right-side: inverted from left
         .limits.m3508 = {.speed_limit = 10000.0f},
         .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f},
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
     },
 
-    // Back-right chassis motor (ID 4)
+    // [2] Back-left chassis motor (CAN ID 4)
     {
         .motor_id = 4,
         .type = MOTOR_TYPE_M3508,
@@ -71,7 +60,22 @@ static const MotorConfig_t g_motor_configs_hero_standard[] = {
         .can_rx_id = 0x204,
         .can_tx_id = 0x200,
         .tx_slot = 3,
-        .direction = -1,
+        .direction = +1,  // Left-side: same as FL
+        .limits.m3508 = {.speed_limit = 10000.0f},
+        .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f},
+        .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
+    },
+
+    // [3] Back-right chassis motor (CAN ID 2)
+    {
+        .motor_id = 2,
+        .type = MOTOR_TYPE_M3508,
+        .role = MOTOR_ROLE_CHASSIS_DRIVE,
+        .can_channel = CAN_CHANNEL_2,
+        .can_rx_id = 0x202,
+        .can_tx_id = 0x200,
+        .tx_slot = 1,
+        .direction = -1,  // Right-side: inverted from left
         .limits.m3508 = {.speed_limit = 10000.0f},
         .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f},
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}

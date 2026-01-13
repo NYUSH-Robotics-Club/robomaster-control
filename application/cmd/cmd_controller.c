@@ -135,10 +135,18 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     }
 
     // Extract joystick values with deadband
-    // ch[2]: left stick X -> vy, ch[3]: left stick Y -> vx, ch[4]: dial/wheel -> wz
+    // ch[2]: left stick X, ch[3]: left stick Y -> vx, ch[4]: dial/wheel
     int16_t vx_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
+
+#ifdef ROBOT_TYPE_hero_standard
+    // Hero: swap vy and wz channels (ch[2] for rotation, ch[4] for strafe)
+    int16_t vy_raw = apply_deadband((int16_t)(rc->rc.ch[4]), JOYSTICK_DEADBAND);
+    int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[2]), JOYSTICK_DEADBAND);
+#else
+    // Infantry/others: standard mapping (ch[2] for strafe, ch[4] for rotation)
     int16_t vy_raw = apply_deadband((int16_t)(rc->rc.ch[2]), JOYSTICK_DEADBAND);
     int16_t wz_raw = apply_deadband((int16_t)(rc->rc.ch[4]), JOYSTICK_DEADBAND);
+#endif
 
     // Convert to normalized values (-1.0 to 1.0)
     const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
