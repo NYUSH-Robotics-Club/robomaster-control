@@ -9,7 +9,8 @@
       "options": [
         "infantry_standard",
         "sentry_swerve",
-        "some_other_robot"
+        "some_other_robot",
+        "hero_standard"
       ],
       "default": "infantry_standard"
     }

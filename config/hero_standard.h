@@ -115,8 +115,8 @@ static const MotorConfig_t g_motor_configs_hero_standard[] = {
             .gravity_compensation = 0.0f,
             .initial_angle = -1.0f // Auto-init: use current angle on first feedback
         },
-        .pid_outer = {1.5f, 0.03f, 0.03f, 400.0f, 300.0f},
-        .pid_inner = {20.0f, 0.2f, 4.0f, 20000.0f, 6000.0f}
+        .pid_outer = {3.5f, 0.01f, 0.2f, 500.0f, 300.0f},
+        .pid_inner = {26.5f, 0.03f, 3.0f, 20000.0f, 6000.0f}
     }
 };
 
