@@ -92,8 +92,8 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
             .gravity_compensation = 0.0f,
             .initial_angle = -1.0f // Auto-init: use current angle on first feedback
         },
-        .pid_outer = {3.0f, 0.06f, 0.055f, 500.0f, 400.0f},  // Angle → Speed (aggressive)
-        .pid_inner = {35.0f, 0.7f, 7.0f, 30000.0f, 8000.0f} // Speed → Current (very aggressive)
+        .pid_outer = {3.5f, 0.05f, 0.085f, 500.0f, 400.0f},  // Angle → Speed (aggressive)
+        .pid_inner = {35.5f, 0.7f, 7.5f, 30000.0f, 8000.0f} // Speed → Current (very aggressive)
     },
 
     // --------------------------
