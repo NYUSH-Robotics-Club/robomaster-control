@@ -43,6 +43,11 @@ typedef struct {
     PID_Controller steer_pids[CHASSIS_STEER_COUNT];          // angle PID
     Motor_Feedback steer_feedbacks[CHASSIS_STEER_COUNT];     // steer feedback
     int16_t steer_output_currents[CHASSIS_STEER_COUNT];      // steer currents
+
+    // Direction memory: remembers the "forward" direction to avoid flipping
+    // between forward/reverse (180deg ambiguity)
+    float steer_zero_direction;  // Absolute angle (encoder ticks) for joystick "forward"
+    bool steer_zero_initialized; // True after first movement
 } ChassisController;
 
 

@@ -65,6 +65,10 @@ void ChassisController_Init(ChassisController *controller) {
 
   memset(controller, 0, sizeof(ChassisController));
 
+  // Initialize direction memory
+  controller->steer_zero_direction = 0.0f;
+  controller->steer_zero_initialized = false;
+
   // Find drive motors by role
   s_drive_motor_count = MotorDriver_FindByRole(
       MOTOR_ROLE_CHASSIS_DRIVE, s_drive_motor_ids, CHASSIS_MOTOR_COUNT);
@@ -120,107 +124,136 @@ void ChassisController_Update(ChassisController *controller,
 
   float vx_norm = s_last_cmd.vx;
   float vy_norm = s_last_cmd.vy;
+  float wz_norm = s_last_cmd.wz;
 
-  // Calculate joystick magnitude (speed) and direction (angle)
-  float magnitude = sqrtf(vx_norm * vx_norm + vy_norm * vy_norm);
+  const float deadband = 0.02f;
+  const float ticks_per_rev = 8192.0f;
+  const float rad_to_ticks = ticks_per_rev / (2.0f * M_PI);
+  const float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;
 
-  // Drive speed: proportional to joystick magnitude
-  float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;
-  float drive_speed = magnitude * max_speed;
-
-  float drive_direction = 1.0f;
-
-  if (magnitude > 0.1f) {
-    float target_angle_rad = atan2f(vx_norm, -vy_norm);
-    float joystick_angle_ticks = target_angle_rad * (8192.0f / (2.0f * M_PI));
-
-    // Map joystick to ±90deg range (ensures forward/backward map to same angle)
-    float canonical_angle_ticks = joystick_angle_ticks;
-    if (canonical_angle_ticks > 2048.0f) {
-      canonical_angle_ticks -= 4096.0f;
-      drive_direction = -1.0f;
-    } else if (canonical_angle_ticks < -2048.0f) {
-      canonical_angle_ticks += 4096.0f;
-      drive_direction = -1.0f;
+  if (fabsf(vx_norm) < deadband && fabsf(vy_norm) < deadband &&
+      fabsf(wz_norm) < deadband) {
+    for (uint8_t i = 0; i < s_drive_motor_count; i++) {
+      controller->target_speeds[i] = 0.0f;
     }
 
-    // Shortest path optimization (FIXED: use initial_angle as reference, not last_target)
-    if (s_steer_motor_count > 0) {
-      MotorContext_t *ctx0 = MotorDriver_GetContext(s_steer_motor_ids[0]);
-      if (ctx0 && ctx0->config && ctx0->angle_initialized) {
-        float initial0 = (float)ctx0->config->limits.gm6020.initial_angle;
-
-        // CRITICAL FIX: Compare against initial_angle (zero position), not last_target
-        // This prevents accumulated drift over multiple movements
-        float current_angle0 = (float)ctx0->angle_raw;
-
-        float option1_angle = initial0 + canonical_angle_ticks;
-        while (option1_angle >= 8192.0f) option1_angle -= 8192.0f;
-        while (option1_angle < 0.0f) option1_angle += 8192.0f;
-
-        float option2_angle = initial0 + canonical_angle_ticks + 4096.0f;
-        while (option2_angle >= 8192.0f) option2_angle -= 8192.0f;
-        while (option2_angle < 0.0f) option2_angle += 8192.0f;
-
-        // Calculate shortest path from CURRENT position (not last_target)
-        float diff1 = option1_angle - current_angle0;
-        if (diff1 > 4096.0f) diff1 -= 8192.0f;
-        if (diff1 < -4096.0f) diff1 += 8192.0f;
-
-        float diff2 = option2_angle - current_angle0;
-        if (diff2 > 4096.0f) diff2 -= 8192.0f;
-        if (diff2 < -4096.0f) diff2 += 8192.0f;
-
-        float final_angle_ticks;
-        if (fabsf(diff1) <= fabsf(diff2)) {
-          final_angle_ticks = canonical_angle_ticks;
-        } else {
-          final_angle_ticks = canonical_angle_ticks + 4096.0f;
-          while (final_angle_ticks >= 4096.0f) final_angle_ticks -= 8192.0f;
-          while (final_angle_ticks < -4096.0f) final_angle_ticks += 8192.0f;
-          drive_direction = -drive_direction;
-        }
-
-        for (uint8_t i = 0; i < s_steer_motor_count; i++) {
-          MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
-          if (ctx && ctx->config && ctx->angle_initialized) {
-            float initial = (float)ctx->config->limits.gm6020.initial_angle;
-            float target_angle = initial + final_angle_ticks;
-
-            while (target_angle >= 8192.0f)
-              target_angle -= 8192.0f;
-            while (target_angle < 0.0f)
-              target_angle += 8192.0f;
-
-            controller->steer_target_angles[i] = target_angle;
-          }
-        }
-      }
-    }
-
-    // Apply drive speed with direction to ALL drive motors
-    if (s_drive_motor_count >= 4) {
-      for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-        controller->target_speeds[i] =
-            s_drive_motor_directions[i] * drive_speed * drive_direction;
-      }
-    }
-  } else {
-    // Joystick released: stop drive motors AND reset steer to zero position
-    // CRITICAL FIX: Reset to initial_angle to prevent accumulated drift
-    if (s_drive_motor_count >= 4) {
-      for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-        controller->target_speeds[i] = 0.0f;
-      }
-    }
-
-    // Reset steer motors to initial_angle (zero position memory)
     for (uint8_t i = 0; i < s_steer_motor_count; i++) {
       MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
       if (ctx && ctx->config && ctx->angle_initialized) {
-        controller->steer_target_angles[i] = (float)ctx->config->limits.gm6020.initial_angle;
+        controller->steer_target_angles[i] =
+            (float)ctx->config->limits.gm6020.initial_angle;
       }
     }
+
+    controller->steer_zero_initialized = false;
+    controller->running = s_last_cmd.enabled;
+    return;
+  }
+
+  float forward = vy_norm;
+  float left = vx_norm;
+  float magnitude = sqrtf(forward * forward + left * left);
+  if (magnitude < deadband && fabsf(wz_norm) >= deadband) {
+    float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
+    for (uint8_t i = 0; i < s_steer_motor_count; i++) {
+      MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
+      if (ctx && ctx->config && ctx->angle_initialized) {
+        float motor_initial = (float)ctx->config->limits.gm6020.initial_angle;
+        float target_angle = motor_initial + ticks_per_rev / 4.0f;
+        float alternate_angle = target_angle + ticks_per_rev / 2.0f;
+
+        while (alternate_angle >= ticks_per_rev)
+          alternate_angle -= ticks_per_rev;
+
+        float current_angle = (float)ctx->angle_raw;
+        float diff_main = target_angle - current_angle;
+        if (diff_main > ticks_per_rev / 2.0f)
+          diff_main -= ticks_per_rev;
+        if (diff_main < -ticks_per_rev / 2.0f)
+          diff_main += ticks_per_rev;
+
+        float diff_alt = alternate_angle - current_angle;
+        if (diff_alt > ticks_per_rev / 2.0f)
+          diff_alt -= ticks_per_rev;
+        if (diff_alt < -ticks_per_rev / 2.0f)
+          diff_alt += ticks_per_rev;
+
+        if (fabsf(diff_alt) < fabsf(diff_main)) {
+          target_angle = alternate_angle;
+          module_directions[i] = -1.0f;
+        }
+
+        while (target_angle >= ticks_per_rev)
+          target_angle -= ticks_per_rev;
+        while (target_angle < 0.0f)
+          target_angle += ticks_per_rev;
+
+        controller->steer_target_angles[i] = target_angle;
+      }
+    }
+
+    for (uint8_t i = 0; i < s_drive_motor_count; i++) {
+      uint8_t module_index = (i < 2) ? 0 : 1;
+      float spin_speed = (module_index == 0) ? wz_norm : -wz_norm;
+      controller->target_speeds[i] = s_drive_motor_directions[i] *
+                                     module_directions[module_index] *
+                                     spin_speed * max_speed;
+    }
+
+    controller->running = s_last_cmd.enabled;
+    return;
+  }
+
+  if (magnitude > 1.0f)
+    magnitude = 1.0f;
+
+  float angle_rad = atan2f(left, forward);
+  float angle_ticks = angle_rad * rad_to_ticks;
+  if (angle_ticks < 0.0f)
+    angle_ticks += ticks_per_rev;
+
+  float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
+  for (uint8_t i = 0; i < s_steer_motor_count; i++) {
+    MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
+    if (ctx && ctx->config && ctx->angle_initialized) {
+      float motor_initial = (float)ctx->config->limits.gm6020.initial_angle;
+      float target_angle = motor_initial + angle_ticks;
+      float alternate_angle = target_angle + ticks_per_rev / 2.0f;
+
+      while (alternate_angle >= ticks_per_rev)
+        alternate_angle -= ticks_per_rev;
+
+      float current_angle = (float)ctx->angle_raw;
+      float diff_main = target_angle - current_angle;
+      if (diff_main > ticks_per_rev / 2.0f)
+        diff_main -= ticks_per_rev;
+      if (diff_main < -ticks_per_rev / 2.0f)
+        diff_main += ticks_per_rev;
+
+      float diff_alt = alternate_angle - current_angle;
+      if (diff_alt > ticks_per_rev / 2.0f)
+        diff_alt -= ticks_per_rev;
+      if (diff_alt < -ticks_per_rev / 2.0f)
+        diff_alt += ticks_per_rev;
+
+      if (fabsf(diff_alt) < fabsf(diff_main)) {
+        target_angle = alternate_angle;
+        module_directions[i] = -1.0f;
+      }
+
+      while (target_angle >= ticks_per_rev)
+        target_angle -= ticks_per_rev;
+      while (target_angle < 0.0f)
+        target_angle += ticks_per_rev;
+
+      controller->steer_target_angles[i] = target_angle;
+    }
+  }
+
+  for (uint8_t i = 0; i < s_drive_motor_count; i++) {
+    float module_dir = (i < 2) ? module_directions[0] : module_directions[1];
+    controller->target_speeds[i] = s_drive_motor_directions[i] * module_dir *
+                                   magnitude * max_speed;
   }
 
   controller->running = s_last_cmd.enabled;
