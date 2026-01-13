@@ -3,6 +3,7 @@
 
 #include "main.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 // Vision communication now uses USB CDC instead of UART
 // #define VISION_UART_HANDLE huart6  // Old UART method
@@ -137,6 +138,129 @@ void VisionComm_RxCallback(uint8_t *buf, uint32_t len);
  * @brief Start UART reception for vision communication
  */
 void VisionComm_StartReceive(void);
+
+// =============================================================================
+// Diagnostic and Monitoring Features (诊断和监控功能)
+// =============================================================================
+
+/**
+ * @brief Communication diagnostics structure
+ */
+typedef struct {
+    // Packet statistics - 数据包统计
+    uint32_t total_received;        // Total packets received
+    uint32_t total_sent;            // Total packets sent
+    uint32_t crc_errors;            // CRC check failures
+    uint32_t timeout_count;         // Data timeout occurrences
+    uint32_t out_of_range_count;    // Out-of-range angle data count
+
+    // Communication quality - 通信质量
+    float packet_loss_rate;         // Packet loss rate (0.0-1.0)
+    uint32_t avg_latency_ms;        // Average communication latency
+    uint32_t max_latency_ms;        // Maximum latency recorded
+
+    // Data quality - 数据质量
+    float data_noise_level;         // Noise level in received data
+    uint32_t last_recv_time_ms;     // Last successful receive timestamp
+    bool is_data_stale;             // Data freshness flag
+
+    // Protocol errors - 协议错误
+    uint32_t length_errors;         // Incorrect packet length count
+    uint32_t cmd_id_errors;         // Unknown command ID count
+} VisionDiagnostics;
+
+/**
+ * @brief Data validation result
+ */
+typedef enum {
+    VALIDATION_OK = 0,              // Data is valid
+    VALIDATION_OUT_OF_RANGE,        // Angle out of valid range
+    VALIDATION_TIMEOUT,             // Data is stale (timeout)
+    VALIDATION_CRC_ERROR,           // CRC check failed
+    VALIDATION_LENGTH_ERROR,        // Packet length incorrect
+    VALIDATION_CMD_ID_ERROR         // Command ID unknown
+} ValidationResult;
+
+/**
+ * @brief Filtered vision data with quality metrics
+ */
+typedef struct {
+    float pitch_filtered;           // Filtered pitch angle
+    float yaw_filtered;             // Filtered yaw angle
+    float pitch_raw;                // Raw pitch angle (before filtering)
+    float yaw_raw;                  // Raw yaw angle (before filtering)
+    float noise_estimate;           // Estimated noise level
+    uint32_t timestamp_ms;          // Receive timestamp
+    ValidationResult validation;    // Validation result
+} VisionDataQuality;
+
+/**
+ * @brief Control signal diagnostics
+ */
+typedef struct {
+    // PID output monitoring - PID输出监控
+    float pid_output_pitch;         // Current pitch PID output
+    float pid_output_yaw;           // Current yaw PID output
+    float integral_pitch;           // Pitch integral term
+    float integral_yaw;             // Yaw integral term
+
+    // Saturation detection - 饱和检测
+    bool integral_saturated;        // Integral saturation flag
+    bool output_saturated;          // Output saturation flag
+    uint32_t saturation_count;      // Number of saturation occurrences
+
+    // Response analysis - 响应分析
+    float angle_error_pitch;        // Current pitch error
+    float angle_error_yaw;          // Current yaw error
+    float deadzone_threshold;       // Current deadzone threshold
+    bool in_deadzone;               // Whether error is in deadzone
+} ControlDiagnostics;
+
+/**
+ * @brief Get communication diagnostics
+ * @return Pointer to diagnostics structure
+ */
+VisionDiagnostics* VisionComm_GetDiagnostics(void);
+
+/**
+ * @brief Get filtered data with quality metrics
+ * @return Pointer to quality data structure
+ */
+VisionDataQuality* VisionComm_GetDataQuality(void);
+
+/**
+ * @brief Get control diagnostics
+ * @return Pointer to control diagnostics structure
+ */
+ControlDiagnostics* VisionComm_GetControlDiagnostics(void);
+
+/**
+ * @brief Reset all diagnostic counters
+ */
+void VisionComm_ResetDiagnostics(void);
+
+/**
+ * @brief Validate received angle data
+ * @param pitch Pitch angle to validate
+ * @param yaw Yaw angle to validate
+ * @return Validation result
+ */
+ValidationResult VisionComm_ValidateData(float pitch, float yaw);
+
+/**
+ * @brief Update control diagnostics (should be called from gimbal controller)
+ * @param pitch_pid_output Pitch PID output
+ * @param yaw_pid_output Yaw PID output
+ * @param pitch_error Pitch angle error
+ * @param yaw_error Yaw angle error
+ */
+void VisionComm_UpdateControlDiag(float pitch_pid_output, float yaw_pid_output,
+                                   float pitch_error, float yaw_error);
+
+/**
+ * @brief Print diagnostic report to USB CDC
+ */
+void VisionComm_PrintDiagnostics(void);
 
 #endif // VISION_COMM_H
 

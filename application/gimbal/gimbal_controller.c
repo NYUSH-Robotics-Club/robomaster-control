@@ -184,8 +184,8 @@ int16_t GimbalController_YawControlWithCompensation(float rate_normalized,
   float current = yaw->angle_raw;
   float angle_error = yaw->angle_target - current;
 
-  // Ultra-minimal deadband for maximum tracking precision (reduced from 1.0 → 0.1)
-  if (fabsf(angle_error) < 0.1f)
+  // Ultra-minimal deadband for maximum tracking precision (reduced from 1.0 → 0.1 → 0.02)
+  if (fabsf(angle_error) < 0.02f)
     angle_error = 0.0f;
 
   // wrap error into [-ENC_MAX/2, ENC_MAX/2]

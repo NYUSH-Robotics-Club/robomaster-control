@@ -174,10 +174,10 @@ dfu-util -a 0 -s 0x08000000:leave -D build/NYUSH_Infantry.bin
 
 ```bash
 # Linux
-screen /dev/ttyACM0 115200
+screen /dev/ttyACM1 115200
 
 # 或使用minicom
-minicom -D /dev/ttyACM0
+minicom -D /dev/ttyACM1
 ```
 
 #### 方法2：CSV日志分析

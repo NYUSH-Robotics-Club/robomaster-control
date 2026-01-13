@@ -16,7 +16,7 @@
 #define CHASSIS_STEER_COUNT 2
 
 // Chassis control parameters
-#define CHASSIS_DEMO_TARGET_SPEED 7000
+#define CHASSIS_DEMO_TARGET_SPEED 8050  // Increased by 15% from 7000
 
 
 // Chassis controller structure
