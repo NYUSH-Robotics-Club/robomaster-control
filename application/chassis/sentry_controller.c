@@ -122,21 +122,26 @@ void ChassisController_Update(ChassisController *controller,
   if (controller == NULL)
     return;
 
-  float vx_norm = s_last_cmd.vx;
-  float vy_norm = s_last_cmd.vy;
-  float wz_norm = s_last_cmd.wz;
+  // NEW CONTROL SCHEME:
+  // vx = drive power (left stick Y, all 4 drive motors)
+  // vy = steer angle normalized [-1 to +1] -> [-90° to +90°]
+  // wz = not used
+
+  float drive_power = s_last_cmd.vx;
+  float steer_angle_norm = s_last_cmd.vy;  // [-1, +1]
 
   const float deadband = 0.02f;
   const float ticks_per_rev = 8192.0f;
-  const float rad_to_ticks = ticks_per_rev / (2.0f * M_PI);
   const float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;
 
-  if (fabsf(vx_norm) < deadband && fabsf(vy_norm) < deadband &&
-      fabsf(wz_norm) < deadband) {
+  // Check if all inputs are in deadband
+  if (fabsf(drive_power) < deadband && fabsf(steer_angle_norm) < deadband) {
+    // Stop all drive motors
     for (uint8_t i = 0; i < s_drive_motor_count; i++) {
       controller->target_speeds[i] = 0.0f;
     }
 
+    // Return steer motors to initial position
     for (uint8_t i = 0; i < s_steer_motor_count; i++) {
       MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
       if (ctx && ctx->config && ctx->angle_initialized) {
@@ -150,80 +155,35 @@ void ChassisController_Update(ChassisController *controller,
     return;
   }
 
-  float forward = vy_norm;
-  float left = vx_norm;
-  float magnitude = sqrtf(forward * forward + left * left);
-  if (magnitude < deadband && fabsf(wz_norm) >= deadband) {
-    float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
-    for (uint8_t i = 0; i < s_steer_motor_count; i++) {
-      MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
-      if (ctx && ctx->config && ctx->angle_initialized) {
-        float motor_initial = (float)ctx->config->limits.gm6020.initial_angle;
-        float target_angle = motor_initial + ticks_per_rev / 4.0f;
-        float alternate_angle = target_angle + ticks_per_rev / 2.0f;
+  // Linear mapping: steer_angle_norm [-1, +1] -> [-90°, +90°]
+  // Then convert to encoder ticks relative to initial_angle
+  float steer_angle_deg = steer_angle_norm * 90.0f;  // [-90, +90] degrees
+  float deg_to_ticks = ticks_per_rev / 360.0f;
+  float angle_offset_ticks = steer_angle_deg * deg_to_ticks;
 
-        while (alternate_angle >= ticks_per_rev)
-          alternate_angle -= ticks_per_rev;
-
-        float current_angle = (float)ctx->angle_raw;
-        float diff_main = target_angle - current_angle;
-        if (diff_main > ticks_per_rev / 2.0f)
-          diff_main -= ticks_per_rev;
-        if (diff_main < -ticks_per_rev / 2.0f)
-          diff_main += ticks_per_rev;
-
-        float diff_alt = alternate_angle - current_angle;
-        if (diff_alt > ticks_per_rev / 2.0f)
-          diff_alt -= ticks_per_rev;
-        if (diff_alt < -ticks_per_rev / 2.0f)
-          diff_alt += ticks_per_rev;
-
-        if (fabsf(diff_alt) < fabsf(diff_main)) {
-          target_angle = alternate_angle;
-          module_directions[i] = -1.0f;
-        }
-
-        while (target_angle >= ticks_per_rev)
-          target_angle -= ticks_per_rev;
-        while (target_angle < 0.0f)
-          target_angle += ticks_per_rev;
-
-        controller->steer_target_angles[i] = target_angle;
-      }
-    }
-
-    for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-      uint8_t module_index = (i < 2) ? 0 : 1;
-      float spin_speed = (module_index == 0) ? wz_norm : -wz_norm;
-      controller->target_speeds[i] = s_drive_motor_directions[i] *
-                                     module_directions[module_index] *
-                                     spin_speed * max_speed;
-    }
-
-    controller->running = s_last_cmd.enabled;
-    return;
-  }
-
-  if (magnitude > 1.0f)
-    magnitude = 1.0f;
-
-  float angle_rad = atan2f(left, forward);
-  float angle_ticks = angle_rad * rad_to_ticks;
-  if (angle_ticks < 0.0f)
-    angle_ticks += ticks_per_rev;
-
+  // Set target angle for both steer motors (shortest path with direction flip)
   float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
   for (uint8_t i = 0; i < s_steer_motor_count; i++) {
     MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
     if (ctx && ctx->config && ctx->angle_initialized) {
       float motor_initial = (float)ctx->config->limits.gm6020.initial_angle;
-      float target_angle = motor_initial + angle_ticks;
+      float target_angle = motor_initial + angle_offset_ticks;
       float alternate_angle = target_angle + ticks_per_rev / 2.0f;
+
+      // Wrap angles to [0, ticks_per_rev)
+      while (target_angle >= ticks_per_rev)
+        target_angle -= ticks_per_rev;
+      while (target_angle < 0.0f)
+        target_angle += ticks_per_rev;
 
       while (alternate_angle >= ticks_per_rev)
         alternate_angle -= ticks_per_rev;
+      while (alternate_angle < 0.0f)
+        alternate_angle += ticks_per_rev;
 
       float current_angle = (float)ctx->angle_raw;
+
+      // Calculate shortest path distance for both options
       float diff_main = target_angle - current_angle;
       if (diff_main > ticks_per_rev / 2.0f)
         diff_main -= ticks_per_rev;
@@ -236,24 +196,23 @@ void ChassisController_Update(ChassisController *controller,
       if (diff_alt < -ticks_per_rev / 2.0f)
         diff_alt += ticks_per_rev;
 
+      // Choose shorter path (may flip drive direction)
       if (fabsf(diff_alt) < fabsf(diff_main)) {
         target_angle = alternate_angle;
         module_directions[i] = -1.0f;
       }
 
-      while (target_angle >= ticks_per_rev)
-        target_angle -= ticks_per_rev;
-      while (target_angle < 0.0f)
-        target_angle += ticks_per_rev;
-
       controller->steer_target_angles[i] = target_angle;
     }
   }
 
+  // Set drive motor speeds (all same speed, adjusted by direction)
   for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-    float module_dir = (i < 2) ? module_directions[0] : module_directions[1];
-    controller->target_speeds[i] = s_drive_motor_directions[i] * module_dir *
-                                   magnitude * max_speed;
+    uint8_t module_index = (i < 2) ? 0 : 1;
+    float module_dir = module_directions[module_index];
+    controller->target_speeds[i] = s_drive_motor_directions[i] *
+                                   module_dir *
+                                   drive_power * max_speed;
   }
 
   controller->running = s_last_cmd.enabled;

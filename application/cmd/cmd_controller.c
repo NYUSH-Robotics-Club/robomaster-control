@@ -266,6 +266,29 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
         return;
     }
 
+#ifdef ROBOT_TYPE_sentry_swerve
+    // SENTRY SWERVE CONTROL MODE:
+    // - Left stick Y (ch[3]): drive wheel power
+    // - Right stick X (ch[0]): steer angle (-1 = -90deg, 0 = center, +1 = +90deg)
+    // Command interpretation:
+    //   vx = drive power (left Y)
+    //   vy = steer angle normalized [-1, +1]
+    //   wz = 0 (not used)
+
+    int16_t drive_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
+    int16_t steer_x_raw = apply_deadband((int16_t)(rc->rc.ch[0]), JOYSTICK_DEADBAND);
+
+    const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
+    s_chassis_cmd.vx = (float)drive_raw / max_input;      // Drive power
+    s_chassis_cmd.vy = (float)steer_x_raw / max_input;    // Steer angle (reversed direction)
+    s_chassis_cmd.wz = 0.0f;                               // Not used
+    s_chassis_cmd.enabled = (drive_raw != 0 || steer_x_raw != 0);
+
+    (void)sensor;
+    (void)spin_mode;
+    (void)gimbal_follow_mode;
+    return;
+#else
     // Extract joystick values with deadband
     // ch[2]: left stick X -> vy, ch[3]: left stick Y -> vx, ch[4]: dial/wheel -> wz
     int16_t vx_raw = apply_deadband((int16_t)(rc->rc.ch[3]), JOYSTICK_DEADBAND);
@@ -335,6 +358,7 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
         // Enable chassis if any joystick is moved
         s_chassis_cmd.enabled = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
     }
+#endif // ROBOT_TYPE_sentry_swerve
 }
 
 // Process shooter control commands
@@ -378,6 +402,18 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
     // Gimbal always enabled
     s_gimbal_cmd.enabled = true;
 
+#ifdef ROBOT_TYPE_sentry_swerve
+    // SENTRY: Right stick is used for steer wheel control, not gimbal
+    // Disable yaw control, only allow pitch control
+    s_gimbal_cmd.yaw_rate = 0.0f;
+    s_gimbal_cmd.pitch_rate = 0.0f;
+    s_gimbal_cmd.yaw_rate_memo = 0.0f;
+    s_gimbal_cmd.yaw_target_memo = 0.0f;
+
+    (void)sensor;
+    (void)spin_mode;
+    yaw_storage = 0;
+#else
     // Gimbal controls:
     //   ch[0]: yaw via right stick X
     //   ch[1]: pitch via right stick Y
@@ -418,6 +454,9 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
         s_gimbal_cmd.yaw_target_memo = 0.0f;
     }
 
+    yaw_storage = yaw_raw;
+#endif // ROBOT_TYPE_sentry_swerve
+
     if (s_last_vision.updated)
     {
         s_last_vision.updated = 0;
@@ -443,7 +482,6 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
             s_gimbal_cmd.vision_valid = false;
         }
     }
-    yaw_storage = yaw_raw;
 }
 
 void CmdController_Init(void)
