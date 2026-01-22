@@ -123,131 +123,12 @@ static void gimbal_to_chassis_frame(float vx_g, float vy_g, float offset_angle_d
 static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
 {
     // Timeout protection: if radar data is stale (>1000ms), fall back to RC or stop
-    // Note: 500ms was too aggressive, causing spurious fallback to RC mode
     if (!s_last_radar.valid || (now - s_last_radar.ts_ms > 1000u)) {
-        // Data invalid, switch back to RC or stop
         s_control_mode = CONTROL_MODE_RC;
         return;
     }
     
-    // Radar data valid, use it
-    s_control_mode = CONTROL_MODE_RADAR;
-    
-    // COORDINATE SYSTEM MUST MATCH RC MODE (sentry_controller.c)
-    // RC mode uses: atan2f(vx, -vy) for steering angle
-    // This is the same coordinate system where:
-    //  - vx: forward/backward component (Y-axis in math coords)
-    //  - vy: left/right (strafe) component (X-axis in math coords)
-    //  - For steering: angle = atan2f(vx, -vy)
-    
-    // Calculate magnitude and direction (same logic as RC mode)
-    float magnitude = sqrtf(vx * vx + vy * vy);
-    
-    // Target steering angle (MUST use same formula as RC)
-    float target_angle_rad = atan2f(vx, -vy);  // atan2(forward, -strafe)
-    
-    // Drive speed from magnitude
-    float speed_magnitude = magnitude * (float)CHASSIS_DEMO_TARGET_SPEED;
-    
-    // For swerve steering (both modules):
-    float theta0 = target_angle_rad;
-    // theta1 = target_angle_rad;  // Same as theta0 for swerve
-    float speed0 = speed_magnitude;
-    float speed1 = speed_magnitude;
-    
-    // Dispatch: set steer target angles and drive target speeds
-    // Convert theta (rad) -> encoder ticks as used by GM6020 (8192 ticks/rev)
-    extern ChassisController* ChassisApp_GetController(void);
-    extern void ChassisController_SetSteerTargetAngles(ChassisController *controller, const float angles[CHASSIS_STEER_COUNT]);
-
-    ChassisController *ctrl = ChassisApp_GetController();
-    if (ctrl) {
-        // Compute canonical tick value from radians
-        float ticks_per_rev = 8192.0f;
-        float rad_to_ticks = ticks_per_rev / (2.0f * (float)M_PI);
-
-        float tick0 = theta0 * rad_to_ticks;
-
-        // Normalize to [-4096,4096) then canonicalize to +/-90deg logic (same as RC mode)
-        float canonical0 = tick0;
-        if (canonical0 > 2048.0f) canonical0 -= 4096.0f;
-        if (canonical0 < -2048.0f) canonical0 += 4096.0f;
-
-        // Find steer motors and drive motors
-        uint8_t steer_ids[CHASSIS_STEER_COUNT] = {0};
-        uint8_t drive_ids[CHASSIS_MOTOR_COUNT] = {0};
-        uint8_t steer_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_STEER, steer_ids, CHASSIS_STEER_COUNT);
-        (void)MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE, drive_ids, CHASSIS_MOTOR_COUNT);  // Get drive motors but don't store count
-
-        // Determine final angle ticks using initial offset and shortest-path heuristics
-        float final_ticks = canonical0; // default
-        if (steer_count > 0) {
-            MotorContext_t *ctx0 = MotorDriver_GetContext(steer_ids[0]);
-            if (ctx0 && ctx0->config && ctx0->angle_initialized) {
-                float initial0 = (float)ctx0->config->limits.gm6020.initial_angle;
-                float last_target0 = ctrl->steer_target_angles[0];
-
-                float option1 = initial0 + canonical0;
-                while (option1 >= ticks_per_rev) option1 -= ticks_per_rev;
-                while (option1 < 0.0f) option1 += ticks_per_rev;
-
-                float option2 = initial0 + canonical0 + 4096.0f;
-                while (option2 >= ticks_per_rev) option2 -= ticks_per_rev;
-                while (option2 < 0.0f) option2 += ticks_per_rev;
-
-                float diff1 = option1 - last_target0;
-                if (diff1 > 4096.0f) diff1 -= 8192.0f;
-                if (diff1 < -4096.0f) diff1 += 8192.0f;
-
-                float diff2 = option2 - last_target0;
-                if (diff2 > 4096.0f) diff2 -= 8192.0f;
-                if (diff2 < -4096.0f) diff2 += 8192.0f;
-
-                if (fabsf(diff1) <= fabsf(diff2)) {
-                    final_ticks = canonical0;
-                } else {
-                    final_ticks = canonical0 + 4096.0f;
-                    while (final_ticks >= 4096.0f) final_ticks -= 8192.0f;
-                    while (final_ticks < -4096.0f) final_ticks += 8192.0f;
-                }
-            }
-        }
-
-        // Prepare steer angles array (ticks + initial offsets)
-        float steer_angles[CHASSIS_STEER_COUNT] = {0};
-        for (uint8_t i = 0; i < CHASSIS_STEER_COUNT; i++) {
-            MotorContext_t *ctx = MotorDriver_GetContext(steer_ids[i]);
-            if (ctx && ctx->config) {
-                float initial = (float)ctx->config->limits.gm6020.initial_angle;
-                float target_angle = initial + final_ticks;
-                while (target_angle >= ticks_per_rev) target_angle -= ticks_per_rev;
-                while (target_angle < 0.0f) target_angle += ticks_per_rev;
-                steer_angles[i] = target_angle;
-            }
-        }
-
-        // Drive speeds: assign module speeds to front (0,1) and rear (2,3)
-        float drive_speeds[CHASSIS_MOTOR_COUNT] = {0};
-        for (uint8_t i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
-            if (i < 2) {
-                // front module
-                MotorContext_t *dctx = MotorDriver_GetContext(drive_ids[i]);
-                int8_t dir = (dctx && dctx->config) ? dctx->config->direction : 1;
-                drive_speeds[i] = dir * speed0;
-            } else {
-                // rear module
-                MotorContext_t *dctx = MotorDriver_GetContext(drive_ids[i]);
-                int8_t dir = (dctx && dctx->config) ? dctx->config->direction : 1;
-                drive_speeds[i] = dir * speed1;
-            }
-        }
-
-        // Commit to controller state and compute currents immediately
-        ChassisController_SetSteerTargetAngles(ctrl, steer_angles);
-        ChassisController_SetTargetSpeeds(ctrl, drive_speeds);
-        ChassisController_ComputeCurrents(ctrl, HAL_GetTick());
-    }
-    // Safety checks: discard obviously-bad values
+    // Safety checks: discard obviously-bad values (do this FIRST)
     if (!isfinite(vx) || !isfinite(vy) || !isfinite(wz)) {
         s_control_mode = CONTROL_MODE_RC;
         return;
@@ -261,17 +142,17 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
         return;
     }
 
-    // One-pole low-pass filter then per-cycle delta cap
+    // STEP 1: Apply filtering FIRST (before any calculations)
     float prev_vx = s_filtered_vx;
     float prev_vy = s_filtered_vy;
     float prev_wz = s_filtered_wz;
 
-    // Low-pass
+    // Low-pass filter
     float lp_vx = prev_vx + RADAR_SMOOTH_ALPHA * (vx - prev_vx);
     float lp_vy = prev_vy + RADAR_SMOOTH_ALPHA * (vy - prev_vy);
     float lp_wz = prev_wz + RADAR_SMOOTH_ALPHA * (wz - prev_wz);
 
-    // Delta cap
+    // Delta cap (limit acceleration per cycle)
     float dvx = lp_vx - prev_vx;
     if (dvx > RADAR_MAX_DELTA_V) dvx = RADAR_MAX_DELTA_V;
     if (dvx < -RADAR_MAX_DELTA_V) dvx = -RADAR_MAX_DELTA_V;
@@ -279,7 +160,6 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
 
     float dvy = lp_vy - prev_vy;
     if (dvy > RADAR_MAX_DELTA_V) dvy = RADAR_MAX_DELTA_V;
-    
     if (dvy < -RADAR_MAX_DELTA_V) dvy = -RADAR_MAX_DELTA_V;
     s_filtered_vy = prev_vy + dvy;
 
@@ -288,11 +168,25 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     if (dwz < -RADAR_MAX_DELTA_W) dwz = -RADAR_MAX_DELTA_W;
     s_filtered_wz = prev_wz + dwz;
 
-    // Apply filtered values to chassis command (safe to publish)
-    s_chassis_cmd.vx = s_filtered_vx;
-    s_chassis_cmd.vy = s_filtered_vy;
-    s_chassis_cmd.wz = s_filtered_wz;
+    // STEP 2: Use FILTERED values for all subsequent calculations
+    // Match RC mode coordinate system: swap vx <-> vy
+    float vx_cmd = s_filtered_vy;  // swap to match RC
+    float vy_cmd = s_filtered_vx;  // swap to match RC
+    float wz_cmd = s_filtered_wz;
+
+    // Calculate magnitude and steering direction from filtered values
+    float magnitude = sqrtf(vx_cmd * vx_cmd + vy_cmd * vy_cmd);
+    float target_angle_rad = atan2f(vx_cmd, -vy_cmd);  // atan2(forward, -strafe)
+    float speed_magnitude = magnitude * (float)CHASSIS_DEMO_TARGET_SPEED;
+
+    // STEP 3: Set chassis command with FILTERED and SWAPPED coordinates
+    s_chassis_cmd.vx = vx_cmd;
+    s_chassis_cmd.vy = vy_cmd;
+    s_chassis_cmd.wz = wz_cmd;
     s_chassis_cmd.enabled = true;
+
+    // Control mode flag
+    s_control_mode = CONTROL_MODE_RADAR;
 
     // Debug log: original vs filtered speeds
     LOG_CSV(LOG_TAG_CMD, "RADAR,IN:%.3f,%.3f,%.3f,OUT:%.3f,%.3f,%.3f",
@@ -322,7 +216,7 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
 
 // Callback for RC update
 static void on_rc_update(const MsgEvent *ev, void *user_data)
-{
+{return;
     (void)user_data;
     if (ev->size == sizeof(RC_ctrl_t))
     {
