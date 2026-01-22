@@ -119,7 +119,7 @@ static void gimbal_to_chassis_frame(float vx_g, float vy_g, float offset_angle_d
  * NOTE: This function is sentry_swerve specific.
  * For infantry mecanum, use different mapping (TODO if needed).
  */
-#ifdef ROBOT_TYPE_sentry_swerve
+/*#ifdef ROBOT_TYPE_sentry_swerve
 static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
 {
     // Timeout protection: if radar data is stale (>1000ms), fall back to RC or stop
@@ -192,7 +192,7 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     LOG_CSV(LOG_TAG_CMD, "RADAR,IN:%.3f,%.3f,%.3f,OUT:%.3f,%.3f,%.3f",
             vx, vy, wz, s_filtered_vx, s_filtered_vy, s_filtered_wz);
 }
-#else
+#else*/
 // Infantry (mecanum/2WD) radar mapping - placeholder for future implementation
 static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
 {
@@ -205,14 +205,14 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     s_control_mode = CONTROL_MODE_RADAR;
     
     // For infantry: direct velocity pass-through (chassis_controller handles mapping)
-    s_chassis_cmd.vx = vx;
-    s_chassis_cmd.vy = vy;
+    s_chassis_cmd.vx = vy;
+    s_chassis_cmd.vy = vx;
     s_chassis_cmd.wz = wz;
     s_chassis_cmd.enabled = true;
     
     LOG_CSV(LOG_TAG_CMD, "RADAR,%.3f,%.3f,%.3f", vx, vy, wz);
 }
-#endif
+// #endif
 
 // Callback for RC update
 static void on_rc_update(const MsgEvent *ev, void *user_data)

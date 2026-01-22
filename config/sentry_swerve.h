@@ -32,7 +32,7 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         .can_rx_id = 0x201,
         .can_tx_id = 0x200,
         .tx_slot = 0,
-        .direction = 1,
+        .direction = -1,
         .limits.m3508 = {.speed_limit = 10000.0f},
         .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f},
         .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
@@ -41,7 +41,7 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
     {.motor_id = 1, .type = MOTOR_TYPE_M3508, .role = MOTOR_ROLE_CHASSIS_DRIVE, .can_channel = CAN_CHANNEL_1, .can_rx_id = 0x202, .can_tx_id = 0x200, .tx_slot = 1, .direction = -1, .limits.m3508 = {.speed_limit = 10000.0f}, .pid_outer = {8.0f, 0.0f, 0.1f, 15000.0f, 7500.0f}, .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
 
     // Wheel 2 drive (left-omniwheel)
-    {.motor_id = 2, .type = MOTOR_TYPE_M3508, .role = MOTOR_ROLE_CHASSIS_DRIVE, .can_channel = CAN_CHANNEL_1, .can_rx_id = 0x203, .can_tx_id = 0x200, .tx_slot = 2, .direction = 1, .limits.m3508 = {.speed_limit = 10000.0f}, .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f}, .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
+    {.motor_id = 2, .type = MOTOR_TYPE_M3508, .role = MOTOR_ROLE_CHASSIS_DRIVE, .can_channel = CAN_CHANNEL_1, .can_rx_id = 0x203, .can_tx_id = 0x200, .tx_slot = 2, .direction = -1, .limits.m3508 = {.speed_limit = 10000.0f}, .pid_outer = {10.0f, 0.0f, 0.1f, 15000.0f, 7500.0f}, .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
 
     // Wheel 3 drive (back normal wheel)
     {.motor_id = 3, .type = MOTOR_TYPE_M3508, .role = MOTOR_ROLE_CHASSIS_DRIVE, .can_channel = CAN_CHANNEL_1, .can_rx_id = 0x204, .can_tx_id = 0x200, .tx_slot = 3, .direction = -1, .limits.m3508 = {.speed_limit = 10000.0f}, .pid_outer = {8.0f, 0.0f, 0.005f, 15000.0f, 7500.0f}, .pid_inner = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
@@ -57,8 +57,8 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         .tx_slot = 0,       // For 0x2FF, slot = (motor_id - 5)
         .direction = 1,
         .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 1084.0f},
-        .pid_outer = {0.7f, 0.045f, 0.018f, 300.0f, 300.0f}, // Yaw angle PID
-        .pid_inner = {32.0f, 0.01f, 2.0f, 30000.0f, 4000.0f} // Yaw speed PID
+        .pid_outer = {1.2f, 0.08f, 0.03f, 300.0f, 300.0f}, // Steer angle PID (increased for faster response)
+        .pid_inner = {45.0f, 0.02f, 3.0f, 30000.0f, 4000.0f} // Steer speed PID (increased for faster response)
     },
 
     // Steer motor B (GM6020 ID 6 => RX 0x20A)
@@ -69,8 +69,8 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         .tx_slot = 1,
         .direction = 1,
         .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 2434.0f},
-        .pid_outer = {0.7f, 0.045f, 0.018f, 300.0f, 300.0f},
-        .pid_inner = {22.0f, 0.01f, 3.0f, 30000.0f, 4000.0f}},
+        .pid_outer = {1.2f, 0.08f, 0.03f, 300.0f, 300.0f}, // Steer angle PID (increased for faster response)
+        .pid_inner = {45.0f, 0.02f, 3.0f, 30000.0f, 4000.0f}}, // Steer speed PID (increased for faster response)
 
     // --------------------------
     // GIMBAL YAW (GM6020) — CAN1
