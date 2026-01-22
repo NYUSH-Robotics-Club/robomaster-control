@@ -5,7 +5,6 @@
 #include "vision_comm.h"
 #include "radar_comm.h"
 #include "chassis_controller.h"
-#include "motor_driver.h"
 #include "printing.h"
 #include "logger.h"
 #include "stm32f4xx_hal.h"
@@ -24,9 +23,22 @@
 #define RADAR_MAX_DELTA_W 0.10f     // max rad/s change per cycle for wz
 
 // ==========================
+// Remote Control Switch Assignment
+// ==========================
+// LEFT SWITCH (s[1]): Shooter control
+//   - UP: Friction wheels + Feed enabled
+//   - MID: Friction wheels only
+//   - DOWN: All disabled
+//
+// RIGHT SWITCH (s[0]): Chassis mode control
+//   - UP: Small gyro (spinning) mode
+//   - MID: Gimbal-oriented follow mode
+//   - DOWN: Normal mode
+//
+// ==========================
 // Small gyro (spinning) mode
 // ==========================
-// Trigger: left switch in MID position.
+// Trigger: right switch in UP position.
 // Behavior:
 //  - Chassis: constant spin + allow translation (field-oriented control).
 //  - Gimbal yaw: hold gimbal IMU absolute yaw steady (controlled by gimbal module's internal PID).
@@ -42,7 +54,7 @@ static float s_spin_hold_yaw_deg = 0.0f; // target absolute yaw (deg, gimbal IMU
 // ==========================
 // Gimbal-oriented follow mode
 // ==========================
-// Trigger: left switch in UP position.
+// Trigger: right switch in MID position.
 // Behavior:
 //  - Chassis: movement direction follows gimbal orientation (field-oriented control).
 //  - Chassis does NOT auto-spin (wz controlled manually by joystick).
@@ -282,8 +294,8 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     s_chassis_cmd.enabled = true;
 
     // Debug log: original vs filtered speeds
-    LOG_CSV(LOG_TAG_CMD, "RADAR,IN:%.3f,%.3f,%.3f,OUT:%.3f,%.3f,%.3f,sp0:%.2f,sp1:%.2f",
-            vx, vy, wz, s_filtered_vx, s_filtered_vy, s_filtered_wz, speed0, speed1);
+    LOG_CSV(LOG_TAG_CMD, "RADAR,IN:%.3f,%.3f,%.3f,OUT:%.3f,%.3f,%.3f",
+            vx, vy, wz, s_filtered_vx, s_filtered_vy, s_filtered_wz);
 }
 #else
 // Infantry (mecanum/2WD) radar mapping - placeholder for future implementation
@@ -433,8 +445,8 @@ static void process_chassis_command(const RC_ctrl_t *rc, const SensorData *senso
     else
     {
         // Normal (original) behavior
-        s_chassis_cmd.vx = vx_f;
-        s_chassis_cmd.vy = vy_f;
+        s_chassis_cmd.vx = vy_f;
+        s_chassis_cmd.vy = vx_f;
         s_chassis_cmd.wz = wz_n;
         // Enable chassis if any joystick is moved
         s_chassis_cmd.enabled = (vx_raw != 0 || vy_raw != 0 || wz_raw != 0);
@@ -452,15 +464,15 @@ static void process_shooter_command(const RC_ctrl_t *rc)
         return;
     }
 
-    // Right switch (s[0]) controls shooter
+    // Left switch (s[1]) controls shooter
     // Up: friction + feed enabled
     // Mid: friction enabled only
     // Down: all disabled
-    bool right_switch_up = switch_is_up(rc->rc.s[0]);
-    bool right_switch_mid = switch_is_mid(rc->rc.s[0]);
+    bool left_switch_up = switch_is_up(rc->rc.s[1]);
+    bool left_switch_mid = switch_is_mid(rc->rc.s[1]);
 
-    s_shoot_cmd.friction_enabled = (right_switch_up || right_switch_mid);
-    s_shoot_cmd.feed_enabled = right_switch_up;
+    s_shoot_cmd.friction_enabled = (left_switch_up || left_switch_mid);
+    s_shoot_cmd.feed_enabled = left_switch_up;
 }
 
 // Process gimbal control commands
@@ -603,8 +615,8 @@ void CmdController_Task(uint32_t current_tick)
         process_gimbal_command(&s_last_rc, &s_last_sensor, false);  // No spin mode in radar autonomous
     } else {
         // RC mode (fallback)
-        bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[1]);
-        bool spin_now = switch_is_up(s_last_rc.rc.s[1]);
+        bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[0]);
+        bool spin_now = switch_is_up(s_last_rc.rc.s[0]);
 
         // Spin mode rising edge: latch current gimbal absolute yaw as hold target
         if (spin_now && !s_spin_mode)
@@ -632,8 +644,8 @@ void CmdController_Task(uint32_t current_tick)
         process_gimbal_command(&s_last_rc, &s_last_sensor, false);  // No spin mode in radar autonomous
     } else {
         // RC mode (fallback when radar not available)
-        bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[1]);
-        bool spin_now = switch_is_up(s_last_rc.rc.s[1]);
+        bool gimbal_follow_now = switch_is_mid(s_last_rc.rc.s[0]);
+        bool spin_now = switch_is_up(s_last_rc.rc.s[0]);
 
         // Spin mode rising edge: latch current gimbal absolute yaw as hold target
         if (spin_now && !s_spin_mode)
