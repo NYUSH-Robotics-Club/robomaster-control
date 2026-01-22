@@ -442,7 +442,7 @@ def main():
     
     # Keyboard mode parameters
     parser.add_argument('--speed', type=float, default=0.3, help='Movement speed for keyboard (0.0-1.0)')
-    parser.add_argument('--rate', type=int, default=100, help='Send rate in Hz (default 100)')
+    parser.add_argument('--rate', type=int, default=200, help='Send rate in Hz (default 200 to match STM32 CmdController 200Hz)')
     
     args = parser.parse_args()
 

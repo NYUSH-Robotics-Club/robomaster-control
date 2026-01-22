@@ -5,6 +5,7 @@
 #include "vision_comm.h"
 #include "radar_comm.h"
 #include "chassis_controller.h"
+#include "motor_driver.h"
 #include "printing.h"
 #include "logger.h"
 #include "stm32f4xx_hal.h"
@@ -150,7 +151,7 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     
     // For swerve steering (both modules):
     float theta0 = target_angle_rad;
-    float theta1 = target_angle_rad;
+    // theta1 = target_angle_rad;  // Same as theta0 for swerve
     float speed0 = speed_magnitude;
     float speed1 = speed_magnitude;
     
@@ -176,7 +177,7 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
         uint8_t steer_ids[CHASSIS_STEER_COUNT] = {0};
         uint8_t drive_ids[CHASSIS_MOTOR_COUNT] = {0};
         uint8_t steer_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_STEER, steer_ids, CHASSIS_STEER_COUNT);
-        uint8_t drive_count = MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE, drive_ids, CHASSIS_MOTOR_COUNT);
+        (void)MotorDriver_FindByRole(MOTOR_ROLE_CHASSIS_DRIVE, drive_ids, CHASSIS_MOTOR_COUNT);  // Get drive motors but don't store count
 
         // Determine final angle ticks using initial offset and shortest-path heuristics
         float final_ticks = canonical0; // default
