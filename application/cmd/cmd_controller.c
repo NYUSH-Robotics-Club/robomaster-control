@@ -109,8 +109,9 @@ static void gimbal_to_chassis_frame(float vx_g, float vy_g, float offset_angle_d
 #ifdef ROBOT_TYPE_sentry_swerve
 static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
 {
-    // Timeout protection: if radar data is stale (>500ms), fall back to RC or stop
-    if (!s_last_radar.valid || (now - s_last_radar.ts_ms > 500u)) {
+    // Timeout protection: if radar data is stale (>1000ms), fall back to RC or stop
+    // Note: 500ms was too aggressive, causing spurious fallback to RC mode
+    if (!s_last_radar.valid || (now - s_last_radar.ts_ms > 1000u)) {
         // Data invalid, switch back to RC or stop
         s_control_mode = CONTROL_MODE_RC;
         return;
@@ -119,27 +120,27 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     // Radar data valid, use it
     s_control_mode = CONTROL_MODE_RADAR;
     
-    // Swerve wheel mapping (simplified)
-    // Wheel positions relative to chassis center:
-    //  Front-Left: (-L, -W),  Front-Right: (-L, W)
-    //  Rear-Left:  (L, -W),   Rear-Right:  (L, W)
-    // For 2-module swerve (front & rear): use average positions
+    // COORDINATE SYSTEM MUST MATCH RC MODE (sentry_controller.c)
+    // RC mode uses: atan2f(vx, -vy) for steering angle
+    // This is the same coordinate system where:
+    //  - vx: forward/backward component (Y-axis in math coords)
+    //  - vy: left/right (strafe) component (X-axis in math coords)
+    //  - For steering: angle = atan2f(vx, -vy)
     
-    const float L = 0.15f;  // Front-to-rear half-length
-    const float W = 0.15f;  // Left-to-right half-width
-    const float r = 0.05f;  // Wheel radius
+    // Calculate magnitude and direction (same logic as RC mode)
+    float magnitude = sqrtf(vx * vx + vy * vy);
     
-    // Module 0 (front): position (-L, 0) -> average of front wheels
-    float v0_x = vx - wz * 0.0f;  // wz * (-y_pos) = wz * 0
-    float v0_y = vy + wz * (-L);
-    float theta0 = atan2f(v0_y, v0_x);
-    float speed0 = sqrtf(v0_x * v0_x + v0_y * v0_y) / r;
+    // Target steering angle (MUST use same formula as RC)
+    float target_angle_rad = atan2f(vx, -vy);  // atan2(forward, -strafe)
     
-    // Module 1 (rear): position (L, 0) -> average of rear wheels
-    float v1_x = vx - wz * 0.0f;
-    float v1_y = vy + wz * L;
-    float theta1 = atan2f(v1_y, v1_x);
-    float speed1 = sqrtf(v1_x * v1_x + v1_y * v1_y) / r;
+    // Drive speed from magnitude
+    float speed_magnitude = magnitude * (float)CHASSIS_DEMO_TARGET_SPEED;
+    
+    // For swerve steering (both modules):
+    float theta0 = target_angle_rad;
+    float theta1 = target_angle_rad;
+    float speed0 = speed_magnitude;
+    float speed1 = speed_magnitude;
     
     // Dispatch: set steer target angles and drive target speeds
     // Convert theta (rad) -> encoder ticks as used by GM6020 (8192 ticks/rev)
@@ -153,16 +154,11 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
         float rad_to_ticks = ticks_per_rev / (2.0f * (float)M_PI);
 
         float tick0 = theta0 * rad_to_ticks;
-        float tick1 = theta1 * rad_to_ticks;
 
-        // Normalize to [-4096,4096) then canonicalize to +/-90deg logic similar to sentry
+        // Normalize to [-4096,4096) then canonicalize to +/-90deg logic (same as RC mode)
         float canonical0 = tick0;
         if (canonical0 > 2048.0f) canonical0 -= 4096.0f;
         if (canonical0 < -2048.0f) canonical0 += 4096.0f;
-
-        float canonical1 = tick1;
-        if (canonical1 > 2048.0f) canonical1 -= 4096.0f;
-        if (canonical1 < -2048.0f) canonical1 += 4096.0f;
 
         // Find steer motors and drive motors
         uint8_t steer_ids[CHASSIS_STEER_COUNT] = {0};
@@ -598,8 +594,8 @@ void CmdController_Task(uint32_t current_tick)
     uint32_t now = HAL_GetTick();
     
 #ifdef ROBOT_TYPE_sentry_swerve
-    // Sentry: support radar autonomous mode
-    if (s_last_radar.valid && (now - s_last_radar.ts_ms <= 500u)) {
+    // Timeout protection: increased from 500ms to 1000ms to handle network jitter
+    if (s_last_radar.valid && (now - s_last_radar.ts_ms <= 1000u)) {
         // Radar mode: autonomous motion from external controller
         radar_cmd_to_wheel_speeds(s_last_radar.vx, s_last_radar.vy, s_last_radar.wz, now);
         // Still process gimbal and shooter from RC/other sources
@@ -627,7 +623,8 @@ void CmdController_Task(uint32_t current_tick)
 #else
     // Infantry: support both RC and radar control
     // Priority: radar (if valid and fresh) > RC (fallback)
-    if (s_last_radar.valid && (now - s_last_radar.ts_ms <= 500u)) {
+    // Timeout: 1000ms (increased from 500ms to handle network latency)
+    if (s_last_radar.valid && (now - s_last_radar.ts_ms <= 1000u)) {
         // Radar mode: autonomous motion from external controller (ROS2/Jetson)
         radar_cmd_to_wheel_speeds(s_last_radar.vx, s_last_radar.vy, s_last_radar.wz, now);
         // Still process gimbal and shooter from RC

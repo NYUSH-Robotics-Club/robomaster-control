@@ -52,7 +52,7 @@ static const MotorConfig_t g_motor_configs_sentry_swerve[] = {
         .direction = 1,
         .limits.gm6020 = {.angle_min = 0.0f, .angle_max = 8192.0f, .gravity_compensation = 0.0f, .initial_angle = 1084.0f},
         .pid_outer = {0.7f, 0.045f, 0.018f, 300.0f, 300.0f}, // Yaw angle PID
-        .pid_inner = {22.0f, 0.01f, 3.0f, 30000.0f, 4000.0f} // Yaw speed PID
+        .pid_inner = {32.0f, 0.01f, 2.0f, 30000.0f, 4000.0f} // Yaw speed PID
     },
 
     // Steer motor B (GM6020 ID 6 => RX 0x20A)

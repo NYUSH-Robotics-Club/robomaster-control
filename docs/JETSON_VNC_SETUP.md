@@ -396,11 +396,19 @@ source /opt/ros/humble/setup.bash
 cd ~/nav_ws
 source install/setup.bash
 
-# 运行RViz
+# 运行RViz（使用Nav2默认配置）
+ros2 run rviz2 rviz2 -d $(ros2 pkg prefix nav2_bringup)/share/nav2_bringup/rviz/nav2_default_view.rviz
+
+# 或者运行不带配置的RViz（需要手动加载配置）
 ros2 run rviz2 rviz2
 
-# 或者运行你的Nav2脚本（现在可以启动RViz了）
+# 或者运行你的Nav2脚本（如果脚本中包含RViz启动）
 ./your_nav2_script.sh
 ```
+
+**说明**：
+- `-d` 参数指定RViz配置文件
+- `$(ros2 pkg prefix nav2_bringup)` 会自动解析Nav2包的安装路径
+- `nav2_default_view.rviz` 是Nav2提供的默认可视化配置
 
 现在你可以在VNC窗口中看到RViz的图形界面了！
