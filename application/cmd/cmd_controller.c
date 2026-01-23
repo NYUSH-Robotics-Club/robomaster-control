@@ -26,10 +26,9 @@
 // ==========================
 // Remote Control Switch Assignment
 // ==========================
-// LEFT SWITCH (s[1]): Shooter control
-//   - UP: Friction wheels + Feed enabled
-//   - MID: Friction wheels only
-//   - DOWN: All disabled
+// LEFT SWITCH (s[1]): 
+//   - Infantry: Shooter control (UP: Friction+Feed, MID: Friction only, DOWN: All disabled)
+//   - Sentry: Gimbal yaw auto-rotation (MID: Enable yaw rotation, others: Disable)
 //
 // RIGHT SWITCH (s[0]): Chassis mode control
 //   - UP: Small gyro (spinning) mode
@@ -48,6 +47,13 @@
 #define SPIN_WZ_NORM (0.33f)                   // chassis spin rate command (normalized, 0-1)
 #define SPIN_TRANSLATE_LIMIT_NORM (1.00f)      // max translation velocity in spin mode (normalized)
 #define SPIN_GIMBAL_YAW_ADJ_DEG_PER_S (120.0f) // manual yaw adjustment rate when in spin mode (deg/s)
+
+// ==========================
+// Sentry yaw auto-rotation mode
+// ==========================
+// Trigger: left switch in MID position (sentry only).
+// Behavior: Gimbal yaw rotates at constant speed for surveillance
+#define SENTRY_YAW_AUTO_ROTATION_RPM (400.0f)  // Target RPM for yaw auto-rotation (constant speed)
 
 static bool s_spin_mode = false;
 static float s_spin_hold_yaw_deg = 0.0f; // target absolute yaw (deg, gimbal IMU yaw_total_angle)
@@ -279,7 +285,13 @@ static void process_shooter_command(const RC_ctrl_t *rc)
         return;
     }
 
-    // Left switch (s[1]) controls shooter
+#ifdef ROBOT_TYPE_sentry_swerve
+    // Sentry: No shooter control via left switch
+    // Left switch is used for gimbal yaw auto-rotation instead
+    s_shoot_cmd.friction_enabled = false;
+    s_shoot_cmd.feed_enabled = false;
+#else
+    // Infantry: Left switch (s[1]) controls shooter
     // Up: friction + feed enabled
     // Mid: friction enabled only
     // Down: all disabled
@@ -288,6 +300,7 @@ static void process_shooter_command(const RC_ctrl_t *rc)
 
     s_shoot_cmd.friction_enabled = (left_switch_up || left_switch_mid);
     s_shoot_cmd.feed_enabled = left_switch_up;
+#endif
 }
 
 // Process gimbal control commands
@@ -309,6 +322,51 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
     // Gimbal always enabled
     s_gimbal_cmd.enabled = true;
 
+#ifdef ROBOT_TYPE_sentry_swerve
+    // Sentry: Left switch (s[1]) controls yaw auto-rotation
+    // MID: Enable auto-rotation at constant speed
+    // UP/DOWN: Manual control (disabled auto-rotation)
+    bool left_switch_mid = switch_is_mid(rc->rc.s[1]);
+    
+    // Pitch control: right stick Y
+    int16_t pitch_raw = apply_deadband((int16_t)(rc->rc.ch[1]), JOYSTICK_DEADBAND);
+    const float max_input = (float)(RC_CH_VALUE_MAX - RC_CH_VALUE_OFFSET);
+    s_gimbal_cmd.pitch_rate = (float)pitch_raw / max_input;
+    
+    // Yaw control: auto-rotation when left switch is MID, otherwise manual
+    if (left_switch_mid)
+    {
+        // Speed-only mode: pure speed control (bypass angle loop)
+        // yaw_rate_memo = 2.0: indicates speed-only mode
+        // yaw_target_memo: target speed in RPM
+        s_gimbal_cmd.yaw_rate_memo = 2.0f;
+        s_gimbal_cmd.yaw_target_memo = SENTRY_YAW_AUTO_ROTATION_RPM;
+        s_gimbal_cmd.yaw_rate = 0.0f;  // Not used in speed-only mode
+    }
+    else
+    {
+        // Manual yaw control: right stick X (normal dual-loop control)
+        int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
+        
+        // RC signal glitch filter: reject sudden jumps >1000 units
+        if (abs(yaw_storage - yaw_raw) > 1000)
+        {
+            yaw_raw = yaw_storage;
+        }
+        
+        s_gimbal_cmd.yaw_rate = (float)yaw_raw / max_input;
+        s_gimbal_cmd.yaw_rate_memo = 0.0f;      // Normal mode
+        s_gimbal_cmd.yaw_target_memo = 0.0f;
+        yaw_storage = yaw_raw;
+    }
+    
+    // Sentry doesn't use vision
+    s_gimbal_cmd.vision_valid = false;
+    s_gimbal_cmd.vision_yaw_err_rad = 0.0f;
+    s_gimbal_cmd.vision_pitch_err_rad = 0.0f;
+    
+#else
+    // Infantry: Original gimbal control logic
     // Gimbal controls:
     //   ch[0]: yaw via right stick X
     //   ch[1]: pitch via right stick Y
@@ -375,6 +433,7 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
         }
     }
     yaw_storage = yaw_raw;
+#endif
 }
 
 void CmdController_Init(void)

@@ -17,8 +17,17 @@ static uint8_t s_yaw_motor_id = 0xFF;
 #define YAW_CONTROL_GYRO_LPF_ALPHA (0.3f)
 #define CURRENT_LIMIT (30000.0f)
 
+// Independent PID controller for speed-only mode (sentry auto-rotation)
+// This PID is tuned specifically for constant speed tracking
+static PID_Controller s_yaw_speed_only_pid;
+#define SPEED_ONLY_PID_KP (120.0f)   // Very stiff proportional gain
+#define SPEED_ONLY_PID_KI (0.5f)     // Small integral to eliminate steady-state error
+#define SPEED_ONLY_PID_KD (20.0f)    // High derivative for damping
+#define SPEED_ONLY_PID_OUT_MAX (30000.0f)
+#define SPEED_ONLY_PID_INT_MAX (10000.0f)
+
 // Legacy defines (not used anymore - values from config)
-#define YAW_RPM_MAX (220.0f) * 2.0f
+#define YAW_RPM_MAX (220.0f)
 #define YAW_RPM_MIN 0.0f
 #define YAW_ERROR_FOR_FULL_SPEED (1200.0f)
 // Static state for application
@@ -208,9 +217,11 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
     if (s_last_cmd.enabled) {
       static bool s_yaw_vision_active = false;
       static bool s_yaw_spin_hold_active = false;
+      static bool s_yaw_speed_only_active = false;
+      
       bool use_vision_target = s_last_cmd.vision_valid;
-      bool use_spin_hold =
-          (!use_vision_target) && (s_last_cmd.yaw_rate_memo > 0.5f);
+      bool use_spin_hold = (!use_vision_target) && (s_last_cmd.yaw_rate_memo > 0.5f && s_last_cmd.yaw_rate_memo < 1.5f);
+      bool use_speed_only = (!use_vision_target) && (s_last_cmd.yaw_rate_memo > 1.5f);
 
       // Continuous angle control: update target angle every cycle when vision
       // is valid
@@ -286,15 +297,56 @@ static void on_gimbal_cmd(const MsgEvent *ev, void *user) {
       } else {
         s_yaw_spin_hold_active = false;
       }
+      
+      // Speed-only mode: direct speed control (bypass angle loop)
+      // yaw_rate_memo = 2.0: speed-only flag
+      // yaw_target_memo: target speed in RPM
+      // Uses independent PID controller (s_yaw_speed_only_pid)
+      int16_t yaw_current = 0;
+      if (use_speed_only) {
+        MotorContext_t *yaw = MotorDriver_GetContext(s_yaw_motor_id);
+        if (yaw && yaw->angle_initialized) {
+          float target_rpm = s_last_cmd.yaw_target_memo;
+          float speed_feedback = (float)yaw->speed_rpm;
+          
+          // Use dedicated speed-only PID controller (independent from dual-loop PID)
+          float cmd_speed_to_current = PID_Calculate(&s_yaw_speed_only_pid, target_rpm, speed_feedback);
+          
+          // Clamp current
+          if (cmd_speed_to_current > CURRENT_LIMIT)
+            cmd_speed_to_current = CURRENT_LIMIT;
+          if (cmd_speed_to_current < -CURRENT_LIMIT)
+            cmd_speed_to_current = -CURRENT_LIMIT;
+          
+          yaw_current = (int16_t)cmd_speed_to_current;
+          
+          if (!s_yaw_speed_only_active) {
+            PID_Reset(&s_yaw_speed_only_pid);
+          }
+          s_yaw_speed_only_active = true;
+          
+          // Speed-only mode CSV logging
+          LOG_CSV(LOG_TAG_GIM, "SPEED_ONLY,%.2f,%.2f,%d,%.2f",
+                  target_rpm,
+                  speed_feedback,
+                  yaw->speed_rpm,
+                  cmd_speed_to_current);
+        } else {
+          s_yaw_speed_only_active = false;
+        }
+      } else {
+        s_yaw_speed_only_active = false;
+        // Normal dual-loop control
+        yaw_current = GimbalController_YawControlWithCompensation(
+            (use_vision_target || use_spin_hold) ? 0.0f : s_last_cmd.yaw_rate,
+            &s_last_sensor,
+            use_spin_hold // Use IMU feedback only in spin mode
+        );
+      }
 
       int16_t pitch_current = GimbalController_PitchControl(
           s_pitch_motor_id, use_vision_target ? 0.0f : s_last_cmd.pitch_rate,
           &s_last_sensor);
-      int16_t yaw_current = GimbalController_YawControlWithCompensation(
-          (use_vision_target || use_spin_hold) ? 0.0f : s_last_cmd.yaw_rate,
-          &s_last_sensor,
-          use_spin_hold // Use IMU feedback only in spin mode
-      );
 
       // Send motor currents (buffered, will be flushed by message center)
       MotorDriver_SendCurrent(s_pitch_motor_id, pitch_current);
@@ -348,7 +400,17 @@ void GimbalApp_Init(void) {
   memset(&s_last_cmd, 0, sizeof(s_last_cmd));
   memset(&s_last_sensor, 0, sizeof(s_last_sensor));
 
+  // Initialize independent speed-only PID controller
+  PID_Init(&s_yaw_speed_only_pid, 
+           SPEED_ONLY_PID_KP, 
+           SPEED_ONLY_PID_KI, 
+           SPEED_ONLY_PID_KD, 
+           SPEED_ONLY_PID_OUT_MAX, 
+           SPEED_ONLY_PID_INT_MAX);
+
   LOG_INFO(LOG_TAG_GIM, "Gimbal init: searching for motors...");
+  LOG_INFO(LOG_TAG_GIM, "Speed-only PID: Kp=%.1f Ki=%.1f Kd=%.1f", 
+           SPEED_ONLY_PID_KP, SPEED_ONLY_PID_KI, SPEED_ONLY_PID_KD);
 
   // Find gimbal motors by role (module layer handles config)
   uint8_t pitch_motors[1];

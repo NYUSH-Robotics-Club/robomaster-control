@@ -13,9 +13,9 @@ extern "C" {
 typedef struct {
     bool enabled;              // Gimbal control enabled
     float pitch_rate;          // Pitch angular rate command (-1.0 to 1.0, normalized)
-    float yaw_rate; 
-    float yaw_rate_memo;
-    float yaw_target_memo;           // Yaw angular rate command (-1.0 to 1.0, normalized)
+    float yaw_rate;            // Yaw angular rate command (-1.0 to 1.0, normalized)
+    float yaw_rate_memo;       // Multipurpose: spin hold flag (1.0) or speed-only mode flag (2.0)
+    float yaw_target_memo;     // Multipurpose: spin hold target angle (deg) or speed target (RPM)
     bool vision_valid;
     float vision_yaw_err_rad;
     float vision_pitch_err_rad;

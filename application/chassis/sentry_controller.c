@@ -20,6 +20,13 @@
 
 #define MOTOR_FEEDBACK_TIMEOUT_MS (100U)
 
+// Swerve control constants
+#define VELOCITY_DEADBAND (0.005f)
+#define ENCODER_TICKS_PER_REV (8192.0f)
+#define STEER_RPM_LIMIT (450.0f)
+#define STEER_CURRENT_LIMIT (25000.0f)
+#define ANGLE_ERROR_DEADBAND (1.0f)
+
 // Math constants
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
@@ -125,12 +132,11 @@ void ChassisController_Update(ChassisController *controller,
   float vx_norm = s_last_cmd.vx;
   float vy_norm = s_last_cmd.vy;
 
-  const float deadband = 0.005f;  // 降低死区以响应小速度命令
-  const float ticks_per_rev = 8192.0f;
+  const float ticks_per_rev = ENCODER_TICKS_PER_REV;
   const float rad_to_ticks = ticks_per_rev / (2.0f * M_PI);
   const float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;
 
-  if (fabsf(vx_norm) < deadband && fabsf(vy_norm) < deadband) {
+  if (fabsf(vx_norm) < VELOCITY_DEADBAND && fabsf(vy_norm) < VELOCITY_DEADBAND) {
     for (uint8_t i = 0; i < s_drive_motor_count; i++) {
       controller->target_speeds[i] = 0.0f;
     }
@@ -160,7 +166,8 @@ void ChassisController_Update(ChassisController *controller,
   if (angle_ticks < 0.0f)
     angle_ticks += ticks_per_rev;
 
-  bool use_alternate_direction = false;  // Global flag: false=forward, true=reverse+180°
+  // Global flag: false=forward, true=reverse+180°
+  bool use_alternate_direction = false;
   
   // STEP 1: Calculate master steer motor (motor 0) optimal decision
   MotorContext_t *ctx0 = MotorDriver_GetContext(s_steer_motor_ids[0]);
@@ -196,11 +203,9 @@ void ChassisController_Update(ChassisController *controller,
   }
   
   // STEP 2: Apply global decision to all steer motors
-  float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
-  if (use_alternate_direction) {
-    module_directions[0] = -1.0f;
-    module_directions[1] = -1.0f;
-  }
+  float module_directions[CHASSIS_STEER_COUNT];
+  module_directions[0] = use_alternate_direction ? -1.0f : 1.0f;
+  module_directions[1] = use_alternate_direction ? -1.0f : 1.0f;
   
   for (uint8_t i = 0; i < s_steer_motor_count; i++) {
     MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
@@ -252,7 +257,7 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
   float current_angle = (float)steer->angle_raw;
   float angle_error = steer->angle_target - current_angle;
 
-  if (fabsf(angle_error) < 1.0f)
+  if (fabsf(angle_error) < ANGLE_ERROR_DEADBAND)
     angle_error = 0.0f;
 
   if (angle_error > enc_max / 2.0f)
@@ -265,11 +270,10 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
       PID_Calculate(&steer->pid_outer, 0.0f, -angle_error);
 
   // RPM limit (stability)
-  const float rpm_limit = 450.0f;
-  if (cmd_angle_to_speed > rpm_limit)
-    cmd_angle_to_speed = rpm_limit;
-  if (cmd_angle_to_speed < -rpm_limit)
-    cmd_angle_to_speed = -rpm_limit;
+  if (cmd_angle_to_speed > STEER_RPM_LIMIT)
+    cmd_angle_to_speed = STEER_RPM_LIMIT;
+  if (cmd_angle_to_speed < -STEER_RPM_LIMIT)
+    cmd_angle_to_speed = -STEER_RPM_LIMIT;
 
   // INNER: speed → current
   float speed_feedback = (float)steer->speed_rpm;
@@ -278,11 +282,10 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
       PID_Calculate(&steer->pid_inner, cmd_angle_to_speed, speed_feedback);
 
   // Current clamp
-  const float current_limit = 25000.0f;
-  if (cmd_speed_to_current > current_limit)
-    cmd_speed_to_current = current_limit;
-  if (cmd_speed_to_current < -current_limit)
-    cmd_speed_to_current = -current_limit;
+  if (cmd_speed_to_current > STEER_CURRENT_LIMIT)
+    cmd_speed_to_current = STEER_CURRENT_LIMIT;
+  if (cmd_speed_to_current < -STEER_CURRENT_LIMIT)
+    cmd_speed_to_current = -STEER_CURRENT_LIMIT;
 
   return (int16_t)cmd_speed_to_current;
 }
@@ -330,12 +333,11 @@ void ChassisController_ComputeCurrents(ChassisController *controller,
     MotorDriver_SendCurrent(s_drive_motor_ids[i], motor_current);
   }
 
-  // Steer currents
-  // ===== Steer currents (angle position control) =====
+  // Steer currents (angle position control)
   for (int i = 0; i < s_steer_motor_count; i++) {
     int16_t motor_current = SteerController_CascadeControl(
         s_steer_motor_ids[i],
-        controller->steer_target_angles[i] // Use target angle from Update()
+        controller->steer_target_angles[i]
     );
 
     controller->steer_output_currents[i] = motor_current;
