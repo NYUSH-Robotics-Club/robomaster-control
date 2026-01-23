@@ -113,86 +113,6 @@ static void gimbal_to_chassis_frame(float vx_g, float vy_g, float offset_angle_d
     *vy_c = s * vx_g + c * vy_g;
 }
 
-/**
- * @brief Map radar velocity (vx, vy, wz) to swerve/mecanum wheel speeds
- * 
- * NOTE: This function is sentry_swerve specific.
- * For infantry mecanum, use different mapping (TODO if needed).
- */
-/*#ifdef ROBOT_TYPE_sentry_swerve
-static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
-{
-    // Timeout protection: if radar data is stale (>1000ms), fall back to RC or stop
-    if (!s_last_radar.valid || (now - s_last_radar.ts_ms > 1000u)) {
-        s_control_mode = CONTROL_MODE_RC;
-        return;
-    }
-    
-    // Safety checks: discard obviously-bad values (do this FIRST)
-    if (!isfinite(vx) || !isfinite(vy) || !isfinite(wz)) {
-        s_control_mode = CONTROL_MODE_RC;
-        return;
-    }
-
-    // Simple sanity limits (prevent absurd commands)
-    const float MAX_REASONABLE_V = 10.0f; // m/s
-    const float MAX_REASONABLE_W = 10.0f; // rad/s
-    if (fabsf(vx) > MAX_REASONABLE_V || fabsf(vy) > MAX_REASONABLE_V || fabsf(wz) > MAX_REASONABLE_W) {
-        s_control_mode = CONTROL_MODE_RC;
-        return;
-    }
-
-    // STEP 1: Apply filtering FIRST (before any calculations)
-    float prev_vx = s_filtered_vx;
-    float prev_vy = s_filtered_vy;
-    float prev_wz = s_filtered_wz;
-
-    // Low-pass filter
-    float lp_vx = prev_vx + RADAR_SMOOTH_ALPHA * (vx - prev_vx);
-    float lp_vy = prev_vy + RADAR_SMOOTH_ALPHA * (vy - prev_vy);
-    float lp_wz = prev_wz + RADAR_SMOOTH_ALPHA * (wz - prev_wz);
-
-    // Delta cap (limit acceleration per cycle)
-    float dvx = lp_vx - prev_vx;
-    if (dvx > RADAR_MAX_DELTA_V) dvx = RADAR_MAX_DELTA_V;
-    if (dvx < -RADAR_MAX_DELTA_V) dvx = -RADAR_MAX_DELTA_V;
-    s_filtered_vx = prev_vx + dvx;
-
-    float dvy = lp_vy - prev_vy;
-    if (dvy > RADAR_MAX_DELTA_V) dvy = RADAR_MAX_DELTA_V;
-    if (dvy < -RADAR_MAX_DELTA_V) dvy = -RADAR_MAX_DELTA_V;
-    s_filtered_vy = prev_vy + dvy;
-
-    float dwz = lp_wz - prev_wz;
-    if (dwz > RADAR_MAX_DELTA_W) dwz = RADAR_MAX_DELTA_W;
-    if (dwz < -RADAR_MAX_DELTA_W) dwz = -RADAR_MAX_DELTA_W;
-    s_filtered_wz = prev_wz + dwz;
-
-    // STEP 2: Use FILTERED values for all subsequent calculations
-    // Match RC mode coordinate system: swap vx <-> vy
-    float vx_cmd = s_filtered_vy;  // swap to match RC
-    float vy_cmd = s_filtered_vx;  // swap to match RC
-    float wz_cmd = s_filtered_wz;
-
-    // Calculate magnitude and steering direction from filtered values
-    float magnitude = sqrtf(vx_cmd * vx_cmd + vy_cmd * vy_cmd);
-    float target_angle_rad = atan2f(vx_cmd, -vy_cmd);  // atan2(forward, -strafe)
-    float speed_magnitude = magnitude * (float)CHASSIS_DEMO_TARGET_SPEED;
-
-    // STEP 3: Set chassis command with FILTERED and SWAPPED coordinates
-    s_chassis_cmd.vx = vx_cmd;
-    s_chassis_cmd.vy = vy_cmd;
-    s_chassis_cmd.wz = wz_cmd;
-    s_chassis_cmd.enabled = true;
-
-    // Control mode flag
-    s_control_mode = CONTROL_MODE_RADAR;
-
-    // Debug log: original vs filtered speeds
-    LOG_CSV(LOG_TAG_CMD, "RADAR,IN:%.3f,%.3f,%.3f,OUT:%.3f,%.3f,%.3f",
-            vx, vy, wz, s_filtered_vx, s_filtered_vy, s_filtered_wz);
-}
-#else*/
 // Infantry (mecanum/2WD) radar mapping - placeholder for future implementation
 static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now)
 {
@@ -216,7 +136,7 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
 
 // Callback for RC update
 static void on_rc_update(const MsgEvent *ev, void *user_data)
-{return;
+{
     (void)user_data;
     if (ev->size == sizeof(RC_ctrl_t))
     {
