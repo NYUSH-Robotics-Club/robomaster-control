@@ -5,7 +5,7 @@
 // - 2x GM6020 steer motors (role: MOTOR_ROLE_CHASSIS_STEER)
 
 #include "can_comm.h"
-#include "chassis_controller.h" // IMPORTANT: use the common header name
+#include "chassis_controller.h"
 #include "cmd_controller.h"
 #include "gyro_data.h"
 #include "message_center.h"
@@ -124,15 +124,13 @@ void ChassisController_Update(ChassisController *controller,
 
   float vx_norm = s_last_cmd.vx;
   float vy_norm = s_last_cmd.vy;
-  float wz_norm = s_last_cmd.wz;
 
   const float deadband = 0.02f;
   const float ticks_per_rev = 8192.0f;
   const float rad_to_ticks = ticks_per_rev / (2.0f * M_PI);
   const float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;
 
-  if (fabsf(vx_norm) < deadband && fabsf(vy_norm) < deadband &&
-      fabsf(wz_norm) < deadband) {
+  if (fabsf(vx_norm) < deadband && fabsf(vy_norm) < deadband) {
     for (uint8_t i = 0; i < s_drive_motor_count; i++) {
       controller->target_speeds[i] = 0.0f;
     }
@@ -153,56 +151,6 @@ void ChassisController_Update(ChassisController *controller,
   float forward = vy_norm;
   float left = vx_norm;
   float magnitude = sqrtf(forward * forward + left * left);
-  if (magnitude < deadband && fabsf(wz_norm) >= deadband) {
-    float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
-    for (uint8_t i = 0; i < s_steer_motor_count; i++) {
-      MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
-      if (ctx && ctx->config && ctx->angle_initialized) {
-        float motor_initial = (float)ctx->config->limits.gm6020.initial_angle;
-        float target_angle = motor_initial + ticks_per_rev / 4.0f;
-        float alternate_angle = target_angle + ticks_per_rev / 2.0f;
-
-        while (alternate_angle >= ticks_per_rev)
-          alternate_angle -= ticks_per_rev;
-
-        float current_angle = (float)ctx->angle_raw;
-        float diff_main = target_angle - current_angle;
-        if (diff_main > ticks_per_rev / 2.0f)
-          diff_main -= ticks_per_rev;
-        if (diff_main < -ticks_per_rev / 2.0f)
-          diff_main += ticks_per_rev;
-
-        float diff_alt = alternate_angle - current_angle;
-        if (diff_alt > ticks_per_rev / 2.0f)
-          diff_alt -= ticks_per_rev;
-        if (diff_alt < -ticks_per_rev / 2.0f)
-          diff_alt += ticks_per_rev;
-
-        if (fabsf(diff_alt) < fabsf(diff_main)) {
-          target_angle = alternate_angle;
-          module_directions[i] = -1.0f;
-        }
-
-        while (target_angle >= ticks_per_rev)
-          target_angle -= ticks_per_rev;
-        while (target_angle < 0.0f)
-          target_angle += ticks_per_rev;
-
-        controller->steer_target_angles[i] = target_angle;
-      }
-    }
-
-    for (uint8_t i = 0; i < s_drive_motor_count; i++) {
-      uint8_t module_index = (i < 2) ? 0 : 1;
-      float spin_speed = (module_index == 0) ? wz_norm : -wz_norm;
-      controller->target_speeds[i] = s_drive_motor_directions[i] *
-                                     module_directions[module_index] *
-                                     spin_speed * max_speed;
-    }
-
-    controller->running = s_last_cmd.enabled;
-    return;
-  }
 
   if (magnitude > 1.0f)
     magnitude = 1.0f;
@@ -212,35 +160,58 @@ void ChassisController_Update(ChassisController *controller,
   if (angle_ticks < 0.0f)
     angle_ticks += ticks_per_rev;
 
+  bool use_alternate_direction = false;  // Global flag: false=forward, true=reverse+180°
+  
+  // STEP 1: Calculate master steer motor (motor 0) optimal decision
+  MotorContext_t *ctx0 = MotorDriver_GetContext(s_steer_motor_ids[0]);
+  if (ctx0 && ctx0->config && ctx0->angle_initialized) {
+    float motor_initial = (float)ctx0->config->limits.gm6020.initial_angle;
+    float target_angle = motor_initial + angle_ticks;
+    float alternate_angle = target_angle + ticks_per_rev / 2.0f;
+    
+    // Normalize alternate angle to [0, 8192)
+    while (alternate_angle >= ticks_per_rev)
+      alternate_angle -= ticks_per_rev;
+    
+    float current_angle = (float)ctx0->angle_raw;
+    
+    // Calculate angle error for main target (shortest path)
+    float diff_main = target_angle - current_angle;
+    if (diff_main > ticks_per_rev / 2.0f)
+      diff_main -= ticks_per_rev;
+    if (diff_main < -ticks_per_rev / 2.0f)
+      diff_main += ticks_per_rev;
+    
+    // Calculate angle error for alternate target (+180°, reverse drive)
+    float diff_alt = alternate_angle - current_angle;
+    if (diff_alt > ticks_per_rev / 2.0f)
+      diff_alt -= ticks_per_rev;
+    if (diff_alt < -ticks_per_rev / 2.0f)
+      diff_alt += ticks_per_rev;
+    
+    // Master decision: choose alternate if it requires less rotation
+    if (fabsf(diff_alt) < fabsf(diff_main)) {
+      use_alternate_direction = true;
+    }
+  }
+  
+  // STEP 2: Apply global decision to all steer motors
   float module_directions[CHASSIS_STEER_COUNT] = {1.0f, 1.0f};
+  if (use_alternate_direction) {
+    module_directions[0] = -1.0f;
+    module_directions[1] = -1.0f;
+  }
+  
   for (uint8_t i = 0; i < s_steer_motor_count; i++) {
     MotorContext_t *ctx = MotorDriver_GetContext(s_steer_motor_ids[i]);
     if (ctx && ctx->config && ctx->angle_initialized) {
       float motor_initial = (float)ctx->config->limits.gm6020.initial_angle;
       float target_angle = motor_initial + angle_ticks;
-      float alternate_angle = target_angle + ticks_per_rev / 2.0f;
-
-      while (alternate_angle >= ticks_per_rev)
-        alternate_angle -= ticks_per_rev;
-
-      float current_angle = (float)ctx->angle_raw;
-      float diff_main = target_angle - current_angle;
-      if (diff_main > ticks_per_rev / 2.0f)
-        diff_main -= ticks_per_rev;
-      if (diff_main < -ticks_per_rev / 2.0f)
-        diff_main += ticks_per_rev;
-
-      float diff_alt = alternate_angle - current_angle;
-      if (diff_alt > ticks_per_rev / 2.0f)
-        diff_alt -= ticks_per_rev;
-      if (diff_alt < -ticks_per_rev / 2.0f)
-        diff_alt += ticks_per_rev;
-
-      if (fabsf(diff_alt) < fabsf(diff_main)) {
-        target_angle = alternate_angle;
-        module_directions[i] = -1.0f;
+      
+      // Apply global decision: if using alternate direction, add 180°
+      if (use_alternate_direction) {
+        target_angle += ticks_per_rev / 2.0f;
       }
-
       while (target_angle >= ticks_per_rev)
         target_angle -= ticks_per_rev;
       while (target_angle < 0.0f)
@@ -262,12 +233,6 @@ void ChassisController_Update(ChassisController *controller,
 static int16_t SteerController_CascadeControl(uint8_t motor_id,
                                               float target_angle) {
   MotorContext_t *steer = MotorDriver_GetContext(motor_id);
-  if (!steer || !steer->angle_initialized || !steer->config) {
-    // Debug: Steer motor not initialized
-    LOG_WARN(LOG_TAG_SEN, "Steer motor %d not initialized (ptr=%p init=%d)",
-             motor_id, (void*)steer, (steer ? steer->angle_initialized : -1));
-    return 0;
-  }
 
   // Use provided target angle
   steer->angle_target = target_angle;
@@ -300,7 +265,7 @@ static int16_t SteerController_CascadeControl(uint8_t motor_id,
       PID_Calculate(&steer->pid_outer, 0.0f, -angle_error);
 
   // RPM limit (stability)
-  const float rpm_limit = 300.0f;
+  const float rpm_limit = 450.0f;
   if (cmd_angle_to_speed > rpm_limit)
     cmd_angle_to_speed = rpm_limit;
   if (cmd_angle_to_speed < -rpm_limit)

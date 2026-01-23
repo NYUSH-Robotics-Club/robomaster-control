@@ -62,7 +62,7 @@ static uint32_t frame_count = 0u;      // Total frames received
 static uint32_t crc_error_count = 0u;  // CRC errors
 static uint32_t last_debug_time_ms = 0u;
 
-#define RADAR_DATA_TIMEOUT_MS 200u  // Mark invalid if no new data for 200ms
+#define RADAR_DATA_TIMEOUT_MS 1000u  // Mark invalid if no new data for 1000ms
 #define RADAR_DEBUG_INTERVAL_MS 500u  // Print debug info every 500ms
 
 /**
