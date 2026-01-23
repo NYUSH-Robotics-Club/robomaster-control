@@ -112,7 +112,7 @@ controller_server:
     use_sim_time: False
     controller_frequency: 50.0  # 50Hz以获得更快响应
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.5
+    min_y_velocity_threshold: 0.001  # 修复：从0.5改为0.001，避免截断所有y速度
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
@@ -135,37 +135,35 @@ controller_server:
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
-      min_vel_x: 0.0
-      min_vel_y: 0.0
-      max_vel_x: 0.26
-      max_vel_y: 0.26
+      min_vel_x: -0.5   # 允许后退
+      min_vel_y: -0.5   # 允许侧移
+      max_vel_x: 0.5    # 提速到0.5 m/s
+      max_vel_y: 0.5    # 提速到0.5 m/s
       max_vel_theta: 0.0  # 禁用旋转，只用 vx vy
-      min_speed_xy: 0.05  # 最小速度，避免被STM32的deadband过滤
-      max_speed_xy: 0.26
+      min_speed_xy: 0.0   # 让DWB自由选择速度
+      max_speed_xy: 0.6   # 提高合成速度到0.6 m/s
       min_speed_theta: 0.0
-      acc_lim_x: 2.5
-      acc_lim_y: 2.5
+      acc_lim_x: 2.0      # 提高加速度
+      acc_lim_y: 2.0
       acc_lim_theta: 0.0  # 禁用旋转加速度
-      decel_lim_x: -2.5
-      decel_lim_y: -2.5
+      decel_lim_x: -2.0
+      decel_lim_y: -2.0
       decel_lim_theta: 0.0  # 禁用旋转减速度
-      vx_samples: 20
-      vy_samples: 7
-      vtheta_samples: 1  # 只采样 0 旋转
-      sim_time: 1.2  # 降到1.2s（从1.5s），平衡预测和计算速度
+      vx_samples: 15      # 减少采样数，速度更快
+      vy_samples: 5
+      vtheta_samples: 1   # 只采样 0 旋转
+      sim_time: 1.5       # 增加预测时间
       linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 1.5  # 1.5秒容差
       xy_goal_tolerance: 0.25
-      trans_stopped_velocity: 0.25
+      trans_stopped_velocity: 0.05  # 降低停止阈值（从0.25）
       short_circuit_trajectory_evaluation: True
       stateful: True
-      critics: ["Oscillation", "BaseObstacle", "PathAlign", "PathDist", "GoalDist"]  # 移除 RotateToGoal 和 GoalAlign
-      BaseObstacle.scale: 0.05
-      PathAlign.scale: 64.0  # 增加到64（从32），更重视沿着路径走
-      PathAlign.forward_point_distance: 0.1
-      PathDist.scale: 64.0  # 增加到64（从32），更重视接近路径
-      GoalDist.scale: 24.0
+      critics: ["Oscillation", "BaseObstacle", "GoalDist", "PathDist"]  # 简化评分器
+      BaseObstacle.scale: 0.08   # 增加障碍物权重，更好避障
+      GoalDist.scale: 24.0       # 目标距离权重
+      PathDist.scale: 32.0       # 路径跟踪权重
 
 local_costmap:
   local_costmap:
@@ -184,8 +182,8 @@ local_costmap:
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.8
+        cost_scaling_factor: 5.0   # 增加代价衰减速度
+        inflation_radius: 1.0      # 增加膨胀半径，提前避障
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -326,13 +324,13 @@ waypoint_follower:
 velocity_smoother:
   ros__parameters:
     use_sim_time: False
-    smoothing_frequency: 50.0  # 50Hz与controller保持一致
+    smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.26, 0.26, 0.0]  # theta=0禁用旋转
-    min_velocity: [-0.26, -0.26, 0.0]  # theta=0禁用旋转
-    max_accel: [2.5, 2.5, 0.0]  # theta=0禁用旋转加速度
-    max_decel: [-2.5, -2.5, 0.0]  # theta=0禁用旋转减速度
+    max_velocity: [0.5, 0.5, 0.0]   # 提速到0.5 m/s
+    min_velocity: [-0.5, -0.5, 0.0]
+    max_accel: [2.0, 2.0, 0.0]      # 提高加速度
+    max_decel: [-2.0, -2.0, 0.0]
     odom_topic: "odom"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
