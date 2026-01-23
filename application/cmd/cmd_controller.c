@@ -205,7 +205,7 @@ static void radar_cmd_to_wheel_speeds(float vx, float vy, float wz, uint32_t now
     s_control_mode = CONTROL_MODE_RADAR;
     
     // For infantry: direct velocity pass-through (chassis_controller handles mapping)
-    s_chassis_cmd.vx = vy;
+    s_chassis_cmd.vx = -vy;
     s_chassis_cmd.vy = vx;
     s_chassis_cmd.wz = wz;
     s_chassis_cmd.enabled = true;
