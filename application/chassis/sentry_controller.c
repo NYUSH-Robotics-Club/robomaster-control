@@ -125,7 +125,7 @@ void ChassisController_Update(ChassisController *controller,
   float vx_norm = s_last_cmd.vx;
   float vy_norm = s_last_cmd.vy;
 
-  const float deadband = 0.02f;
+  const float deadband = 0.005f;  // 降低死区以响应小速度命令
   const float ticks_per_rev = 8192.0f;
   const float rad_to_ticks = ticks_per_rev / (2.0f * M_PI);
   const float max_speed = (float)CHASSIS_DEMO_TARGET_SPEED;

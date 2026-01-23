@@ -30,7 +30,7 @@ amcl:
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
-    transform_tolerance: 5.0
+    transform_tolerance: 1.5  # 1.5秒容差（折中值，容忍实际系统延迟）
     update_min_a: 0.15  # 降低角度阈值（从0.2），更频繁更新
     update_min_d: 0.2   # 降低距离阈值（从0.25）
     z_hit: 0.5
@@ -38,8 +38,8 @@ amcl:
     z_rand: 0.5
     z_short: 0.05
     scan_topic: scan
-    set_initial_pose: false  # 不需要初始位姿，全局定位模式
-    always_reset_initial_pose: true  # 每次启动都重新全局定位
+    set_initial_pose: true  # 需要初始位姿
+    always_reset_initial_pose: false  # 不每次重置，保持定位连续性
 
 bt_navigator:
   ros__parameters:
@@ -110,7 +110,7 @@ bt_navigator_navigate_to_pose_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: False
-    controller_frequency: 30.0  # 降到30Hz（从50Hz），平衡性能和响应速度
+    controller_frequency: 50.0  # 50Hz以获得更快响应
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
@@ -129,7 +129,7 @@ controller_server:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 3.15  # 放宽到接近 π，不检查朝向
+      yaw_goal_tolerance: 6.30  # 接近2π，完全忽略朝向检查
     
     # DWB parameters - optimized for faster response
     FollowPath:
@@ -140,7 +140,7 @@ controller_server:
       max_vel_x: 0.26
       max_vel_y: 0.26
       max_vel_theta: 0.0  # 禁用旋转，只用 vx vy
-      min_speed_xy: 0.0
+      min_speed_xy: 0.05  # 最小速度，避免被STM32的deadband过滤
       max_speed_xy: 0.26
       min_speed_theta: 0.0
       acc_lim_x: 2.5
@@ -155,7 +155,7 @@ controller_server:
       sim_time: 1.2  # 降到1.2s（从1.5s），平衡预测和计算速度
       linear_granularity: 0.05
       angular_granularity: 0.025
-      transform_tolerance: 5.0
+      transform_tolerance: 1.5  # 1.5秒容差
       xy_goal_tolerance: 0.25
       trans_stopped_velocity: 0.25
       short_circuit_trajectory_evaluation: True
@@ -179,7 +179,7 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.1
-      transform_tolerance: 5.0
+      transform_tolerance: 1.5  # 1.5秒容差
       robot_radius: 0.22
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
@@ -220,7 +220,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: False
-      transform_tolerance: 5.0
+      transform_tolerance: 1.5  # 1.5秒容差
       robot_radius: 0.22
       resolution: 0.1
       track_unknown_space: true
@@ -264,7 +264,7 @@ map_saver:
 
 planner_server:
   ros__parameters:
-    expected_planner_frequency: 1.0  # 降到1Hz，减少频繁重新规划（之前20Hz太高）
+    expected_planner_frequency: 5.0  # 5Hz平衡规划质量和CPU负载
     use_sim_time: False
     planner_plugins: ["GridBased"]
     GridBased:
@@ -288,7 +288,7 @@ behavior_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]  # 保留spin但速度为0
     spin:
       plugin: "nav2_behaviors/Spin"
     backup:
@@ -301,12 +301,12 @@ behavior_server:
       plugin: "nav2_behaviors/AssistedTeleop"
     global_frame: odom
     robot_base_frame: base_link
-    transform_tolerance: 5.0
+    transform_tolerance: 1.5  # 1.5秒容差
     use_sim_time: False
     simulate_ahead_time: 2.0
-    max_rotational_vel: 1.0
-    min_rotational_vel: 0.4
-    rotational_acc_lim: 3.2
+    max_rotational_vel: 0.0  # 禁用旋转
+    min_rotational_vel: 0.0  # 禁用旋转
+    rotational_acc_lim: 0.0  # 禁用旋转加速度
 
 robot_state_publisher:
   ros__parameters:
@@ -326,13 +326,13 @@ waypoint_follower:
 velocity_smoother:
   ros__parameters:
     use_sim_time: False
-    smoothing_frequency: 30.0  # 降到30Hz（从50Hz）
+    smoothing_frequency: 50.0  # 50Hz与controller保持一致
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.26, 0.26, 1.0]
-    min_velocity: [-0.26, -0.26, -1.0]
-    max_accel: [2.5, 2.5, 3.2]
-    max_decel: [-2.5, -2.5, -3.2]
+    max_velocity: [0.26, 0.26, 0.0]  # theta=0禁用旋转
+    min_velocity: [-0.26, -0.26, 0.0]  # theta=0禁用旋转
+    max_accel: [2.5, 2.5, 0.0]  # theta=0禁用旋转加速度
+    max_decel: [-2.5, -2.5, 0.0]  # theta=0禁用旋转减速度
     odom_topic: "odom"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
