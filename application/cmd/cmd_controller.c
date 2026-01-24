@@ -54,7 +54,7 @@
 // ==========================
 // Trigger: left switch in MID position (sentry only).
 // Behavior: Gimbal yaw rotates at constant speed for surveillance
-#define SENTRY_YAW_AUTO_ROTATION_RPM (100.0f)  // Target RPM for yaw auto-rotation (constant speed)
+#define SENTRY_YAW_AUTO_ROTATION_RPM (150.0f)  // Target RPM for yaw auto-rotation (constant speed)
 
 static bool s_spin_mode = false;
 static float s_spin_hold_yaw_deg = 0.0f; // target absolute yaw (deg, gimbal IMU yaw_total_angle)
