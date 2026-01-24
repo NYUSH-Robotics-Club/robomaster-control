@@ -62,6 +62,11 @@ void GimbalApp_Init(void);
  */
 void Gimbal_WaitForAlignment(void);
 
+/**
+ * @brief Reset yaw motor target angle to initial position (aligned with chassis vx)
+ * @note Call this when exiting spin mode to realign gimbal
+ */
+void GimbalController_ResetYawToInitial(void);
 
 #ifdef __cplusplus
 }

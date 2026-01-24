@@ -5,6 +5,7 @@
 #include "vision_comm.h"
 #include "radar_comm.h"
 #include "chassis_controller.h"
+#include "gimbal_controller.h"
 #include "motor_driver.h"
 #include "printing.h"
 #include "logger.h"
@@ -53,7 +54,7 @@
 // ==========================
 // Trigger: left switch in MID position (sentry only).
 // Behavior: Gimbal yaw rotates at constant speed for surveillance
-#define SENTRY_YAW_AUTO_ROTATION_RPM (400.0f)  // Target RPM for yaw auto-rotation (constant speed)
+#define SENTRY_YAW_AUTO_ROTATION_RPM (100.0f)  // Target RPM for yaw auto-rotation (constant speed)
 
 static bool s_spin_mode = false;
 static float s_spin_hold_yaw_deg = 0.0f; // target absolute yaw (deg, gimbal IMU yaw_total_angle)
@@ -497,6 +498,11 @@ void CmdController_Task(uint32_t current_tick)
         {
             s_spin_hold_yaw_deg = s_last_sensor.yaw_total_angle;
         }
+        // Spin mode falling edge: reset yaw to initial position (aligned with chassis vx)
+        if (!spin_now && s_spin_mode)
+        {
+            GimbalController_ResetYawToInitial();
+        }
 
         s_gimbal_follow_mode = gimbal_follow_now;
         s_spin_mode = spin_now;
@@ -525,6 +531,11 @@ void CmdController_Task(uint32_t current_tick)
         if (spin_now && !s_spin_mode)
         {
             s_spin_hold_yaw_deg = s_last_sensor.yaw_total_angle;
+        }
+        // Spin mode falling edge: reset yaw to initial position (aligned with chassis vx)
+        if (!spin_now && s_spin_mode)
+        {
+            GimbalController_ResetYawToInitial();
         }
 
         s_gimbal_follow_mode = gimbal_follow_now;

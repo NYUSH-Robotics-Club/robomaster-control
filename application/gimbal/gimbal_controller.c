@@ -511,3 +511,22 @@ void Gimbal_WaitForAlignment(void) {
   USB_CDC_Printf(
       "[Gimbal] Warning: Alignment timeout, continuing anyway...\r\n");
 }
+
+/**
+ * @brief Reset yaw motor target angle to initial position (aligned with chassis vx)
+ */
+void GimbalController_ResetYawToInitial(void) {
+  MotorContext_t *yaw = MotorDriver_GetContext(s_yaw_motor_id);
+  if (yaw && yaw->angle_initialized && yaw->config) {
+    float initial_angle = yaw->config->limits.gm6020.initial_angle;
+    if (initial_angle >= 0.0f) {
+      LOG_INFO(LOG_TAG_GIM, "Yaw reset: cur=%.1f -> tgt=%.1f", yaw->angle_target, initial_angle);
+      yaw->angle_target = initial_angle;
+      // Reset PID to avoid accumulated integral error
+      PID_Reset(&yaw->pid_outer);
+      PID_Reset(&yaw->pid_inner);
+    }
+  } else {
+    LOG_INFO(LOG_TAG_GIM, "Yaw reset FAILED: yaw=%p init=%d", yaw, yaw ? yaw->angle_initialized : 0);
+  }
+}
