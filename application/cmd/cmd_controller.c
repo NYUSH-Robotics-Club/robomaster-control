@@ -54,10 +54,11 @@
 // ==========================
 // Trigger: left switch in MID position (sentry only).
 // Behavior: Gimbal yaw rotates at constant speed for surveillance
-#define SENTRY_YAW_AUTO_ROTATION_RPM (150.0f)  // Target RPM for yaw auto-rotation (constant speed)
+#define SENTRY_YAW_AUTO_ROTATION_RPM (50.0f)
 
 static bool s_spin_mode = false;
 static float s_spin_hold_yaw_deg = 0.0f; // target absolute yaw (deg, gimbal IMU yaw_total_angle)
+static bool s_sentry_yaw_auto_rotation_active = false;
 
 // ==========================
 // Gimbal-oriented follow mode
@@ -343,9 +344,16 @@ static void process_gimbal_command(const RC_ctrl_t *rc, const SensorData *sensor
         s_gimbal_cmd.yaw_rate_memo = 2.0f;
         s_gimbal_cmd.yaw_target_memo = SENTRY_YAW_AUTO_ROTATION_RPM;
         s_gimbal_cmd.yaw_rate = 0.0f;  // Not used in speed-only mode
+        s_sentry_yaw_auto_rotation_active = true;
     }
     else
     {
+        if (s_sentry_yaw_auto_rotation_active)
+        {
+            GimbalController_ResetYawToInitial();
+            s_sentry_yaw_auto_rotation_active = false;
+        }
+        
         // Manual yaw control: right stick X (normal dual-loop control)
         int16_t yaw_raw = apply_deadband((int16_t)(-rc->rc.ch[0]), JOYSTICK_DEADBAND);
         

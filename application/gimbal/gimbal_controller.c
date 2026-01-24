@@ -20,9 +20,9 @@ static uint8_t s_yaw_motor_id = 0xFF;
 // Independent PID controller for speed-only mode (sentry auto-rotation)
 // This PID is tuned specifically for constant speed tracking
 static PID_Controller s_yaw_speed_only_pid;
-#define SPEED_ONLY_PID_KP (120.0f)   // Very stiff proportional gain
-#define SPEED_ONLY_PID_KI (0.5f)     // Small integral to eliminate steady-state error
-#define SPEED_ONLY_PID_KD (20.0f)    // High derivative for damping
+#define SPEED_ONLY_PID_KP (500.0f)   // Proportional gain
+#define SPEED_ONLY_PID_KI (5.0f)     // Integral to eliminate steady-state error
+#define SPEED_ONLY_PID_KD (20.0f)    // Derivative
 #define SPEED_ONLY_PID_OUT_MAX (30000.0f)
 #define SPEED_ONLY_PID_INT_MAX (10000.0f)
 
