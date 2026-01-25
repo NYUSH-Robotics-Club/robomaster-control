@@ -22,6 +22,9 @@ import struct
 import time
 import sys
 import threading
+import statistics
+from collections import deque
+from datetime import datetime
 
 
 def crc8(data: bytes) -> int:
@@ -46,8 +49,53 @@ def encode_radar_cmd(vx: float, vy: float, wz: float) -> bytes:
     return bytes(frame)
 
 
+class LatencyStats:
+    """Collect and compute latency statistics."""
+    def __init__(self, window_size: int = 100):
+        self.latencies = deque(maxlen=window_size)
+        self.total_count = 0
+        self.last_report_time = time.time()
+        self.report_interval = 5.0  # Report every 5 seconds
+    
+    def add(self, latency_ms: float):
+        self.latencies.append(latency_ms)
+        self.total_count += 1
+    
+    def get_stats(self) -> dict:
+        if len(self.latencies) < 2:
+            return None
+        sorted_lat = sorted(self.latencies)
+        n = len(sorted_lat)
+        return {
+            'count': self.total_count,
+            'window': n,
+            'min': sorted_lat[0],
+            'max': sorted_lat[-1],
+            'mean': statistics.mean(sorted_lat),
+            'median': statistics.median(sorted_lat),
+            'p95': sorted_lat[int(n * 0.95)] if n >= 20 else sorted_lat[-1],
+            'p99': sorted_lat[int(n * 0.99)] if n >= 100 else sorted_lat[-1],
+        }
+    
+    def should_report(self) -> bool:
+        now = time.time()
+        if now - self.last_report_time >= self.report_interval:
+            self.last_report_time = now
+            return True
+        return False
+    
+    def format_report(self) -> str:
+        stats = self.get_stats()
+        if not stats:
+            return "[LATENCY] Not enough data yet"
+        return (f"[LATENCY] n={stats['count']} | "
+                f"min={stats['min']:.2f}ms max={stats['max']:.2f}ms | "
+                f"mean={stats['mean']:.2f}ms median={stats['median']:.2f}ms | "
+                f"p95={stats['p95']:.2f}ms p99={stats['p99']:.2f}ms")
+
+
 class SerialForwarder:
-    def __init__(self, port: str, baud: int = 115200, timeout=1.0):
+    def __init__(self, port: str, baud: int = 115200, timeout=1.0, measure_latency=False):
         self.port = port
         self.baud = baud
         self.timeout = timeout
@@ -55,6 +103,8 @@ class SerialForwarder:
         self.lock = threading.Lock()  # 线程锁
         self.last_reconnect_attempt = 0
         self.reconnect_interval = 2.0  # 2秒重连冷却
+        self.measure_latency = measure_latency
+        self.latency_stats = LatencyStats() if measure_latency else None
 
     def open(self):
         with self.lock:
@@ -73,7 +123,8 @@ class SerialForwarder:
                 print(f"Error opening serial port: {e}")
                 self.ser = None
 
-    def send(self, vx: float, vy: float, wz: float):
+    def send(self, vx: float, vy: float, wz: float, recv_time_ns: int = None):
+        """Send velocity command. If recv_time_ns is provided, measure latency."""
         frame = encode_radar_cmd(vx, vy, wz)
         
         # 检查是否连接，带有冷却机制
@@ -82,15 +133,25 @@ class SerialForwarder:
             if now - self.last_reconnect_attempt > self.reconnect_interval:
                 self.last_reconnect_attempt = now
                 self.open()
-            return  # 如果还在冷却期或打开失败，直接丢弃这帧数据，不要阻塞
+            return None  # 如果还在冷却期或打开失败，直接丢弃这帧数据，不要阻塞
 
+        send_time_ns = None
         try:
             with self.lock:
                 self.ser.write(frame)
+                send_time_ns = time.perf_counter_ns()
                 # Note: flush() removed - let OS handle buffering for better performance
         except Exception as e:
             print(f"Serial write error: {e}")
             self.close()  # 出错时关闭，等待下次重连
+            return None
+        
+        # Calculate and record latency if measurement enabled
+        if self.measure_latency and recv_time_ns is not None and send_time_ns is not None:
+            latency_ms = (send_time_ns - recv_time_ns) / 1e6
+            self.latency_stats.add(latency_ms)
+            return latency_ms
+        return None
 
     def close(self):
         with self.lock:
@@ -103,34 +164,93 @@ class SerialForwarder:
                 self.ser = None
 
     def _reader_loop(self):
-        # Read lines from STM32 and print to stdout
+        """Read and filter STM32 output, separating binary radar frames from text logs."""
+        line_buffer = bytearray()
+        
         while getattr(self, '_reader_run', False) and self.ser and self.ser.is_open:
             try:
-                line = self.ser.readline()
-                if line:
-                    # Filter out binary radar frames (start with 0xA5 0x5A)
-                    if len(line) >= 2 and line[0] == 0xA5 and line[1] == 0x5A:
-                        continue  # Skip radar frames
+                # Read available bytes
+                if self.ser.in_waiting > 0:
+                    data = self.ser.read(self.ser.in_waiting)
+                else:
+                    data = self.ser.read(1)  # Blocking read with timeout
+                
+                if not data:
+                    continue
+                
+                for byte in data:
+                    # Check for radar frame header (0xA5 0x5A)
+                    if len(line_buffer) >= 1 and line_buffer[-1] == 0xA5 and byte == 0x5A:
+                        # Remove the 0xA5 from buffer and skip the next 13 bytes (rest of radar frame)
+                        line_buffer = line_buffer[:-1]
+                        # Read and discard remaining 13 bytes of radar frame
+                        remaining = 13  # vx(4) + vy(4) + wz(4) + crc(1)
+                        while remaining > 0 and self.ser.is_open:
+                            skip = self.ser.read(min(remaining, self.ser.in_waiting or 1))
+                            if skip:
+                                remaining -= len(skip)
+                            else:
+                                break
+                        continue
                     
-                    # Check if it's mostly printable text
-                    printable_count = sum(1 for b in line if (32 <= b <= 126) or b in (9, 10, 13))
-                    if len(line) > 0 and printable_count / len(line) > 0.8:
-                        # It's text, decode and print
-                        try:
-                            s = line.decode('ascii', errors='ignore').rstrip('\r\n')
-                            # Only print if it's not empty and contains actual text
-                            if s.strip():
-                                print('STM32>', s)
-                        except Exception:
-                            pass
-                    # Skip binary data (don't print hex dumps to reduce noise)
+                    # Handle newlines - flush buffer as a line
+                    if byte in (0x0A, 0x0D):  # \n or \r
+                        if len(line_buffer) > 0:
+                            self._process_text_line(line_buffer)
+                            line_buffer = bytearray()
+                        continue
+                    
+                    # Accumulate printable ASCII characters
+                    if 32 <= byte <= 126 or byte == 0x09:  # printable or tab
+                        line_buffer.append(byte)
+                    else:
+                        # Non-printable byte encountered - might be start of binary data
+                        # Flush any accumulated text first
+                        if len(line_buffer) > 3:  # Only print if we have meaningful text
+                            self._process_text_line(line_buffer)
+                        line_buffer = bytearray()
+                        
+                        # If this looks like start of radar frame, skip it
+                        if byte == 0xA5:
+                            line_buffer.append(byte)  # Keep to check next byte
+                            
+            except Exception:
+                time.sleep(0.05)
+    
+    def _process_text_line(self, line_buffer: bytearray):
+        """Process and print a text line from STM32."""
+        try:
+            s = line_buffer.decode('ascii', errors='ignore').strip()
+            if len(s) < 3:
+                return
+            
+            # Known valid prefixes
+            valid_prefixes = ('GIM,', 'CMD,', 'CHA,', 'SHO,', 'RAD,', 
+                              '[DEBUG]', '[INFO]', '[WARN]', '[ERROR]',
+                              'RADAR', 'YAW', 'PIT', 'Motor', 'Init')
+            
+            # Try to find a valid prefix in the string (might have leading garbage)
+            for prefix in valid_prefixes:
+                idx = s.find(prefix)
+                if idx != -1:
+                    # Extract from the valid prefix onwards
+                    clean_line = s[idx:]
+                    # Validate: should have proper structure (commas for data lines)
+                    if prefix in ('GIM,', 'CMD,', 'CHA,', 'SHO,', 'RAD,'):
+                        if clean_line.count(',') >= 2:
+                            print(f'STM32> {clean_line}')
+                    else:
+                        print(f'STM32> {clean_line}')
+                    return
+        except Exception:
+            pass
             except Exception:
                 # Short sleep to avoid busy loop on errors
                 time.sleep(0.05)
 
 
 # ROS2 subscriber path
-def ros2_run(forwarder: SerialForwarder, topic: str = '/cmd_vel'):
+def ros2_run(forwarder: SerialForwarder, topic: str = '/cmd_vel', verbose_latency: bool = False):
     try:
         import rclpy
         from rclpy.node import Node
@@ -147,14 +267,28 @@ def ros2_run(forwarder: SerialForwarder, topic: str = '/cmd_vel'):
                 Twist, topic, self.cb_twist, 10
             )
             self.get_logger().info('Subscribed to %s' % topic)
+            if forwarder.measure_latency:
+                self.get_logger().info('Latency measurement ENABLED (stats every 5s)')
 
         def cb_twist(self, msg: Twist):
+            recv_time_ns = time.perf_counter_ns()  # Record receive time immediately
+            
             vx = float(msg.linear.x)
             vy = float(msg.linear.y)
             wz = float(msg.angular.z)
             try:
-                forwarder.send(vx, vy, wz)
-                self.get_logger().debug('Forwarded vx=%.3f vy=%.3f wz=%.3f' % (vx, vy, wz))
+                latency_ms = forwarder.send(vx, vy, wz, recv_time_ns)
+                
+                # Verbose per-message latency logging
+                if verbose_latency and latency_ms is not None:
+                    self.get_logger().info(f'[LAT] {latency_ms:.3f}ms | vx={vx:.3f} vy={vy:.3f} wz={wz:.3f}')
+                else:
+                    self.get_logger().debug('Forwarded vx=%.3f vy=%.3f wz=%.3f' % (vx, vy, wz))
+                
+                # Periodic stats report
+                if forwarder.measure_latency and forwarder.latency_stats.should_report():
+                    self.get_logger().info(forwarder.latency_stats.format_report())
+                    
             except Exception as e:
                 self.get_logger().error('Serial send failed: %s' % e)
 
@@ -163,14 +297,29 @@ def ros2_run(forwarder: SerialForwarder, topic: str = '/cmd_vel'):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        # Print final stats on exit
+        if forwarder.measure_latency:
+            print('\n' + '='*60)
+            print('FINAL LATENCY STATISTICS')
+            print(forwarder.latency_stats.format_report())
+            print('='*60)
     finally:
         node.destroy_node()
         rclpy.shutdown()
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Forward /cmd_vel to STM32 via serial with optional latency measurement',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Latency Measurement Examples:
+  # Basic latency measurement (stats every 5s)
+  python3 cmd_vel_forwarder_updated.py --port /dev/ttyACM0 --ros2 --latency
+  
+  # Verbose mode (print each message latency)
+  python3 cmd_vel_forwarder_updated.py --port /dev/ttyACM0 --ros2 --latency --verbose
+""")
     parser.add_argument('--port', required=True, help='Serial device (e.g., /dev/ttyACM0)')
     parser.add_argument('--baud', type=int, default=115200)
     parser.add_argument('--ros2', action='store_true', help='Run as ROS2 node subscribing to /cmd_vel')
@@ -179,18 +328,22 @@ def main():
     parser.add_argument('--vy', type=float, default=0.0)
     parser.add_argument('--wz', type=float, default=0.0)
     parser.add_argument('--rate', type=float, default=20.0, help='Send rate (Hz) for periodic sends')
+    parser.add_argument('--latency', action='store_true', help='Enable latency measurement (ROS2 mode)')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Print latency for each message')
     args = parser.parse_args()
 
-    fwd = SerialForwarder(args.port, args.baud)
+    fwd = SerialForwarder(args.port, args.baud, measure_latency=args.latency)
 
     if args.ros2:
         print('Running in ROS2 subscriber mode. Topic=%s' % args.topic)
+        if args.latency:
+            print('Latency measurement ENABLED')
         try:
             fwd.open()
         except Exception as e:
             print('Failed to open serial port:', e)
             sys.exit(1)
-        ros2_run(fwd, args.topic)
+        ros2_run(fwd, args.topic, verbose_latency=args.verbose)
         fwd.close()
         return
 
